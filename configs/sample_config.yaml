@@ -3,57 +3,65 @@ num_replicates: 5
 population_size: 1000
 sequence_length: 20
 recombination_rate: 0.00001
-mutation_rate: 0.00001
+mutation_rate: 0.000000001
 growth_rate: 0.1
 ms_path: C:/Users/Lenovo/OneDrive/Dokumente/Informatik-Studium/KIT/Masterarbeit/ms.folder/ms/msdir/ms.exe
 ms_output_file: results/ms_output.txt
 msprime_output_file: results/msprime_output.txt
 
 populations:
-  - id: 0
+  - name: pop1
     initial_size: 500
     sample_size: 5
-    growth_rate: 0.2
-  - id: 1
+    growth_rate: 0.002
+  - name: pop2
     initial_size: 200
     sample_size: 5
+  - name: pop3
+    initial_size: 800
+  - name: pop4
+    initial_size: 800
+  - name: pop5
+    initial_size: 800
 
-migration_matrix:
-  - [0.0, 0.1]
-  - [0.1, 0.0]
-
-# Alternativ:
 migration_rates:
-  - source: 0
-    dest: 1
-    rate: 0.01
-  - source: 1
-    dest: 0
-    rate: 0.01
+  - source: pop1
+    dest: pop2
+    rate: 0.1
+  - source: pop2
+    dest: pop1
+    rate: 0.1
+  - source: pop4
+    dest: pop5
+    rate: 0.1
+  - source: pop5
+    dest: pop4
+    rate: 0.1
 
 demography_events:
   - type: size_change
     time: 10
-    population: all
+    population: pop1
     size: 1000
 
   - type: growth_rate_change
     time: 50
-    population: 1
-    rate: 0.3
+    population: pop2
+    rate: 0.003
 
   - type: migration_rate_change
     time: 100
-    source: 0
-    dest: 1
+    source: pop1
+    dest: pop2
     rate: 0.2
 
   - type: population_split
-    time: 0.5
-    source: 2
-    target: 1
+    time: 150
+    derived: [pop1, pop2]
+    ancestral: pop3
 
   - type: population_admixture
-    time: 0.7
-    source: 0
-    probability: 0.7
+    time: 200
+    derived: pop3
+    ancestral: [pop4, pop5]
+    proportions: [0.25, 0.75]

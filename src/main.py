@@ -3,6 +3,7 @@ import yaml
 import os
 from ms_runner import run_ms_simulation
 from msprime_runner import run_msprime_simulation
+import msprime
 
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
