@@ -88,17 +88,25 @@ def run_msprime_simulation(config):
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
     with open(output_file, "w") as f:
-        for ts in replicates:
+        for rep_index, ts in enumerate(replicates, start=1):
             mts = msprime.sim_mutations(ts, rate=config["mutation_rate"], random_seed=42)
-            f.write("//\n")
+
+            f.write(f"// Replicate {rep_index}\n")
+
+            # Write trees in Newick format
+            if config.get("save_trees", False):
+                for tree in ts.trees():
+                    f.write(tree.as_newick() + ";\n")
+                f.write("\n")  # optional blank line between trees and sequences
+
+            # Write sequences (ms-style)
             f.write(f"segsites: {mts.num_sites}\n")
             if mts.num_sites > 0:
-                positions = " ".join(
-                    f"{site.position / mts.sequence_length:.6f}"
-                    for site in mts.sites()
-                )
+                positions = " ".join(f"{site.position / mts.sequence_length:.6f}" for site in mts.sites())
                 f.write(f"positions: {positions}\n")
                 gt_matrix = mts.genotype_matrix().T
                 for row in gt_matrix:
                     f.write("".join(map(str, row)) + "\n")
+            
+            f.write("\n")
 

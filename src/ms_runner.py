@@ -34,6 +34,10 @@ def build_ms_command(config):
     theta = 4 * population_size * mut_rate * seq_length
     cmd = f"ms {total_sample_size} {num_replicates} -t {theta}"
 
+    #Tree output
+    if config.get("save_trees", True):
+        cmd += " -T"
+
     #Recombination
     recomb_rate = float(config.get("recombination_rate", 0)) * seq_length
     rho = 4 * population_size * recomb_rate
