@@ -1,10 +1,12 @@
 sample_size: 20
 num_replicates: 5
 population_size: 1000
-sequence_length: 20
+sequence_length: 100
 recombination_rate: 0.00001
 mutation_rate: 0.000000001
 growth_rate: 0.1
+gene_conversion_rate: 0.00001
+gene_conversion_tract_length: 1
 ms_path: C:/Users/Lenovo/OneDrive/Dokumente/Informatik-Studium/KIT/Masterarbeit/ms.folder/ms/msdir/ms.exe
 ms_output_file: results/ms_output.txt
 msprime_output_file: results/msprime_output.txt

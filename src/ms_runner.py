@@ -34,10 +34,17 @@ def build_ms_command(config):
     theta = 4 * population_size * mut_rate * seq_length
     cmd = f"ms {total_sample_size} {num_replicates} -t {theta}"
 
-    if "recombination_rate" in config:
-        recomb_rate = float(config["recombination_rate"])
-        rho = 4 * population_size * recomb_rate * seq_length
-        cmd += f" -r {rho} {seq_length}"
+    #Recombination
+    recomb_rate = float(config.get("recombination_rate", 0)) * seq_length
+    rho = 4 * population_size * recomb_rate
+    cmd += f" -r {rho} {seq_length}"
+
+    #Gene conversion
+    if "gene_conversion_tract_length" in config and "gene_conversion_rate" in config:
+        gen_rate = float(config["gene_conversion_rate"])
+        f = gen_rate/ recomb_rate if recomb_rate != 0 else 4 * population_size * gen_rate
+        gen_tract_length = float(config["gene_conversion_tract_length"])
+        cmd += f" -c {f} {gen_tract_length}"
 
     activity = initial_population_activity(config)
 

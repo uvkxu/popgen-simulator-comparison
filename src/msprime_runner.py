@@ -23,8 +23,6 @@ def create_msprime_demography(config):
                     rate=mig["rate"]
                 )
 
-        
-
     for event in config.get("demography_events", []):
         t = event["time"]
         type = event["type"]
@@ -70,15 +68,21 @@ def run_msprime_simulation(config):
                     time=0
                 )
             )
+    
+    params = {
+        "samples": samples,
+        "sequence_length": config["sequence_length"],
+        "demography": demography,
+        "ploidy": 1,
+        "random_seed": 42,
+    }
 
-    ts = msprime.sim_ancestry(
-        samples=samples,
-        recombination_rate=config["recombination_rate"],
-        sequence_length=config["sequence_length"],
-        demography=demography,
-        ploidy=1,
-        random_seed=42
-    )
+    for key in ("recombination_rate", "gene_conversion_rate", "gene_conversion_tract_length"):
+        if key in config:
+            params[key] = config[key]
+
+    ts = msprime.sim_ancestry(**params)
+
     mts = msprime.sim_mutations(ts, rate=config["mutation_rate"], random_seed=42)
 
     output_file = config.get("msprime_output_file", "results/msprime/output.txt")
