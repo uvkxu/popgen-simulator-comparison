@@ -1,2 +1,21 @@
 //
 segsites: 0
+//
+segsites: 1
+positions: 0.800000
+0
+1
+1
+0
+1
+1
+1
+0
+1
+1
+//
+segsites: 0
+//
+segsites: 0
+//
+segsites: 0

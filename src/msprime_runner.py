@@ -73,6 +73,7 @@ def run_msprime_simulation(config):
         "samples": samples,
         "sequence_length": config["sequence_length"],
         "demography": demography,
+        "num_replicates": config["num_replicates"],
         "ploidy": 1,
         "random_seed": 42,
     }
@@ -81,18 +82,23 @@ def run_msprime_simulation(config):
         if key in config:
             params[key] = config[key]
 
-    ts = msprime.sim_ancestry(**params)
-
-    mts = msprime.sim_mutations(ts, rate=config["mutation_rate"], random_seed=42)
+    replicates = msprime.sim_ancestry(**params)
 
     output_file = config.get("msprime_output_file", "results/msprime/output.txt")
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
     with open(output_file, "w") as f:
-        f.write(f"//\nsegsites: {ts.num_sites}\n")
-        if ts.num_sites > 0:
-            positions = " ".join(f"{site.position / ts.sequence_length:.6f}" for site in ts.sites())
-            f.write(f"positions: {positions}\n")
-            gt_matrix = ts.genotype_matrix().T
-            for row in gt_matrix:
-                f.write("".join(map(str, row)) + "\n")
+        for ts in replicates:
+            mts = msprime.sim_mutations(ts, rate=config["mutation_rate"], random_seed=42)
+            f.write("//\n")
+            f.write(f"segsites: {mts.num_sites}\n")
+            if mts.num_sites > 0:
+                positions = " ".join(
+                    f"{site.position / mts.sequence_length:.6f}"
+                    for site in mts.sites()
+                )
+                f.write(f"positions: {positions}\n")
+                gt_matrix = mts.genotype_matrix().T
+                for row in gt_matrix:
+                    f.write("".join(map(str, row)) + "\n")
+

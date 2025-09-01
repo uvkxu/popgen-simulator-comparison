@@ -133,6 +133,7 @@ def build_ms_command(config):
             #TODO: Schaue dir nochmal den Lebenszyklus an!!!
 
         elif type == "population_admixture":
+            #Problem: Admixture is very different from msprime!!
             derived = event["derived"]
             ancestral = event["ancestral"]
             proportions = event["proportions"]
