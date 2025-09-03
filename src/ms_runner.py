@@ -1,6 +1,6 @@
 import os
 import subprocess
-from checker import initial_population_activity, check_events_sorted, get_populations
+from checker import initial_population_activity, check_events_sorted
 
 def set_migration_rates(config, activity, pop_index, population_size, time=0):
     mig_cmd = ""
@@ -24,7 +24,7 @@ def build_ms_command(config):
     ms_path = config.get("ms_path", "ms")
     total_sample_size = sum(p.get("sample_size", 0) for p in config.get("populations", [])) \
                         if "populations" in config else int(config["sample_size"])
-    populations = get_populations(config)
+    populations = config.get("populations", [])
     num_populations = len(populations)
     population_size = int(config["population_size"])
     num_replicates = int(config.get("num_replicates", 1))
@@ -34,21 +34,25 @@ def build_ms_command(config):
     theta = 4 * population_size * mut_rate * seq_length
     cmd = f"ms {total_sample_size} {num_replicates} -t {theta}"
 
-    #Tree output
+    # Tree output
     if config.get("save_trees", True):
         cmd += " -T"
 
-    #Recombination
+    # Recombination
     recomb_rate = float(config.get("recombination_rate", 0)) * seq_length
     rho = 4 * population_size * recomb_rate
     cmd += f" -r {rho} {seq_length}"
 
-    #Gene conversion
+    # Gene conversion
     if "gene_conversion_tract_length" in config and "gene_conversion_rate" in config:
         gen_rate = float(config["gene_conversion_rate"])
         f = gen_rate/ recomb_rate if recomb_rate != 0 else 4 * population_size * gen_rate
         gen_tract_length = float(config["gene_conversion_tract_length"])
         cmd += f" -c {f} {gen_tract_length}"
+
+    # TODO: Uniform growth rate
+
+    # TODO: Uniform migration rate
 
     activity = initial_population_activity(config)
 
@@ -123,6 +127,10 @@ def build_ms_command(config):
             for d in derived:
                 activity[d] = False
 
+            # Setting the population size of the ancestral population
+            subpop_sizes = {pop["name"]: pop.get("initial_size", population_size) for pop in config.get("populations")}
+            cmd += f" -en {t} {pop_index[ancestral]} {subpop_sizes.get(ancestral)/ population_size}"
+
             cmd += f" -ej {t} {pop_index[derived[1]]} {pop_index[ancestral]}"
 
             # Setting the growth rate of the ancestral population
@@ -134,10 +142,7 @@ def build_ms_command(config):
             # Reinitialize migration rates according to the current activity configuration
             cmd += set_migration_rates(config, activity, pop_index, population_size, t)
 
-            #TODO: Schaue dir nochmal den Lebenszyklus an!!!
-
         elif type == "population_admixture":
-            #Problem: Admixture is very different from msprime!!
             derived = event["derived"]
             ancestral = event["ancestral"]
             proportions = event["proportions"]
@@ -145,24 +150,26 @@ def build_ms_command(config):
             assert len(proportions) == 2, "Proportions should be two values"
             assert sum(proportions) == 1, "Proportions should add up to one"
             assert activity[derived], "Derived population should initially be active"
-            assert all(not activity[a] for a in ancestral), f"Ancestral populations should initially be inactive"
+            assert all(activity[a] for a in ancestral), f"Ancestral populations should initially be active"
 
-            pop_index[ancestral[0]] = pop_index[derived]
-            pop_index.pop(derived)
+            #TODO: Check whether the ancestral populations need to be active prior to the admixture event
+
             num_populations += 1
-            pop_index[ancestral[1]] = num_populations
 
             activity[derived] = False
-            for a in ancestral:
-                activity[a] = True
 
-            cmd += f" -es {t} {pop_index[ancestral[0]]} {proportions[0]}"
+            # Create a temporary subpopulation (from the derived population).
+            # For each lineage in the ancestral population:
+            #     - With probability (1 - p), move the lineage into the temporary subpopulation.
+            #     - With probability p, keep the lineage in the derived population.
+            cmd += f" -es {t} {pop_index[derived]} {proportions[0]}"
 
-            # Setting the growth rates of the ancestral populations
-            growth_rates = {pop["name"]: pop.get("growth_rate", 0) for pop in config.get("populations")}
-            for a in ancestral:
-                cmd += f" -eg {t} {pop_index[a]} {growth_rates.get(a)/ (4 * population_size)}"
-            
+            # Move all lineages from the derived population into the first ancestral population
+            cmd += f" -ej {t} {pop_index[derived]} {pop_index[ancestral[0]]}"
+
+            # Move all lineages from the temporary subpopulation to the second ancestral population
+            cmd += f" -ej {t} {num_populations} {pop_index[ancestral[1]]}"
+
             # Reset all migration rates to 0 at time t
             cmd += f" -eM {t} {0}"
             # Reinitialize migration rates according to the current activity configuration

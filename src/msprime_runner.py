@@ -48,10 +48,9 @@ def create_msprime_demography(config):
         elif type == "population_split":
             dem.add_population_split(time=t, derived=event["derived"], ancestral=event["ancestral"])
         elif type == "population_admixture":
-            #TODO: Problem - ancestral populations sind zu Beginn nicht inaktiv und migrieren schon bei t=0
             dem.add_admixture(time=t, derived=event["derived"], ancestral=event["ancestral"], proportions=event["proportions"])
 
-    print(dem.debug())
+    dem.debug()
 
     return dem
 
@@ -94,7 +93,7 @@ def run_msprime_simulation(config):
             f.write(f"// Replicate {rep_index}\n")
 
             # Write trees in Newick format
-            if config.get("save_trees", False):
+            if config.get("save_trees", True):
                 for tree in ts.trees():
                     f.write(tree.as_newick() + ";\n")
                 f.write("\n")  # optional blank line between trees and sequences

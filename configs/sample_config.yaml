@@ -5,6 +5,7 @@ population_size: 1000
 sequence_length: 100
 recombination_rate: 0.00001
 mutation_rate: 0.000001
+growth_rate: 0.1
 gene_conversion_rate: 0.00001
 gene_conversion_tract_length: 1
 ms_path: C:/Users/Lenovo/OneDrive/Dokumente/Informatik-Studium/KIT/Masterarbeit/ms.folder/ms/msdir/ms.exe
@@ -61,3 +62,9 @@ demography_events:
     time: 150
     derived: [pop1, pop2]
     ancestral: pop3
+
+  - type: population_admixture
+    time: 200
+    derived: pop3
+    ancestral: [pop4, pop5]
+    proportions: [0.25, 0.75]
