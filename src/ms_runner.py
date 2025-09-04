@@ -2,8 +2,11 @@ import os
 import subprocess
 from checker import initial_population_activity, check_events_sorted
 
-def set_migration_rates(config, activity, pop_index, population_size, time=0):
+def set_migration_rates(config, activity, pop_index, time=0):
     mig_cmd = ""
+
+    if "migration_rates" not in config:
+        return mig_cmd
     
     for mig in config["migration_rates"]:
         dest = mig['dest']
@@ -11,7 +14,7 @@ def set_migration_rates(config, activity, pop_index, population_size, time=0):
         if not (activity[dest] and activity[source]):
             continue
 
-        mig_cmd_part = f" {pop_index[dest]} {pop_index[source]} {mig['rate'] / (4 * population_size)}"
+        mig_cmd_part = f" {pop_index[dest]} {pop_index[source]} {mig['rate'] / (4 * config["population_size"])}"
         if time == 0:
             mig_cmd += f" -m" + mig_cmd_part
         else:
@@ -25,14 +28,14 @@ def build_ms_command(config):
     total_sample_size = sum(p.get("sample_size", 0) for p in config.get("populations", [])) \
                         if "populations" in config else int(config["sample_size"])
     populations = config.get("populations", [])
-    num_populations = len(populations)
+    num_populations = 0
     population_size = int(config["population_size"])
     num_replicates = int(config.get("num_replicates", 1))
     mut_rate = float(config["mutation_rate"])
     seq_length = int(config["sequence_length"])
 
     theta = 4 * population_size * mut_rate * seq_length
-    cmd = f"ms {total_sample_size} {num_replicates} -t {theta}"
+    cmd = f"ms {total_sample_size} {num_replicates} -t {theta:.8g}"
 
     # Tree output
     if config.get("save_trees", True):
@@ -59,25 +62,30 @@ def build_ms_command(config):
     pop_index = {}
 
     if "populations" in config:
-        cmd += f" -I {num_populations}"
+        sample_sizes = ""
         subpop_sizes = ""
         growth_rates = ""
 
-        for i, pop in enumerate(populations):
+        for pop in populations:
             pop_name = pop["name"]
-            pop_index[pop_name] = i+1
 
             sample_size = pop.get("sample_size", 0) 
             assert (not activity[pop_name] and sample_size == 0) or activity[pop_name], "You can't sample from an inactive population"
             
-            cmd += f" {sample_size}"
+            if not activity[pop_name]:
+                continue
+            
+            num_populations += 1
+            pop_index[pop_name] = num_populations
+            sample_sizes += f" {sample_size}"
 
-            subpop_sizes += f" -n {pop_index[pop_name]} {int(pop['initial_size']) / population_size}"
-            if "growth_rate" in pop and activity[pop_name]:
+            if "initial_size" in pop and pop['initial_size'] != population_size:
+                subpop_sizes += f" -n {pop_index[pop_name]} {int(pop['initial_size']) / population_size}"
+            if "growth_rate" in pop:
                 growth_rates += f" -g {pop_index[pop_name]} {float(pop['growth_rate']) / (4 * population_size)}"
-        cmd += subpop_sizes + growth_rates
+        cmd += f" -I {num_populations}" + sample_sizes + subpop_sizes + growth_rates
 
-        cmd += set_migration_rates(config, activity, pop_index, population_size)
+        cmd += set_migration_rates(config, activity, pop_index)
 
     assert check_events_sorted(config), "Demography events are not sorted by time!"
 
@@ -114,7 +122,6 @@ def build_ms_command(config):
             derived = event["derived"]
             ancestral = event["ancestral"]
             
-            assert len(derived) == 2, "Only two derived populations are allowed"
             assert not activity[ancestral], "Ancestral population should initially be inactive"
             assert all(activity[d] for d in derived), "Derived populations should initially be active"
 
@@ -131,7 +138,8 @@ def build_ms_command(config):
             subpop_sizes = {pop["name"]: pop.get("initial_size", population_size) for pop in config.get("populations")}
             cmd += f" -en {t} {pop_index[ancestral]} {subpop_sizes.get(ancestral)/ population_size}"
 
-            cmd += f" -ej {t} {pop_index[derived[1]]} {pop_index[ancestral]}"
+            for i in range(1, len(derived)):
+                cmd += f" -ej {t} {pop_index[derived[i]]} {pop_index[ancestral]}"
 
             # Setting the growth rate of the ancestral population
             growth_rates = {pop["name"]: pop.get("growth_rate", 0) for pop in config.get("populations")}
@@ -140,7 +148,7 @@ def build_ms_command(config):
             # Reset all migration rates to 0 at time t
             cmd += f" -eM {t} {0}"
             # Reinitialize migration rates according to the current activity configuration
-            cmd += set_migration_rates(config, activity, pop_index, population_size, t)
+            cmd += set_migration_rates(config, activity, pop_index, t)
 
         elif type == "population_admixture":
             derived = event["derived"]
@@ -173,7 +181,7 @@ def build_ms_command(config):
             # Reset all migration rates to 0 at time t
             cmd += f" -eM {t} {0}"
             # Reinitialize migration rates according to the current activity configuration
-            cmd += set_migration_rates(config, activity, pop_index, population_size, t)
+            cmd += set_migration_rates(config, activity, pop_index, t)
 
     return cmd
 
