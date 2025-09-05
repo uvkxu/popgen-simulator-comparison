@@ -34,7 +34,7 @@ def extract(cmd, flag):
         numbers = [float(x) for x in match.strip().split()]
         results.append(numbers if len(numbers) > 1 else numbers[0])
 
-    # Flatten if only one match and no group_size specified
+    # Flatten if only one match
     if len(results) == 1:
         return results[0]
     return results
@@ -74,6 +74,25 @@ def test_recombination_flag(config, expected_rho, expected_nsites):
     assert found_nsites == expected_nsites, f"Number of sites (-r) mismatch: expected {expected_nsites}, got {found_nsites}.\n"
 
 
+@pytest.mark.parametrize("config,expected_rate,expected_tract_length",[
+    (make_config_single_pop(), [], []),
+    (make_config_with_gene_conversion(), 0.4, 1),
+    (make_config_two_pops_with_migration(), 0.0003, 3)
+])
+def test_gene_conversion_flag(config, expected_rate, expected_tract_length):
+    cmd = build_ms_command(config)
+    found = extract(cmd, "-c")
+
+    if not found:
+        found_rate, found_tract_length = [], []
+    else:
+        found_rate, found_tract_length = found
+
+    assert found_rate == expected_rate, f"Gene conversion rate mismatch: expected {expected_rate}, got {found_rate}"
+    assert found_tract_length == expected_tract_length, f"Gene conversion tract length mismatch: expected {expected_tract_length}, got {found_tract_length}"
+
+
+
 @pytest.mark.parametrize("config,tree_flag_exists", [
     (make_config_two_pops_with_migration(), False),
     (make_config_single_pop(), True),
@@ -110,13 +129,21 @@ def test_population_initialization(config, expected_num_pops_and_samples, expect
 
 @pytest.mark.parametrize("config,activity,pop_index,time,expected_migration", [
     (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 0, [[2, 1, 2.5e-06], [1, 2, 2.5e-06]]),
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 99, [[2, 1, 2.5e-06], [1, 2, 2.5e-06]]),
     (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 100, [[2, 1, 2.5e-06], [1, 2, 2.5e-06]]),
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 101, [[2, 1, 5e-05], [1, 2, 2.5e-06]]),
     (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 0, []),
-    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 1, []),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 80, []),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 100, []),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 105, []),
     (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 0, []),
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 12, []),
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 17, []),
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 100, []),
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 300, []),
     (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 0, []),
-    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 10000, []),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 50, []),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 100, []),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 140, []),
     (make_config_single_pop(), {}, {}, 0, []),
 ])
 def test_set_migration_rates(config, activity, pop_index, time, expected_migration):
