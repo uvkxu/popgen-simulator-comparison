@@ -44,7 +44,7 @@ def set_migration_rates(config, activity, pop_index, time=0):
     return migration_cmd
 
 
-def set_growth_rates(config, activity, pop_index, time=0):
+def set_growth_rates(config, activity, pop_index, time=0, population=None):
     """
     Build ms command string for setting population growth rates.
 
@@ -58,6 +58,25 @@ def set_growth_rates(config, activity, pop_index, time=0):
         str: Growth rate command string for ms.
     """
     factor = 1 / (4 * config["population_size"])  # scaling factor for rates
+
+    if population:
+        for event in reversed(config.get("demography_events", [])):
+            if event["type"] != "growth_rate_change" or event["time"] >= time:
+                continue
+
+            if "population" not in event or event["population"] == "all" or event["population"] == population:
+                rate = event["rate"] * factor
+                return f" -eg {time} {rate:.8g}"
+
+        all_growth_rates = {pop["name"]: pop.get("growth_rate", 0) for pop in config.get("populations")}
+        rate = all_growth_rates[population]
+        rate = rate if rate != 0 else config.get("default_growth_rate", 0)
+        
+        if rate != 0:
+            flag = "-g" if time == 0 else f"-eg {time}"
+            return f" {flag} {pop_index[population]} {rate}"
+        return ""
+
     growth_rate_cmd = ""
     changed_growth_rates = set()  # track populations already updated at given time
 
@@ -68,7 +87,7 @@ def set_growth_rates(config, activity, pop_index, time=0):
                 continue
 
             # Global growth rate change for all populations
-            if event["population"] == "all":
+            if "population" not in event or event["population"] == "all"
                 rate = event["rate"] * factor
                 growth_rate_cmd = f" -eG {time} {rate:.8g}" + growth_rate_cmd
                 return growth_rate_cmd  # global change overrides everything else
@@ -79,6 +98,11 @@ def set_growth_rates(config, activity, pop_index, time=0):
                 rate = event["rate"] * factor
                 growth_rate_cmd += f" -eg {time} {pop_index[pop]} {rate:.8g}"
                 changed_growth_rates.add(pop)
+
+    if "default_growth_rate" in config:
+        rate = config["default_growth_rate"] * factor
+        flag = "-G" if time == 0 else f"-eG {time}"
+        growth_rate_cmd = f" {flag} {rate:.8g}" + growth_rate_cmd
 
     # Initial growth rates (or those not overridden by events)
     for pop in config.get("populations", []):
@@ -124,8 +148,6 @@ def build_ms_command(config):
         gen_tract_length = float(config["gene_conversion_tract_length"])
         cmd += f" -c {f:.8g} {gen_tract_length}"
 
-    # TODO: Uniform growth rate
-
     # TODO: Uniform migration rate
 
     activity = initial_population_activity(config)
@@ -170,7 +192,7 @@ def build_ms_command(config):
                 assert activity[event['population']], "You cant change the size of an inactive population"
 
                 cmd += f" -en {t} {pop_index[event['population']]} {int(event['size']) / population_size}"
-                cmd += set_growth_rates(config, activity, pop_index, t)
+                cmd += set_growth_rates(config, activity, pop_index, t, event['population'])
         elif type == "migration_rate_change":
             dest = event['dest']
             source = event['source']
@@ -217,37 +239,7 @@ def build_ms_command(config):
             cmd += set_migration_rates(config, activity, pop_index, t)
 
         elif type == "population_admixture":
-            derived = event["derived"]
-            ancestral = event["ancestral"]
-            proportions = event["proportions"]
-            assert len(ancestral) == 2, "Only two ancestral populations are allowed"
-            assert len(proportions) == 2, "Proportions should be two values"
-            assert sum(proportions) == 1, "Proportions should add up to one"
-            assert activity[derived], "Derived population should initially be active"
-            assert all(activity[a] for a in ancestral), f"Ancestral populations should initially be active"
-
-            #TODO: Check whether the ancestral populations need to be active prior to the admixture event
-
-            num_populations += 1
-
-            activity[derived] = False
-
-            # Create a temporary subpopulation (from the derived population).
-            # For each lineage in the ancestral population:
-            #     - With probability (1 - p), move the lineage into the temporary subpopulation.
-            #     - With probability p, keep the lineage in the derived population.
-            cmd += f" -es {t} {pop_index[derived]} {proportions[0]}"
-
-            # Move all lineages from the derived population into the first ancestral population
-            cmd += f" -ej {t} {pop_index[derived]} {pop_index[ancestral[0]]}"
-
-            # Move all lineages from the temporary subpopulation to the second ancestral population
-            cmd += f" -ej {t} {num_populations} {pop_index[ancestral[1]]}"
-
-            # Reset all migration rates to 0 at time t
-            cmd += f" -eM {t} {0}"
-            # Reinitialize migration rates according to the current activity configuration
-            cmd += set_migration_rates(config, activity, pop_index, t)
+            pass  # TODO: implement later
 
     return cmd
 
