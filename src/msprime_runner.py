@@ -3,6 +3,7 @@ import msprime
 
 def create_msprime_demography(config):
     dem = msprime.Demography()
+    population_size = config["population_size"]
 
     if "populations" in config:
         for i, pop in enumerate(config.get("populations", [])):
@@ -10,7 +11,7 @@ def create_msprime_demography(config):
 
             dem.add_population(
                 name=name,
-                initial_size=pop["initial_size"],
+                initial_size=pop.get("initial_size", population_size),
                 growth_rate=pop.get("growth_rate", 0.0)
             )
 
@@ -49,7 +50,7 @@ def create_msprime_demography(config):
         elif type == "population_admixture":
             dem.add_admixture(time=t, derived=event["derived"], ancestral=event["ancestral"], proportions=event["proportions"])
 
-    print(dem.debug())
+    # print(dem.debug())
 
     return dem
 

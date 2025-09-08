@@ -7,7 +7,7 @@ import msprime
 
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    default_config = os.path.join(script_dir, "..", "configs", "sample_config.yaml")
+    default_config = os.path.join(script_dir, "..", "configs", "sample_config_2.yaml")
 
     if len(sys.argv) > 1:
         arg_path = sys.argv[1]
