@@ -6,6 +6,7 @@ sequence_length: 100
 recombination_rate: 1e-8
 mutation_rate: 1e-8
 default_growth_rate: 0.01
+default_migration_rate: 0.08
 gene_conversion_rate: 2e-6
 gene_conversion_tract_length: 5
 ms_path: C:/Users/Lenovo/OneDrive/Dokumente/Informatik-Studium/KIT/Masterarbeit/ms.folder/ms/msdir/ms.exe
@@ -24,8 +25,6 @@ populations:
     initial_size: 1200
   - name: pop4
     initial_size: 1000
-  - name: pop5
-    initial_size: 1000
 
 migration_rates:
   - source: pop1
@@ -33,12 +32,6 @@ migration_rates:
     rate: 0.1
   - source: pop2
     dest: pop1
-    rate: 0.1
-  - source: pop4
-    dest: pop5
-    rate: 0.1
-  - source: pop5
-    dest: pop4
     rate: 0.1
 
 demography_events:
@@ -60,5 +53,5 @@ demography_events:
 
   - type: population_split
     time: 150
-    derived: [pop1, pop2]
-    ancestral: pop3
+    derived: [pop1, pop2, pop3]
+    ancestral: pop4

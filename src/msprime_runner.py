@@ -1,6 +1,5 @@
 import os
 import msprime
-from checker import initial_population_activity
 
 def create_msprime_demography(config):
     dem = msprime.Demography()
@@ -50,7 +49,7 @@ def create_msprime_demography(config):
         elif type == "population_admixture":
             dem.add_admixture(time=t, derived=event["derived"], ancestral=event["ancestral"], proportions=event["proportions"])
 
-    dem.debug()
+    print(dem.debug())
 
     return dem
 
