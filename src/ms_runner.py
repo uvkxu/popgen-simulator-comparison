@@ -224,6 +224,7 @@ def build_ms_command(config):
     mut_rate = float(config["mutation_rate"])
     seq_length = int(config["sequence_length"])
 
+    # Mutation
     theta = 4 * population_size * mut_rate * seq_length
     cmd = f"ms {total_sample_size} {num_replicates} -t {theta:.8g}"
 
@@ -353,11 +354,13 @@ def build_ms_command(config):
 
             activity[derived] = False
 
-            for i in range(0, len(ancestral)):
+            for i in range(0, len(ancestral)-1):
                 num_populations += 1
 
                 cmd += f" -es {t} {pop_index[derived]} {1 - proportions[i]}"
                 cmd += f" -ej {t} {num_populations} {pop_index[ancestral[i]]}"
+            
+            cmd += f" -ej {t} {pop_index[derived]} {pop_index[ancestral[-1]]}"
 
             # Reinitialize migration rates according to the current activity configuration
             # cmd += restore_migration_rates(config, activity, pop_index, t)
