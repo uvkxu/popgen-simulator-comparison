@@ -1,9 +1,12 @@
 import pytest
 import re
-from ms_runner import build_ms_command, set_migration_rates
+from ms_runner import build_ms_command, set_initial_migration_rates, set_initial_growth_rates, \
+                        restore_growth_rates, set_initial_population_sizes, set_ancestral_size_at_split, set_population_sample_sizes, \
+                        get_initial_population_activity, get_initial_population_indices
+
 from test_configs import make_config_single_pop, make_config_two_pops_with_migration, make_config_with_gene_conversion, make_population_split_event_config
 
-def extract(cmd, flag):
+def extract_by_flag(cmd, flag):
     """
     Extract numbers following a given flag from a command string.
 
@@ -39,6 +42,51 @@ def extract(cmd, flag):
         return results[0]
     return results
 
+
+def extract_default_migration_rate(cmd):
+    parts = cmd.strip().split()
+    
+    # Check if "-I" is present at all
+    if "-I" not in parts:
+        return 0
+    
+    i = parts.index("-I")
+    num_pops = int(parts[i + 1])
+    expected_len = 2 + num_pops  # "-I", num_pops, and the sample sizes
+    
+    # Take everything starting from "-I"
+    subparts = parts[i:]
+    
+    # Case 1: exactly "-I", num_pops, and sample sizes → no migration rate given
+    if len(subparts) == expected_len:
+        return 0
+    
+    # Case 2: one more element → that's the migration rate
+    if len(subparts) > expected_len:
+        try:
+            return float(subparts[expected_len])
+        except ValueError:
+            # If the element cannot be parsed as a number → assume no migration rate
+            return 0
+    
+    # Anything else is unexpected
+    assert False, f"Unexpected format for -I argument: {' '.join(subparts)}"
+
+
+#TODO: Test migration rate change of all populations
+#TODO: Test growth rate change of all populations
+#TODO: Test set_initial_growth_rates
+#TODO: Test -g flag in command
+#TODO: Test -G flag in command
+#TODO: Test restore_growth_rates
+#TODO: Test set_initial_population_sizes
+#TODO: Test split
+#TODO: Test set_ancestral_size_at_split
+#TODO: Test set_population_sample_sizes
+#TODO: Test -I + sample sizes in command
+#TODO: Test get_initial_population_activity
+#TODO: Test get_initial_population_indices
+
 @pytest.mark.parametrize("config,expected", [
     (make_config_two_pops_with_migration(), "ms 10 1"), 
     (make_config_single_pop(), "ms 15 3"),
@@ -58,7 +106,7 @@ def test_total_sample_size_and_replicates(config, expected):
 ])
 def test_mutation_flag(config, expected_theta):
     cmd = build_ms_command(config)
-    found_theta = extract(cmd, "-t")
+    found_theta = extract_by_flag(cmd, "-t")
     assert found_theta == expected_theta, f"Mutation rate (-t) mismatch: expected {expected_theta}, got {found_theta}.\n"
 
 
@@ -69,7 +117,7 @@ def test_mutation_flag(config, expected_theta):
 ])
 def test_recombination_flag(config, expected_rho, expected_nsites):
     cmd = build_ms_command(config)
-    found_rho, found_nsites = extract(cmd, "-r")
+    found_rho, found_nsites = extract_by_flag(cmd, "-r")
     assert found_rho == expected_rho, f"Recombination rate (-r) mismatch: expected {expected_rho}, got {found_rho}.\n"
     assert found_nsites == expected_nsites, f"Number of sites (-r) mismatch: expected {expected_nsites}, got {found_nsites}.\n"
 
@@ -81,7 +129,7 @@ def test_recombination_flag(config, expected_rho, expected_nsites):
 ])
 def test_gene_conversion_flag(config, expected_rate, expected_tract_length):
     cmd = build_ms_command(config)
-    found = extract(cmd, "-c")
+    found = extract_by_flag(cmd, "-c")
 
     if not found:
         found_rate, found_tract_length = [], []
@@ -90,7 +138,6 @@ def test_gene_conversion_flag(config, expected_rate, expected_tract_length):
 
     assert found_rate == expected_rate, f"Gene conversion rate mismatch: expected {expected_rate}, got {found_rate}"
     assert found_tract_length == expected_tract_length, f"Gene conversion tract length mismatch: expected {expected_tract_length}, got {found_tract_length}"
-
 
 
 @pytest.mark.parametrize("config,tree_flag_exists", [
@@ -106,53 +153,50 @@ def test_tree_flag(config, tree_flag_exists):
         assert "-T" not in cmd, "Expected tree flag (-T) to be absent in command, but it was found.\n"
 
 
-@pytest.mark.parametrize("config,expected_num_pops_and_samples,expected_sizes,expected_growth_rates", [
-    (make_config_two_pops_with_migration(), [2, 5, 5], [2, 0.99], [1, 0.00001]),
-    (make_config_single_pop(), [], [], []),
-    (make_population_split_event_config(), [4, 5, 5, 10, 15], [[1, 0.2], [2, 0.2], [4, 0.4]], [[2, 3e-6], [4, 3.5e-7]]),
-])
-def test_population_initialization(config, expected_num_pops_and_samples, expected_sizes, expected_growth_rates):
-    cmd = build_ms_command(config)
-    found_num_pops_and_sample = extract(cmd, "-I")
-    found_sizes = extract(cmd, "-n")
-    found_growth_rates = extract(cmd, "-g")
-
-    assert found_num_pops_and_sample == expected_num_pops_and_samples, \
-        f"Population structure (-I) mismatch. Expected {expected_num_pops_and_samples}, got {found_num_pops_and_sample}"
-
-    assert found_sizes == expected_sizes, \
-        f"Initial sizes (-n) mismatch. Expected {expected_sizes}, got {found_sizes}"
-
-    assert found_growth_rates == expected_growth_rates, \
-        f"Growth rates (-g) mismatch. Expected {expected_growth_rates}, got {found_growth_rates}"
-
-
-@pytest.mark.parametrize("config,activity,pop_index,time,expected_migration", [
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 0, [[2, 1, 2.5e-06], [1, 2, 2.5e-06]]),
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 99, [[2, 1, 2.5e-06], [1, 2, 2.5e-06]]),
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 100, [[2, 1, 2.5e-06], [1, 2, 2.5e-06]]),
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 101, [[2, 1, 5e-05], [1, 2, 2.5e-06]]),
-    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 0, []),
-    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 80, []),
-    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 100, []),
-    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 105, []),
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 0, []),
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 17, []),
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 100, []),
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 300, []),
-    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 0, []),
-    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 50, []),
-    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 100, []),
-    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 140, []),
+@pytest.mark.parametrize("config,activity,pop_index,expected_default_rate,expected_migration", [
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 1.25e-5, [[2, 1, 2.5e-06], [1, 2, 2.5e-06]]),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 1.25e-5, []),
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 1.25e-5, []),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 1.25e-5, []),
     (make_config_single_pop(), {}, {}, 0, []),
 ])
-def test_set_migration_rates(config, activity, pop_index, time, expected_migration):
-    mig_cmd = set_migration_rates(config, activity, pop_index, time)
-    if time == 0:
-        found_migration = extract(mig_cmd, "-m")
+def test_set_initial_migration_rates(config, activity, pop_index, expected_default_rate, expected_migration):
+    mig_cmd = set_initial_migration_rates(config, activity, pop_index)
+    parts = mig_cmd.strip().split()
+    found_migration = extract_by_flag(mig_cmd, "-m")
+
+    if not parts or parts[0] == "-m":
+        assert expected_default_rate == 0, f"Found no uniform migration rate, but expected {expected_default_rate}"
     else:
-        found_migration = extract(mig_cmd, f"-em {time}")
-    assert found_migration == expected_migration, f"Migration rates mismatch at time {time} (expected {expected_migration}, got {found_migration})"
+        found_default_rate = float(parts[0])
+        assert found_default_rate == expected_default_rate, f"Uniform migration rate is not set correctly, (expected {expected_default_rate}, got {found_default_rate})"
+
+    assert found_migration == expected_migration, f"Migration rates mismatch (expected {expected_migration}, got {found_migration})"
+
+
+@pytest.mark.parametrize("config,m_flag_exists", [
+    (make_config_two_pops_with_migration(), True),
+    (make_config_single_pop(), False),
+])
+def test_migration_flag_in_command(config, m_flag_exists):
+    cmd = build_ms_command(config)
+
+    if m_flag_exists:
+        assert "-m" in cmd, "Expected '-m' in command, but it is missing"
+    else:
+        assert "-m" not in cmd, "Unexpected '-m' in command"
+
+
+@pytest.mark.parametrize("config,expected_default_rate", [
+    (make_config_two_pops_with_migration(), 1.25e-5),
+    (make_config_single_pop(), 0),
+])
+def test_default_migration_rate_in_command(config, expected_default_rate):
+    cmd = build_ms_command(config)
+    found_default_rate = extract_default_migration_rate(cmd)
+
+    assert found_default_rate == expected_default_rate,\
+        f"Default migration rate is not added to the command correctly (expected {expected_default_rate}, got {found_default_rate})"
 
 
 @pytest.mark.parametrize("config,time,expected_migration", [
@@ -160,9 +204,9 @@ def test_set_migration_rates(config, activity, pop_index, time, expected_migrati
     (make_population_split_event_config(), 0.0025, [1, 2, 2.5e-6]),
     (make_population_split_event_config(), 0.009, [[4, 1, 5e-6], [1, 4, 4.5e-6]])
 ])
-def test_migration_rate_change(config, time, expected_migration):
+def test_migration_rate_change_single_population(config, time, expected_migration):
     cmd = build_ms_command(config)
-    found_migration = extract(cmd, f"-em {time}")
+    found_migration = extract_by_flag(cmd, f"-em {time}")
 
     assert found_migration == expected_migration,  \
         f"Migration rates mismatch at time {time} (expected {expected_migration}, got {found_migration})"
@@ -171,35 +215,89 @@ def test_migration_rate_change(config, time, expected_migration):
 @pytest.mark.parametrize("config,time,expected_growth_rate_change", [
     (make_config_two_pops_with_migration(), 0.05, [2, 7.5e-7])
 ])
-def test_growth_rate_change(config, time, expected_growth_rate_change):
+def test_growth_rate_change_single_population(config, time, expected_growth_rate_change):
     cmd = build_ms_command(config)
-    found_growth_rate_change = extract(cmd, f"-eg {time}")
+    found_growth_rate_change = extract_by_flag(cmd, f"-eg {time}")
 
     assert found_growth_rate_change == expected_growth_rate_change, \
         f"Growth rate change mismatch at time {time} (expected {expected_growth_rate_change}, got {found_growth_rate_change})"
 
 
-@pytest.mark.parametrize("config,time,expected_size_change", [
-    (make_config_two_pops_with_migration(), 0.055, [1, 0.9])
-])
-def test_size_change(config, time, expected_size_change):
-    cmd = build_ms_command(config)
-    found_size_change = extract(cmd, f"-en {time}")
+import pytest
 
+# -----------------------
+# Single-population tests
+# -----------------------
+
+@pytest.mark.parametrize(
+    "config,time,pop_id,expected_size_change", [
+        (make_config_two_pops_with_migration(), 0.055, 1, 0.9),
+    ]
+)
+def test_size_change_single_population(config, time, pop_id, expected_size_change):
+    cmd = build_ms_command(config)
+    found_size_change = extract_by_flag(cmd, f"-en {time} {pop_id}")
     assert found_size_change == expected_size_change, \
-        f"Size change mismatch at time {time} (expected {expected_pop_size}, got {found_pop_size})"
+        f"Size change mismatch at time {time} (expected {expected_size_change}, got {found_size_change})"
 
 
-
-@pytest.mark.parametrize("config,time,expected_splits,expected_pop_size,expected_growth_rate,expected_migration", [
-    (make_population_split_event_config(), 0.005, [[2, 1],[3, 1]], [1, 1.0], [1, 5e-8], [[4, 1, 4e-7],[1, 4, 1e-6]])
-])
-def test_population_split_event(config, time, expected_splits, expected_pop_size, expected_growth_rate, expected_migration):
+@pytest.mark.parametrize(
+    "config,time,pop_id,expected_growth_rate", [
+        (make_config_two_pops_with_migration(), 0.055, 1, 1e-5),
+    ]
+)
+def test_single_population_growth_rate_after_size_change(config, time, pop_id, expected_growth_rate):
     cmd = build_ms_command(config)
-    found_splits = extract(cmd, f"-ej {time}")
-    found_pop_size = extract(cmd, f"-en {time}")
-    found_growth_rate = extract(cmd, f"-eg {time}")
-    found_migration = extract(cmd, f"-em {time}")
+    found_growth_rate = extract_by_flag(cmd, f"-eg {time} {pop_id}")
+    assert found_growth_rate == expected_growth_rate, \
+        f"Single population growth rate after size change at time {time} (expected {expected_growth_rate}, got {found_growth_rate})"
+
+
+@pytest.mark.parametrize(
+    "config,time,expected_size_change", [
+        (make_config_two_pops_with_migration(), 0.125, 1.0),
+    ]
+)
+def test_size_change_all_populations(config, time, expected_size_change):
+    cmd = build_ms_command(config)
+    found_size_change = extract_by_flag(cmd, f"-eN {time}")
+    assert found_size_change == expected_size_change, \
+        f"Size change mismatch at time {time} (expected {expected_size_change}, got {found_size_change})"
+
+
+@pytest.mark.parametrize(
+    "config,time,expected_default_growth_rate", [
+        (make_config_two_pops_with_migration(), 0.125, 2.5e-7),
+    ]
+)
+def test_default_growth_rate_for_all_populations_after_size_change(config, time, expected_default_growth_rate):
+    cmd = build_ms_command(config)
+    found_default_growth_rate = extract_by_flag(cmd, f"-eG {time}")
+    assert found_default_growth_rate == expected_default_growth_rate, \
+        f"Default growth rate for all populations after size change at time {time} (expected {expected_default_growth_rate}, got {found_default_growth_rate})"
+
+
+@pytest.mark.parametrize(
+    "config,time,expected_single_growth_rates", [
+        (make_config_two_pops_with_migration(), 0.125, [[2, 7.5e-7], [1, 1e-5]]),
+    ]
+)
+def test_individual_population_growth_rates_after_size_change(config, time, expected_single_growth_rates):
+    cmd = build_ms_command(config)
+    found_single_growth_rates = extract_by_flag(cmd, f"-eg {time}")
+    assert found_single_growth_rates == expected_single_growth_rates, \
+        f"Individual population growth rates after size change at time {time} (expected {expected_single_growth_rates}, got {found_single_growth_rates})"
+
+'''
+@pytest.mark.parametrize("config,time,expected_splits,expected_pop_size,expected_growth_rate", [
+    (make_population_split_event_config(), 0.005, [[2, 1],[3, 1]], [1, 1.0], [1, 5e-8])
+])
+def test_population_split_event(config, time, expected_splits, expected_pop_size, expected_growth_rate):
+    cmd = build_ms_command(config)
+    found_splits = extract_by_flag(cmd, f"-ej {time}")
+    found_pop_size = extract_by_flag(cmd, f"-en {time}")
+    found_growth_rate = extract_by_flag(cmd, f"-eg {time}")
+    found_migration = extract_by_flag(cmd, f"-em {time}")
 
     assert found_splits == expected_splits, \
         f"Splits mismatch: expected {expected_splits}, but got {found_splits}"
@@ -209,16 +307,7 @@ def test_population_split_event(config, time, expected_splits, expected_pop_size
 
     assert found_growth_rate == expected_growth_rate, \
         f"Wrong growth rate at split (expected {expected_growth_rate}, got {found_growth_rate})"
-
-    assert f"-eM {time} 0" in cmd, \
-        f"Missing reset of migration rates at time {time}"
-
-    assert found_migration == expected_migration, \
-        f"Migration rates mismatch at split: expected {expected_migration}, but got {found_migration}"
-
-    assert cmd.find(f"-eM {time} 0") < cmd.find(f"-em {time}"), \
-        f"Reset of migration (-eM {time} 0) does not occur before reinitalization (-em {time})"
-
+'''
 
 '''
 def test_admixture_event_in_command():

@@ -17,7 +17,7 @@ def set_initial_migration_rates(config, activity, pop_index):
 
     return migration_cmd
 
-
+'''
 def restore_migration_rates(config, activity, pop_index, time):
     factor = 1 / (4 * config["population_size"])  # scaling factor for rates
     migration_cmd = ""
@@ -45,7 +45,7 @@ def restore_migration_rates(config, activity, pop_index, time):
             migration_cmd += f" -em {time:.8g} {pop_index[dest]} {pop_index[source]} {rate:.8g}"
 
     return f" -eM {time:.8g} {0}" + migration_cmd
-
+'''
 
 def set_initial_growth_rates(config, activity, pop_index):
     factor = 1 / (4 * config["population_size"])  # scaling factor for rates
@@ -73,7 +73,8 @@ def restore_growth_rates(config, activity, pop_index, time, population=None):
     if population:
         assert activity[population]
         for event in reversed(config.get("demography_events", [])):
-            if event["type"] != "growth_rate_change" or event["time"] >= time:
+            event_time = event["time"] * factor
+            if event["type"] != "growth_rate_change" or event_time >= time:
                 continue
 
             if "population" not in event or event["population"] == "all" or event["population"] == population:
@@ -93,7 +94,8 @@ def restore_growth_rates(config, activity, pop_index, time, population=None):
 
     # Handle past demography events before the given time
     for event in reversed(config.get("demography_events", [])):
-        if event["type"] != "growth_rate_change" or event["time"] >= time:
+        event_time = event["time"] * factor
+        if event["type"] != "growth_rate_change" or event_time >= time:
             continue
 
         # Global growth rate change for all populations
@@ -138,7 +140,8 @@ def set_initial_population_sizes(config, activity, pop_index):
 def set_ancestral_size_at_split(config, activity, pop_index, time, population):
     assert activity[population], f"Can't change the size of an inactive population: {population}"
     for event in reversed(config.get("demography_events", [])):
-        if event["type"] != "size_change" or event["time"] >= time:
+        event_time = event["time"]/ (4 * config["population_size"])
+        if event["type"] != "size_change" or event_time >= time:
             continue
 
         if "population" not in event or event["population"] == "all":
@@ -262,11 +265,11 @@ def build_ms_command(config):
         type = event["type"]
 
         if type == "size_change":
-            if event["population"] == "all":
+            if "population" not in event or event["population"] == "all":
                 cmd += f" -eN {t:.8g} {int(event['size']) / population_size}"
                 cmd += restore_growth_rates(config, activity, pop_index, t)
             else:
-                assert activity[event['population']], "You cant change the size of an inactive population"
+                assert activity[event['population']], "You can't change the size of an inactive population"
 
                 cmd += f" -en {t:.8g} {pop_index[event['population']]} {int(event['size']) / population_size}"
                 cmd += restore_growth_rates(config, activity, pop_index, t, event['population'])
@@ -276,16 +279,24 @@ def build_ms_command(config):
                 if "dest" in event or "source" in event:
                         raise ValueError("Event must define either both 'dest' and 'source' or neither of them.")
                 
-                rate = event["rate"]/ (population_size - 1)
-                cmd += f" -eM {t:.8g} {rate:.8g}"
+                rate = event["rate"] * factor
+                for pop in populations:
+                    dest = pop["name"]
+                    for pop in populations:
+                        source = pop["name"]
+                        if dest == source or not activity[dest] or not activity[source]:
+                            continue
+                
+                    cmd += f" -em {t:.8g} {pop_index[dest]} {pop_index[source]} {rate:.8g}"
 
-            dest = event['dest']
-            source = event['source']
-            if not (activity[dest] and activity[source]):
-                raise ValueError("You can't migrate to or from an inactive population")
+            else:
+                dest = event['dest']
+                source = event['source']
+                if not (activity[dest] and activity[source]):
+                    raise ValueError("You can't migrate to or from an inactive population")
 
-            rate = float(event['rate']) * factor
-            cmd += f" -em {t:.8g} {pop_index[dest]} {pop_index[source]} {rate:.8g}"
+                rate = float(event['rate']) * factor
+                cmd += f" -em {t:.8g} {pop_index[dest]} {pop_index[source]} {rate:.8g}"
 
         elif type == "growth_rate_change":
             if "population" not in event or event["population"] == "all":
@@ -322,7 +333,7 @@ def build_ms_command(config):
             cmd += restore_growth_rates(config, activity, pop_index, t, ancestral)
 
             # Reinitialize migration rates according to the current activity configuration
-            cmd += restore_migration_rates(config, activity, pop_index, t)
+            # cmd += restore_migration_rates(config, activity, pop_index, t)
 
         elif type == "population_admixture":
             derived = event["derived"]
@@ -334,7 +345,7 @@ def build_ms_command(config):
             
             if not sum(proportions) == 1:
                 raise ValueError("Proportions should add up to one")
-                
+
             assert activity[derived], "Derived population should initially be active"
             assert all(activity[a] for a in ancestral), f"Ancestral populations should be active"
 
@@ -349,7 +360,7 @@ def build_ms_command(config):
                 cmd += f" -ej {t} {num_populations} {pop_index[ancestral[i]]}"
 
             # Reinitialize migration rates according to the current activity configuration
-            cmd += restore_migration_rates(config, activity, pop_index, t)
+            # cmd += restore_migration_rates(config, activity, pop_index, t)
 
     return cmd
 

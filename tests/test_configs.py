@@ -30,6 +30,8 @@ def make_config_two_pops_with_migration():
         "sequence_length": 1000,
         "num_replicates": 1,
         "save_trees": False,
+        "default_migration_rate": 0.05,
+        "default_growth_rate": 0.001,
         "recombination_rate": 1e-5,
         "gene_conversion_rate": 3e-6,
         "gene_conversion_tract_length": 3,
@@ -44,7 +46,8 @@ def make_config_two_pops_with_migration():
         "demography_events": [
             {"type": "migration_rate_change", "time": 100, "source": "pop1", "dest": "pop2", "rate": 0.2},
             {"type": "growth_rate_change", "time": 200, "population": "pop2", "rate": 0.003},
-            {"type": "size_change", "time": 220, "population": "pop1", "size": 900}
+            {"type": "size_change", "time": 220, "population": "pop1", "size": 900},
+            {"type": "size_change", "time": 500, "size": 1000}
         ]
     }
 
