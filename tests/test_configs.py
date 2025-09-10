@@ -8,6 +8,9 @@ def make_config_single_pop():
         "num_replicates": 3,
         "save_trees": True,
         "recombination_rate": 1e-8,
+        "demography_events": [
+            {"type": "growth_rate_change", "time": 200, "rate": 0.003}
+        ]
     }
 
 def make_config_with_gene_conversion():
@@ -47,7 +50,8 @@ def make_config_two_pops_with_migration():
             {"type": "migration_rate_change", "time": 100, "source": "pop1", "dest": "pop2", "rate": 0.2},
             {"type": "growth_rate_change", "time": 200, "population": "pop2", "rate": 0.003},
             {"type": "size_change", "time": 220, "population": "pop1", "size": 900},
-            {"type": "size_change", "time": 500, "size": 1000}
+            {"type": "size_change", "time": 500, "size": 1000},
+            {"type": "growth_rate_change", "time": 800, "rate": 0.05}
         ]
     }
 
@@ -76,7 +80,7 @@ def make_population_split_event_config():
             {"type": "migration_rate_change", "time": 50, "source": "pop2", "dest": "pop1", "rate": 0.05},
             {"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"},
             {"type": "migration_rate_change", "time": 180, "source": "pop4", "dest": "pop5", "rate": 0.1},
-            {"type": "migration_rate_change", "time": 180, "dest": "pop4", "source": "pop5", "rate": 0.09},
+            {"type": "migration_rate_change", "time": 180, "rate": 0.09},
         ]
         
     }

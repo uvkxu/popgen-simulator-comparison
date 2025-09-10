@@ -2,9 +2,9 @@ import os
 import subprocess
 
 
-# -----------------------
+# ----------------------------------
 # Recombination & Gene conversion
-# -----------------------
+# ----------------------------------
 
 def set_recombination(config):
     # Return the recombination part of the ms command
@@ -40,9 +40,9 @@ def set_gene_conversion(config):
     return ""
 
 
-# -----------------------
+# ----------------------------------
 # Initial migration & growth
-# -----------------------
+# ----------------------------------
 
 
 def set_initial_migration_rates(config, activity, pop_index):
@@ -82,9 +82,9 @@ def set_initial_growth_rates(config, activity, pop_index):
     return growth_rate_cmd
 
 
-# -----------------------
-# Population Initialization helpers
-# -----------------------
+# ----------------------------------
+# Population initialization helpers
+# ----------------------------------
 
 
 def set_initial_population_sizes(config, activity, pop_index):
@@ -105,10 +105,11 @@ def set_population_sample_sizes(config, activity, pop_index):
     for pop in config.get("populations", []):
         pop_name = pop["name"]
 
-        sample_size = pop.get("sample_size", 0) 
-        assert (not activity[pop_name] and sample_size == 0) or activity[pop_name], "You can't sample from an inactive population"
+        sample_size = pop.get("sample_size", 0)
         
         if not activity[pop_name]:
+            if sample_size != 0:
+                raise ValueError("You can't sample from an inactive population")
             continue
         
         sample_sizes += f" {sample_size}"
@@ -145,9 +146,9 @@ def get_initial_population_indices(config, activity):
     return num_populations, pop_index
 
 
-# -----------------------
+# ----------------------------------
 # Event handlers & helpers
-# -----------------------
+# ----------------------------------
 
 def check_events_sorted(config):
     events = config.get("demography_events", [])
@@ -176,7 +177,7 @@ def set_ancestral_size_at_split(config, activity, pop_index, time, population):
     if initial_size != population_size:
         return f" -en {time:.8g} {pop_index[population]} {initial_size/ population_size}"
     return ""
-    
+
 
 def restore_growth_rates(config, activity, pop_index, time, population=None):
     factor = 1 / (4 * config["population_size"])  # scaling factor for rates
@@ -374,11 +375,13 @@ def build_ms_command(config):
     ms_path = config.get("ms_path", "ms")
     total_sample_size = sum(p.get("sample_size", 0) for p in config.get("populations", [])) \
                         if "populations" in config else int(config["sample_size"])
-    num_populations = 0
     population_size = int(config["population_size"])
     num_replicates = int(config.get("num_replicates", 1))
     mut_rate = float(config["mutation_rate"])
     seq_length = int(config["sequence_length"])
+
+    num_populations = 0
+    activity = pop_index = {}
 
     # Mutation
     theta = 4 * population_size * mut_rate * seq_length
