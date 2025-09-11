@@ -757,3 +757,72 @@ def test_if_ancestral_growth_rate_flag_in_command(config, time, ancestral, expec
 #------------------------------------
 # Test population admixture event 
 #------------------------------------
+
+@pytest.mark.parametrize("event,config,activity_before,pop_index_before,num_populations_before,activity_after",[
+    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, {"pop1": False, "pop2": True, "pop3": True, "pop4": True, "pop5": False}),
+    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.8, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, -1),
+    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.8, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, -1),
+    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": False, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, -1),
+    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": False, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, -1),
+    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": False, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, -1),
+    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": False, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, -1),
+    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": False, "pop3": False, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, -1),
+    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": False, "pop3": False, "pop4": False, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, -1)
+])
+def test_handle_population_admixture_event_of_activity(event, config, activity_before, pop_index_before, num_populations_before, activity_after):
+    if activity_after == -1:
+        with pytest.raises(ValueError):
+            handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
+    else:
+        found_activity, _, _, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
+        assert found_activity == activity_after, f"Expected activity {activity_after}, but found {found_activity}"
+
+
+@pytest.mark.parametrize("event,config,activity_before,pop_index_before,num_populations_before,pop_index_after",[
+    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, {"pop2": 2, "pop3": 3, "pop4": 4})
+])
+def test_handle_population_admixture_event_of_pop_index(event, config, activity_before, pop_index_before, num_populations_before, pop_index_after):
+    _, found_pop_index, _, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
+    assert found_pop_index == pop_index_after, f"Expected pop_index {pop_index_after}, but found {found_pop_index}"
+
+
+@pytest.mark.parametrize("event,config,activity_before,pop_index_before,num_populations_before,num_populations_after",[
+    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, 6)
+])
+def test_handle_population_admixture_event_of_num_populations(event, config, activity_before, pop_index_before, num_populations_before, num_populations_after):
+    _, _, found_num_populations, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
+    assert found_num_populations == num_populations_after, f"Expected num_populations {num_populations_after}, but found {found_num_populations}"
+
+
+@pytest.mark.parametrize("event,config,activity_before,pop_index_before,num_populations_before,time,derived,expected_proportions",[
+    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, 0.0025, 1, [0.5, 0.4])
+])
+def test_handle_population_admixture_event_of_num_populations_of_proportions(event, config, activity_before, pop_index_before, num_populations_before, time, derived, expected_proportions):
+    _, _, _, population_admixture_cmd = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
+    found_proportions = extract_by_flag(population_admixture_cmd, f"-es {time} {derived}")
+    assert found_proportions == expected_proportions, f"Expected proportions {expected_proportions}, but found {found_proportions}"
+
+
+@pytest.mark.parametrize("event,config,activity_before,pop_index_before,num_populations_before,time,expected_splits",[
+    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(), {"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, 0.0025, [[5, 2], [6, 3], [1, 4]])
+])
+def test_handle_population_admixture_event_of_num_populations_of_splits(event, config, activity_before, pop_index_before, num_populations_before, time, expected_splits):
+    _, _, _, population_admixture_cmd = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
+    found_splits = extract_by_flag(population_admixture_cmd, f"-ej {time}")
+    assert found_splits == expected_splits, f"Expected splits {expected_splits}, but found {found_splits}"
+
+
+@pytest.mark.parametrize("config,time",[
+    (make_population_admixture_event_config(), 0.0025)
+])
+def test_admixture_event_es_flag_in_command(config, time):
+    cmd = build_ms_command(config)
+    assert f"-es {time}" in cmd, f"Expected admixture split flag '-es {time}' not found in command"
+
+
+@pytest.mark.parametrize("config,time",[
+    (make_population_admixture_event_config(), 0.0025)
+])
+def test_admixture_event_ej_flag_in_command(config, time):
+    cmd = build_ms_command(config)
+    assert f"-ej {time}" in cmd, f"Expected admixture join flag '-ej {time}' not found in command"

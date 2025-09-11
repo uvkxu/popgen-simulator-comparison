@@ -356,8 +356,11 @@ def handle_population_admixture_event(event, config, activity, pop_index, num_po
     if not sum(proportions) == 1:
         raise ValueError("Proportions should add up to one")
 
-    assert activity[derived], "Derived population should initially be active"
-    assert all(activity[a] for a in ancestral), f"Ancestral populations should be active"
+    if not activity[derived]:
+        raise ValueError("Derived population should initially be active")
+
+    if any(not activity[a] for a in ancestral):
+        raise ValueError("Ancestral populations should all be active")
 
     #TODO: Check whether the ancestral populations need to be active prior to the admixture event
 
@@ -373,7 +376,7 @@ def handle_population_admixture_event(event, config, activity, pop_index, num_po
     activity[derived] = False
     pop_index.pop(derived)
 
-    return activity, num_populations, population_admixture_cmd
+    return activity, pop_index, num_populations, population_admixture_cmd
 
 
 def build_ms_command(config):
@@ -429,7 +432,7 @@ def build_ms_command(config):
             activity, pop_index, population_split_cmd = handle_population_split_event(event, config, activity, pop_index)
             cmd += population_split_cmd
         elif type == "population_admixture":
-            activity, num_populations, population_admixture_cmd = handle_population_admixture_event(event, config, activity, pop_index, num_populations)
+            activity, pop_index, num_populations, population_admixture_cmd = handle_population_admixture_event(event, config, activity, pop_index, num_populations)
             cmd += population_admixture_cmd
 
     return cmd
