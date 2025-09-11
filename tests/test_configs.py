@@ -84,3 +84,52 @@ def make_population_split_event_config():
         ]
         
     }
+
+
+def make_population_split_event_with_size_change_config():
+    return {
+        "ms_path": "ms",
+        "population_size": 5000,
+        "mutation_rate": 4e-8,
+        "sample_size": 20,
+        "sequence_length": 100,
+        "num_replicates": 20,
+        "populations": [
+            {"name": "pop1", "sample_size": 5, "initial_size": 1000},
+            {"name": "pop2", "sample_size": 5, "initial_size": 1000, "growth_rate": 0.06},
+            {"name": "pop3", "sample_size": 10},
+            {"name": "pop4", "initial_size": 1000, "growth_rate": 0.001}
+        ],
+        "migration_rates": [
+            {"source": "pop1", "dest": "pop2", "rate": 0.01},
+            {"source": "pop2", "dest": "pop1", "rate": 0.01}
+        ],
+        "demography_events": [
+            {"type": "size_change", "time": 50, "size": 4000},
+            {"type": "growth_rate_change", "time": 80, "rate": 0.03},
+            {"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"},
+        ]
+        
+    }
+
+
+def make_population_admixture_event_config():
+    return {
+        "ms_path": "ms",
+        "population_size": 10000,
+        "mutation_rate": 9e-9,
+        "sequence_length": 100,
+        "num_replicates": 20,
+        "populations": [
+            {"name": "pop1", "sample_size": 20, "initial_size": 5000},
+            {"name": "pop2", "initial_size": 500, "growth_rate": 0.06},
+            {"name": "pop3"},
+            {"name": "pop4", "initial_size": 500, "growth_rate": 0.001},
+            {"name": "pop5", "initial_size": 2000, "growth_rate": 0.008}
+        ],
+        "demography_events": [
+            {"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]},
+            {"type": "population_split", "time": 180, "derived": ["pop2", "pop3", "pop4"], "ancestral": "pop5"},
+        ]
+    }
+

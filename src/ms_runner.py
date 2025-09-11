@@ -157,11 +157,10 @@ def check_events_sorted(config):
     return times == sorted(times)
 
 
-def set_ancestral_size_at_split(config, activity, pop_index, time, population):
-    assert activity[population], f"Can't change the size of an inactive population: {population}"
+def set_ancestral_size_at_split(config, pop_index, time, population):
     for event in reversed(config.get("demography_events", [])):
         event_time = event["time"]/ (4 * config["population_size"])
-        if event["type"] != "size_change" or event_time >= time:
+        if event["type"] != "size_change" or event_time > time:
             continue
 
         if "population" not in event or event["population"] == "all":
@@ -186,12 +185,12 @@ def restore_growth_rates(config, activity, pop_index, time, population=None):
         assert activity[population]
         for event in reversed(config.get("demography_events", [])):
             event_time = event["time"] * factor
-            if event["type"] != "growth_rate_change" or event_time >= time:
+            if event["type"] != "growth_rate_change" or event_time > time:
                 continue
 
             if "population" not in event or event["population"] == "all" or event["population"] == population:
                 rate = event["rate"] * factor
-                return f" -eg {time:.8g} {rate:.8g}"
+                return f" -eg {time:.8g} {pop_index[population]} {rate:.8g}"
 
         all_growth_rates = {pop["name"]: pop.get("growth_rate", 0) for pop in config.get("populations")}
         rate = all_growth_rates[population]
@@ -207,7 +206,7 @@ def restore_growth_rates(config, activity, pop_index, time, population=None):
     # Handle past demography events before the given time
     for event in reversed(config.get("demography_events", [])):
         event_time = event["time"] * factor
-        if event["type"] != "growth_rate_change" or event_time >= time:
+        if event["type"] != "growth_rate_change" or event_time > time:
             continue
 
         # Global growth rate change for all populations
@@ -313,23 +312,27 @@ def handle_population_split_event(event, config, activity, pop_index):
     derived = event["derived"]
     ancestral = event["ancestral"]
     
-    assert not activity[ancestral], "Ancestral population should initially be inactive"
-    assert all(activity[d] for d in derived), "Derived populations should initially be active"
+    if activity[ancestral]:
+        raise ValueError("Ancestral population should initially be inactive")
+    elif any(not activity[d] for d in derived):
+        raise ValueError("Derived populations should initially be active")
 
     pop_index[ancestral] = pop_index[derived[0]]
-    pop_index.pop(derived[0])
+
+    # Setting the population size of the ancestral population
+
+    # TODO: Ask Stefanos if it is important to change the size before or after split
+    population_split_cmd += set_ancestral_size_at_split(config, pop_index, t, ancestral)
+
+    for i in range(1, len(derived)):
+        population_split_cmd += f" -ej {t:.8g} {pop_index[derived[i]]} {pop_index[ancestral]}"
 
     # Mark the ancestral population as active
     activity[ancestral] = True
     # Mark all derived populations as inactive
     for d in derived:
         activity[d] = False
-
-    # Setting the population size of the ancestral population
-    population_split_cmd += set_ancestral_size_at_split(config, activity, pop_index, t, ancestral)
-
-    for i in range(1, len(derived)):
-        population_split_cmd += f" -ej {t:.8g} {pop_index[derived[i]]} {pop_index[ancestral]}"
+        pop_index.pop(d)
 
     # Setting the growth rate of the ancestral population
     population_split_cmd += restore_growth_rates(config, activity, pop_index, t, ancestral)
@@ -358,15 +361,17 @@ def handle_population_admixture_event(event, config, activity, pop_index, num_po
 
     #TODO: Check whether the ancestral populations need to be active prior to the admixture event
 
-    activity[derived] = False
-
     for i in range(0, len(ancestral)-1):
         num_populations += 1
+        proportion = proportions[i]/sum(proportions[i:])
 
-        population_admixture_cmd += f" -es {t} {pop_index[derived]} {1 - proportions[i]}"
+        population_admixture_cmd += f" -es {t} {pop_index[derived]} {1 - proportion}"
         population_admixture_cmd += f" -ej {t} {num_populations} {pop_index[ancestral[i]]}"
     
     population_admixture_cmd += f" -ej {t} {pop_index[derived]} {pop_index[ancestral[-1]]}"
+
+    activity[derived] = False
+    pop_index.pop(derived)
 
     return activity, num_populations, population_admixture_cmd
 
