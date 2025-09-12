@@ -1,58 +1,130 @@
 import os
 import msprime
+from ms_runner import get_initial_population_activity
+
+def update_activity(activity, derived=None, ancestral=None):
+    derived = derived if isinstance(derived, list) else [derived]
+    ancestral = ancestral if isinstance(ancestral, list) else [ancestral]
+
+    if ancestral:
+        for a in ancestral:
+            activity[a] = True
+    if derived:
+        for d in derived:
+            activity[d] = False
+    
+    return activity
+
+
+def set_initial_migration_rates(demography, config, activity):
+    explicit_migrations = set()
+    populations = config.get("populations", [])
+    
+    for mig in config.get("migration_rates", []):
+        demography.set_migration_rate(source=mig["source"], dest=mig["dest"], rate=mig["rate"])
+        explicit_migrations.add((mig["dest"], mig["source"]))
+
+    default_rate = config.get("default_migration_rate", 0.0)
+    if default_rate != 0:
+        for dest in (p["name"] for p in populations):
+            for src in (p["name"] for p in populations):
+                if dest != src and (dest, src) not in explicit_migrations:
+                    demography.set_migration_rate(source=src, dest=dest, rate=default_rate)
+
+
+
+def handle_size_change(demography, event):
+    time = event["time"]
+    if event.get("population") in (None, "all"):
+        demography.add_population_parameters_change(time=time, initial_size=event["size"])
+    else:
+        demography.add_population_parameters_change(
+            time=time, initial_size=event["size"], population=event["population"]
+        )
+
+
+def handle_growth_rate_change(demography, event):
+    time = event["time"]
+    if event.get("population") in (None, "all"):
+        demography.add_population_parameters_change(time=time, growth_rate=event["rate"])
+    else:
+        demography.add_population_parameters_change(
+            time=time, growth_rate=event["rate"], population=event["population"]
+        )
+
+
+def handle_migration_rate_change(demography, event, activity, populations):
+    time = event["time"]
+    if event.get("population") in (None, "all"):
+        for dst in (p["name"] for p in populations if activity[p["name"]]):
+            for src in (p["name"] for p in populations if activity[p["name"]]):
+                if dst != src:
+                    demography.set_migration_rate(source=src, dest=dst, rate=event["rate"])
+    else:
+        demography.add_migration_rate_change(
+            time=time, source=event["source"], dest=event["dest"], rate=event["rate"]
+        )
+
+
+def handle_population_split(demography, event, activity):
+    demography.add_population_split(
+        time=event["time"], derived=event["derived"], ancestral=event["ancestral"]
+    )
+    return update_activity(activity, derived=event["derived"], ancestral=["ancestral"])
+
+
+def handle_population_admixture(demography, event, activity):
+    demography.add_admixture(
+        time=event["time"],
+        derived=event["derived"],
+        ancestral=event["ancestral"],
+        proportions=event["proportions"],
+    )
+    return update_activity(activity, derived=event["derived"])
+
 
 def create_msprime_demography(config):
-    dem = msprime.Demography()
+    demography = msprime.Demography()
+    populations = config.get("populations", [])
     population_size = config["population_size"]
+    default_growth_rate = config.get("default_growth_rate", 0.0)
+    default_migration_rate = config.get("default_migration_rate", 0.0)
 
-    if "populations" in config:
-        for i, pop in enumerate(config.get("populations", [])):
-            name = pop.get("name")
+    # Add populations
+    for pop in populations:
+        size = pop.get("initial_size", population_size)
+        growth = pop.get("growth_rate", default_growth_rate)
+        demography.add_population(name=pop["name"], initial_size=size, growth_rate=growth)
+    
+    activity = get_initial_population_activity(config)
+    set_initial_migration_rates(demography, config, activity)
 
-            dem.add_population(
-                name=name,
-                initial_size=pop.get("initial_size", population_size),
-                growth_rate=pop.get("growth_rate", 0.0)
-            )
+    # Event handlers mapping
+    handlers = {
+        "size_change":              lambda ev: handle_size_change(demography, ev),
+        "growth_rate_change":       lambda ev: handle_growth_rate_change(demography, ev),
+        "migration_rate_change":    lambda ev: handle_migration_rate_change(demography, ev, activity, populations),
+        "population_split":         lambda ev: handle_population_split(demography, ev, activity),
+        "population_admixture":     lambda ev: handle_population_admixture(demography, ev, activity),
+    }
 
-        if "migration_rates" in config:
-            for mig in config["migration_rates"]:
-                dem.set_migration_rate(
-                    source=mig["source"],
-                    dest=mig["dest"],
-                    rate=mig["rate"]
-                )
-
+    # Apply demographic events
     for event in config.get("demography_events", []):
-        t = event["time"]
-        type = event["type"]
-        if type == "size_change":
-            pops = event["population"]
-            #TODO: Checke ob die Größe aller Populations oder nur die Größe aller inaktiven Populationen geändert wird
-            if pops == "all":
-                dem.add_population_parameters_change(time=t, initial_size=event["size"])
-            else:
-                dem.add_population_parameters_change(time=t, initial_size=event["size"], population=pops)
-        elif type == "growth_rate_change":
-            if event["population"] == "all":
-                #TODO: Checke ob die Größe aller Populations oder nur die Größe aller inaktiven Populationen geändert wird
-                dem.add_population_parameters_change(time=t, growth_rate=event["rate"])
-            else:
-                dem.add_population_parameters_change(time=t, growth_rate=event["rate"], population=event["population"])
-        elif type == "migration_rate_change":
-            dem.add_migration_rate_change(time=t,
-                source=event["source"],
-                dest=event["dest"],
-                rate=event["rate"]
-            )
-        elif type == "population_split":
-            dem.add_population_split(time=t, derived=event["derived"], ancestral=event["ancestral"])
-        elif type == "population_admixture":
-            dem.add_admixture(time=t, derived=event["derived"], ancestral=event["ancestral"], proportions=event["proportions"])
+        event_type = event["type"]
 
-    # print(dem.debug())
+        if event_type not in handlers:
+            raise ValueError(f"Unsupported event type: {event_type}")
 
-    return dem
+        handler = handlers[event_type]
+
+        # Handler may or may not update `activity`
+        result = handler(event)
+        if result is not None:
+            activity = result
+
+    print(demography.debug())
+
+    return demography
 
 def run_msprime_simulation(config):
     demography = create_msprime_demography(config)

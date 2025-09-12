@@ -671,7 +671,7 @@ def test_handle_population_split_event_change_of_activity(event, config, activit
         with pytest.raises(ValueError):
             handle_population_split_event(event, config, activity_before, pop_index_before)
     else:
-        found_activity, _, _ = handle_population_split_event(event, config, activity_before, pop_index_before)
+        _, found_activity, _ = handle_population_split_event(event, config, activity_before, pop_index_before)
 
         assert found_activity == activity_after, f"Activity mismatch: expected {activity_after}, found {found_activity}"
 
@@ -683,7 +683,7 @@ def test_handle_population_split_event_change_of_activity(event, config, activit
     ]
 )
 def test_handle_population_split_event_change_of_pop_index(event, config, activity_before, pop_index_before, pop_index_after):
-    _, found_pop_index, _ = handle_population_split_event(event, config, activity_before, pop_index_before)
+    _, _, found_pop_index = handle_population_split_event(event, config, activity_before, pop_index_before)
 
     assert found_pop_index == pop_index_after, f"Pop index mismatch: expected {pop_index_after}, found {found_pop_index}"
 
@@ -694,7 +694,7 @@ def test_handle_population_split_event_change_of_pop_index(event, config, activi
     ]
 )
 def test_handle_population_split_event_change_of_command(event, config, activity_before, pop_index_before, time, expected_splits):
-    _, _, population_split_cmd = handle_population_split_event(event, config, activity_before, pop_index_before)
+    population_split_cmd, _, _  = handle_population_split_event(event, config, activity_before, pop_index_before)
     found_splits = extract_by_flag(population_split_cmd, f"-ej {time}")
 
     assert found_splits == expected_splits, f"Split mismatch at time {time}: expected {expected_splits}, found {found_splits}"
@@ -774,7 +774,7 @@ def test_handle_population_admixture_event_of_activity(event, config, activity_b
         with pytest.raises(ValueError):
             handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
     else:
-        found_activity, _, _, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
+        _, found_activity, _, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
         assert found_activity == activity_after, f"Expected activity {activity_after}, but found {found_activity}"
 
 
@@ -782,7 +782,7 @@ def test_handle_population_admixture_event_of_activity(event, config, activity_b
     ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, {"pop2": 2, "pop3": 3, "pop4": 4})
 ])
 def test_handle_population_admixture_event_of_pop_index(event, config, activity_before, pop_index_before, num_populations_before, pop_index_after):
-    _, found_pop_index, _, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
+    _, _, found_pop_index, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
     assert found_pop_index == pop_index_after, f"Expected pop_index {pop_index_after}, but found {found_pop_index}"
 
 
@@ -790,7 +790,7 @@ def test_handle_population_admixture_event_of_pop_index(event, config, activity_
     ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, 6)
 ])
 def test_handle_population_admixture_event_of_num_populations(event, config, activity_before, pop_index_before, num_populations_before, num_populations_after):
-    _, _, found_num_populations, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
+    _, _, _, found_num_populations = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
     assert found_num_populations == num_populations_after, f"Expected num_populations {num_populations_after}, but found {found_num_populations}"
 
 
@@ -798,7 +798,7 @@ def test_handle_population_admixture_event_of_num_populations(event, config, act
     ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, 0.0025, 1, [0.5, 0.4])
 ])
 def test_handle_population_admixture_event_of_num_populations_of_proportions(event, config, activity_before, pop_index_before, num_populations_before, time, derived, expected_proportions):
-    _, _, _, population_admixture_cmd = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
+    population_admixture_cmd, _, _, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
     found_proportions = extract_by_flag(population_admixture_cmd, f"-es {time} {derived}")
     assert found_proportions == expected_proportions, f"Expected proportions {expected_proportions}, but found {found_proportions}"
 
@@ -807,7 +807,7 @@ def test_handle_population_admixture_event_of_num_populations_of_proportions(eve
     ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(), {"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, 0.0025, [[5, 2], [6, 3], [1, 4]])
 ])
 def test_handle_population_admixture_event_of_num_populations_of_splits(event, config, activity_before, pop_index_before, num_populations_before, time, expected_splits):
-    _, _, _, population_admixture_cmd = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
+    population_admixture_cmd, _, _, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
     found_splits = extract_by_flag(population_admixture_cmd, f"-ej {time}")
     assert found_splits == expected_splits, f"Expected splits {expected_splits}, but found {found_splits}"
 

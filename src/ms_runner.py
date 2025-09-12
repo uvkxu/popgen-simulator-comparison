@@ -122,9 +122,7 @@ def get_initial_population_activity(config):
     activity = {pid: True for pid in pop_names}  # Default: aktiv
     
     for event in config.get("demography_events", []):
-        type = event["type"]
-        
-        if type == "population_split":
+       if event["type"] == "population_split":
             activity[event["ancestral"]] = False
     
     return activity
@@ -163,7 +161,7 @@ def set_ancestral_size_at_split(config, pop_index, time, population):
         if event["type"] != "size_change" or event_time > time:
             continue
 
-        if "population" not in event or event["population"] == "all":
+        if event.get("population") in (None, "all"):
             return ""
         # No need to check event["population"] == population here,
         # because a pop_size change is only triggered when a subpopulation
@@ -188,7 +186,7 @@ def restore_growth_rates(config, activity, pop_index, time, population=None):
             if event["type"] != "growth_rate_change" or event_time > time:
                 continue
 
-            if "population" not in event or event["population"] == "all" or event["population"] == population:
+            if event.get("population") in (None, "all", population):
                 rate = event["rate"] * factor
                 return f" -eg {time:.8g} {pop_index[population]} {rate:.8g}"
 
@@ -210,7 +208,7 @@ def restore_growth_rates(config, activity, pop_index, time, population=None):
             continue
 
         # Global growth rate change for all populations
-        if "population" not in event or event["population"] == "all":
+        if event.get("population") in (None, "all"):
             rate = event["rate"] * factor
             return f" -eG {time:.8g} {rate:.8g}" + growth_rate_cmd # global change overrides everything else
 
@@ -244,7 +242,7 @@ def handle_size_change_event(event, config, activity, pop_index):
     factor = 1/ (4 * population_size)
     t = event["time"] * factor
 
-    if "population" not in event or event["population"] == "all":
+    if event.get("population") in (None, "all"):
         size_change_cmd += f" -eN {t:.8g} {event['size']/population_size}"
         size_change_cmd += restore_growth_rates(config, activity, pop_index, t)
     else:
@@ -294,7 +292,7 @@ def handle_growth_rate_change_event(event, config, activity, pop_index):
     t = event["time"] * factor
     rate = event["rate"] * factor
 
-    if "population" not in event or event["population"] == "all":
+    if event.get("population") in (None, "all"):
         return f" -eG {t:.8g} {rate:.8g}"
     
     pop = event["population"]
@@ -337,7 +335,7 @@ def handle_population_split_event(event, config, activity, pop_index):
     # Setting the growth rate of the ancestral population
     population_split_cmd += restore_growth_rates(config, activity, pop_index, t, ancestral)
 
-    return activity, pop_index, population_split_cmd
+    return population_split_cmd, activity, pop_index
 
 
 def handle_population_admixture_event(event, config, activity, pop_index, num_populations):
@@ -376,7 +374,7 @@ def handle_population_admixture_event(event, config, activity, pop_index, num_po
     activity[derived] = False
     pop_index.pop(derived)
 
-    return activity, pop_index, num_populations, population_admixture_cmd
+    return population_admixture_cmd, activity, pop_index, num_populations
 
 
 def build_ms_command(config):
@@ -419,21 +417,22 @@ def build_ms_command(config):
     if not check_events_sorted(config):
         raise ValueError("Demography events are not sorted by time!")
 
-    for event in config.get("demography_events", []):
-        type = event["type"]
 
-        if type == "size_change":
-            cmd += handle_size_change_event(event, config, activity, pop_index)
-        elif type == "migration_rate_change":
-            cmd += handle_migration_rate_change_event(event, config, activity, pop_index)
-        elif type == "growth_rate_change":
-            cmd += handle_growth_rate_change_event(event, config, activity, pop_index)
-        elif type == "population_split":
-            activity, pop_index, population_split_cmd = handle_population_split_event(event, config, activity, pop_index)
-            cmd += population_split_cmd
-        elif type == "population_admixture":
-            activity, pop_index, num_populations, population_admixture_cmd = handle_population_admixture_event(event, config, activity, pop_index, num_populations)
-            cmd += population_admixture_cmd
+    handlers = {
+        "size_change":              lambda ev: (handle_size_change_event(ev, config, activity, pop_index), activity, pop_index, num_populations),
+        "migration_rate_change":    lambda ev: (handle_migration_rate_change_event(ev, config, activity, pop_index), activity, pop_index, num_populations),
+        "growth_rate_change":       lambda ev: (handle_growth_rate_change_event(ev, config, activity, pop_index), activity, pop_index, num_populations),
+        "population_split":         lambda ev: (*handle_population_split_event(ev, config, activity, pop_index), num_populations),
+        "population_admixture":     lambda ev: handle_population_admixture_event(ev, config, activity, pop_index, num_populations),
+    }
+
+    for event in config.get("demography_events", []):
+        event_type = event["type"]
+        if event_type not in handlers:
+            raise ValueError(f"Unsupported event type: {event_type}")
+
+        cmd_part, activity, pop_index, num_populations = handlers[event_type](event)
+        cmd += cmd_part
 
     return cmd
 
