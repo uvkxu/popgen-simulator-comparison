@@ -81,10 +81,10 @@ def extract_default_migration_rate(cmd):
 # ---------------------------------------
 
 @pytest.mark.parametrize("config,expected", [
-    (make_config_two_pops_with_migration(), " 10 1"), 
-    (make_config_single_pop(), " 15 3"),
-    (make_config_with_gene_conversion(), " 20 5"),
-    (make_population_split_event_config(), " 35 20")
+    (make_config_two_pops_with_migration(), "ms 10 1"), 
+    (make_config_single_pop(), "ms 15 3"),
+    (make_config_with_gene_conversion(), "ms 20 5"),
+    (make_population_split_event_config(), "ms 35 20")
 ])
 def test_total_sample_size_and_replicates(config, expected):
     cmd = build_ms_command(config)

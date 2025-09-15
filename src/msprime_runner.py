@@ -48,9 +48,8 @@ def handle_size_change(demography, event, activity, populations):
 def handle_growth_rate_change(demography, event, activity, populations):
     time = event["time"]
     if event.get("population") in (None, "all"):
-        for pop in (p["name"] for p in populations):
-            if activity[pop]:
-                demography.add_population_parameters_change(time=time, growth_rate=event["rate"], population=pop)
+        for pop in (p["name"] for p in populations if activity[p["name"]]):
+            demography.add_population_parameters_change(time=time, growth_rate=event["rate"], population=pop)
     else:
         demography.add_population_parameters_change(
             time=time, growth_rate=event["rate"], population=event["population"]

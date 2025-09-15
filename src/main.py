@@ -1,8 +1,9 @@
 import sys
 import yaml
 import os
-from ms_runner import run_ms_simulation, run_msms_simulation
+from ms_runner import run_ms_simulation
 from msprime_runner import run_msprime_simulation
+from msms_runner import run_msms_simulation
 import msprime
 
 def main():

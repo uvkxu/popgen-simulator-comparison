@@ -421,7 +421,7 @@ def build_ms_command(config):
 
     # Mutation
     theta = 4 * population_size * mut_rate * seq_length
-    cmd = f" {total_sample_size} {num_replicates} -t {theta:.8g}"
+    cmd = f"ms {total_sample_size} {num_replicates} -t {theta:.8g}"
 
     # Tree output
     if config.get("save_trees", True):
@@ -475,7 +475,7 @@ def run_ms_simulation(config):
     if not ms_path or not os.path.exists(ms_path):
         raise FileNotFoundError(f"ms executable not found at {ms_path}. Please check the path in config.")
 
-    command = "ms" + build_ms_command(config)
+    command = build_ms_command(config)
     output_file = config.get("ms_output_file", "results/ms/output.txt")
 
     print(f"🚀 Running ms: {command}")
@@ -490,26 +490,3 @@ def run_ms_simulation(config):
 
     with open(output_file, "w") as f:
         f.write(result.stdout)
-
-
-def run_msms_simulation(config):
-    msms_path = config.get("msms_path")
-    if not msms_path or not os.path.exists(msms_path):
-        raise FileNotFoundError(f"msms executable not found at {msms_path}. Please check the path in config.")
-
-    command = "msms" + build_ms_command(config)
-    output_file = config.get("msms_output_file", "results/msms/output.txt")
-
-    print(f"🚀 Running msms: {command}")
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
-
-    cmd_parts = command.split()
-    cmd_parts[0] = msms_path
-
-    result = subprocess.run(cmd_parts, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"ms failed:\n{result.stderr}")
-
-    with open(output_file, "w") as f:
-        f.write(result.stdout)
-        f.write(result.stderr)
