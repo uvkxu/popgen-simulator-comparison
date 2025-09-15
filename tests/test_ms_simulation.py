@@ -5,7 +5,7 @@ from ms_runner import build_ms_command, set_initial_migration_rates, set_initial
                         get_initial_population_activity, get_initial_population_indices, handle_size_change_event, \
                         handle_migration_rate_change_event, handle_growth_rate_change_event, handle_population_split_event, \
                         handle_population_admixture_event, set_recombination, has_gene_conversion, set_gene_conversion, \
-                        set_ancestral_growth_rate_at_split
+                        set_ancestral_growth_rate_at_split, set_ancestral_migration_rates_at_split
 
 from test_configs import make_config_single_pop, make_config_two_pops_with_migration, make_config_with_gene_conversion, make_population_split_event_config, \
                             make_population_split_event_with_size_change_config, make_population_admixture_event_config
@@ -758,6 +758,29 @@ def test_if_ancestral_growth_rate_flag_in_command(config, time, ancestral, expec
 
     assert found_growth_rate == expected_growth_rate, f"Growth rate flag mismatch at time {time} for {ancestral}: expected {expected_growth_rate}, found {found_growth_rate}"
 
+@pytest.mark.parametrize("config,activity,pop_index,time,population,expected_migrations",[
+        (make_population_split_event_config(), {"pop1": False, "pop2": False, "pop3": False, "pop4": True, "pop5": True}, {"pop4": 1, "pop5": 4}, 0.005, "pop4", [[4, 1, 4e-7], [1, 4, 1e-6]]),
+        (make_population_split_event_config(), {"pop1": False, "pop2": False, "pop3": False, "pop4": True, "pop5": False}, {"pop4": 1, "pop5": 4}, 0.005, "pop4", []),
+        (make_population_split_event_config(), {"pop1": False, "pop2": True, "pop3": False, "pop4": True, "pop5": True}, {"pop2": 2, "pop4": 1, "pop5": 4}, 0.005, "pop4", [[4, 1, 4e-7], [1, 4, 1e-6], [2, 1, 0.0], [1, 2, 0.0]]),
+    ]
+)
+def test_set_ancestral_migration_rates_at_split(config, activity, pop_index, time, population, expected_migrations):
+    migration_cmd = set_ancestral_migration_rates_at_split(config, activity, pop_index, time, population)
+    found_migrations = extract_by_flag(migration_cmd, f"-em {time}")
+
+    assert found_migrations == expected_migrations, f"Ancestral migration rates mismatch at time {time} for population {population}: expected {expected_migrations}, found {found_migrations}"
+
+
+@pytest.mark.parametrize("config,time,expected_migration_rates", [
+        (make_population_split_event_config(), 0.005, [[4, 1, 4e-7], [1, 4, 1e-6]])
+    ]
+)
+def test_if_ancestral_migration_rates_flag_in_command(config, time, expected_migration_rates):
+    cmd = build_ms_command(config)
+    found_migration_rates = extract_by_flag(cmd, f"-em {time}")
+
+    assert found_migration_rates ==  expected_migration_rates, f"Migration rates mismatch at time {time}: expected {expected_migration_rates}, found {found_migration_rates}"
+
 #------------------------------------
 # Test population admixture event 
 #------------------------------------
@@ -821,4 +844,3 @@ def test_admixture_event_ej_flag_in_command(config, time):
 
 
 # TODO: Test pulse mass migration
-# TODO: Test set_ancestral_migration_rates_at_split
