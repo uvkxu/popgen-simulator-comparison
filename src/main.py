@@ -1,7 +1,7 @@
 import sys
 import yaml
 import os
-from ms_runner import run_ms_simulation
+from ms_runner import run_ms_simulation, run_msms_simulation
 from msprime_runner import run_msprime_simulation
 import msprime
 
@@ -25,6 +25,7 @@ def main():
         cfg = yaml.safe_load(f)
 
     run_ms_simulation(cfg)
+    run_msms_simulation(cfg)
     run_msprime_simulation(cfg)
 
 if __name__ == "__main__":

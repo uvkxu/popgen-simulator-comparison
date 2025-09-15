@@ -4,13 +4,14 @@ save_trees: True
 population_size: 1000
 sequence_length: 100
 recombination_rate: 0.000001
-mutation_rate: 0.000001
+mutation_rate: 0.00001
+default_growth_rate: 0.007
 growth_rate: 0.1
-gene_conversion_rate: 0.00001
-gene_conversion_tract_length: 1
 ms_path: C:/Users/Lenovo/OneDrive/Dokumente/Informatik-Studium/KIT/Masterarbeit/ms.folder/ms/msdir/ms.exe
+msms_path: C:/Users/Lenovo/OneDrive/Dokumente/Informatik-Studium/KIT/Masterarbeit/msms/bin/msms.exe
 ms_output_file: results/ms_output.txt
 msprime_output_file: results/msprime_output.txt
+msms_output_file: results/msms_output.txt
 
 populations:
   - name: pop1
@@ -23,14 +24,19 @@ populations:
     sample_size: 5
   - name: pop4
   - name: pop5
+  - name: pop6
 
 migration_rates:
-  - source: pop1
-    dest: pop2
+  - source: pop4
+    dest: pop3
     rate: 0.1
-  - source: pop2
-    dest: pop1
+  - source: pop3
+    dest: pop4
     rate: 0.1
+  - source: pop5
+    dest: pop6
+    rate: 0.9
+
 
 demography_events:
   - type: population_admixture
@@ -38,6 +44,16 @@ demography_events:
     derived: pop1
     ancestral: [pop2, pop3, pop4]
     proportions: [0.25, 0.25, 0.5]
+
+  - type: population_pulse_migration
+    time: 250
+    dest: pop2
+    source: pop3
+    proportion: 0.5
+
+  - type: growth_rate_change
+    time: 280
+    rate: 0.008
 
   - type: population_split
     time: 300

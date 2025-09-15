@@ -64,22 +64,28 @@ def set_initial_migration_rates(config, activity, pop_index):
 
 def set_initial_growth_rates(config, activity, pop_index):
     factor = 1 / (4 * config["population_size"])  # scaling factor for rates
+    default_growth_rate = config.get("default_growth_rate", 0.0) * factor
     growth_rate_cmd = ""
+    growth_rate_map = {}
 
-    if "default_growth_rate" in config:
-        rate = config["default_growth_rate"] * factor
-        growth_rate_cmd = f" -G {rate:.8g}"
+    if default_growth_rate != 0:
+        growth_rate_cmd = f" -G {default_growth_rate:.8g}"
+
+    if "populations" not in config:
+        return growth_rate_cmd, {"single": default_growth_rate} 
 
     # Initial growth rates
-    for pop in config.get("populations", []):
+    for pop in config["populations"]:
         pop_name = pop["name"]
-        if "growth_rate" not in pop or not activity[pop_name]:
-            continue
+        if activity[pop_name]:
+            if "growth_rate" in pop:
+                rate = pop["growth_rate"] * factor
+                growth_rate_map[pop_name] = rate
+                growth_rate_cmd += f" -g {pop_index[pop_name]} {rate:.8g}"
+            elif default_growth_rate != 0:
+                growth_rate_map[pop_name] = default_growth_rate
 
-        rate = pop["growth_rate"] * factor
-        growth_rate_cmd += f" -g {pop_index[pop_name]} {rate:.8g}"
-
-    return growth_rate_cmd
+    return growth_rate_cmd, growth_rate_map
 
 
 # ----------------------------------
@@ -155,87 +161,77 @@ def check_events_sorted(config):
     return times == sorted(times)
 
 
-def set_ancestral_size_at_split(config, pop_index, time, population):
-    for event in reversed(config.get("demography_events", [])):
-        event_time = event["time"]/ (4 * config["population_size"])
-        if event["type"] != "size_change" or event_time > time:
-            continue
-
-        if event.get("population") in (None, "all"):
-            return ""
-        # No need to check event["population"] == population here,
-        # because a pop_size change is only triggered when a subpopulation
-        # transitions from inactive to active.
-    
+def set_ancestral_size_at_split(config, pop_index, time, population):    
     population_size = config["population_size"]
-    all_pop_sizes = {pop["name"]: pop.get("initial_size", population_size) for pop in config.get("populations")}
-    initial_size = all_pop_sizes[population]
+    populations = config.get("populations", [])
 
-    if initial_size != population_size:
-        return f" -en {time:.8g} {pop_index[population]} {initial_size/ population_size}"
+    initial_size = [pop.get("initial_size", population_size) for pop in populations if pop["name"] == population][0]
+
+    return f" -en {time:.8g} {pop_index[population]} {initial_size/ population_size}"
+
+
+def set_ancestral_growth_rate_at_split(config, pop_index, time, population):
+    default_growth_rate = config.get("default_growth_rate", 0)
+    populations = config.get("populations", [])
+
+    growth_rate = [pop.get("growth_rate", default_growth_rate) for pop in populations if pop["name"] == population][0]
+
+    factor = 1 / (4 * config["population_size"])
+    adjusted_growth_rate = growth_rate * factor
+
+    if adjusted_growth_rate != 0:
+        return f" -eg {time:.8g} {pop_index[population]} {adjusted_growth_rate:.8g}"
     return ""
 
 
-def restore_growth_rates(config, activity, pop_index, time, population=None):
+def set_ancestral_migration_rates_at_split(config, activity, pop_index, time, population):
     factor = 1 / (4 * config["population_size"])  # scaling factor for rates
+    migration_cmd = ""
+    handled_migrations = set()
 
-    if population:
-        assert activity[population]
-        for event in reversed(config.get("demography_events", [])):
-            event_time = event["time"] * factor
-            if event["type"] != "growth_rate_change" or event_time > time:
-                continue
+    for mig in config.get("migration_rates", []):
+        dest, source = mig["dest"], mig["source"]
 
-            if event.get("population") in (None, "all", population):
-                rate = event["rate"] * factor
-                return f" -eg {time:.8g} {pop_index[population]} {rate:.8g}"
+        if (dest == population or source == population) and activity[dest] and activity[source]:
+            rate = mig["rate"] * factor
+            migration_cmd += f" -em {time} {pop_index[dest]} {pop_index[source]} {rate:.8g}"
 
-        all_growth_rates = {pop["name"]: pop.get("growth_rate", 0) for pop in config.get("populations")}
-        rate = all_growth_rates[population]
-        rate = (rate if rate != 0 else config.get("default_growth_rate", 0)) * factor
+            handled_migrations.add((dest, source))
+    
+    for pop in (p["name"] for p in config["populations"]):
+        if activity[pop] and pop != population:
+            if (pop, population) not in handled_migrations:
+                migration_cmd += f" -em {time} {pop_index[pop]} {pop_index[population]} {0}"
+            if (population, pop) not in handled_migrations:
+                migration_cmd += f" -em {time} {pop_index[population]} {pop_index[pop]} {0}"
+    
+    return migration_cmd
+
+
+
+def restore_growth_rates(config, activity, pop_index, growth_rate_map, time, population=None):
+    if "populations" in config:
+        populations = (
+            [p["name"] for p in config.get("populations", []) if activity[p["name"]]]
+            if population is None
+            else [population]
+        )
+        growth_rate_cmd = ""
+
+        for pop in populations:
+            rate = growth_rate_map.get(pop, 0.0)
+
+            if rate != 0:
+                growth_rate_cmd += f" -eg {time:.8g} {pop_index[pop]} {rate:.8g}"
         
-        if rate != 0:
-            return f" -eg {time:.8g} {pop_index[population]} {rate:.8g}"
-        return ""
+        return growth_rate_cmd
+    elif growth_rate_map["single"] != 0: # there only exits one population in the whole model
+        return f" -eG {time:.8g} {growth_rate_map["single"]:.8g}"
 
-    growth_rate_cmd = ""
-    changed_growth_rates = set()  # track populations already updated at given time
-
-    # Handle past demography events before the given time
-    for event in reversed(config.get("demography_events", [])):
-        event_time = event["time"] * factor
-        if event["type"] != "growth_rate_change" or event_time > time:
-            continue
-
-        # Global growth rate change for all populations
-        if event.get("population") in (None, "all"):
-            rate = event["rate"] * factor
-            return f" -eG {time:.8g} {rate:.8g}" + growth_rate_cmd # global change overrides everything else
-
-        # Population-specific growth rate change
-        pop = event["population"]
-        if activity[pop] and pop not in changed_growth_rates:
-            rate = event["rate"] * factor
-            growth_rate_cmd += f" -eg {time:.8g} {pop_index[pop]} {rate:.8g}"
-            changed_growth_rates.add(pop)
-
-    if "default_growth_rate" in config:
-        rate = config["default_growth_rate"] * factor
-        growth_rate_cmd = f" -eG {time:.8g} {rate:.8g}" + growth_rate_cmd
-
-    # Initial growth rates (or those not overridden by events)
-    for pop in config.get("populations", []):
-        pop_name = pop["name"]
-        if "growth_rate" not in pop or not activity[pop_name] or pop_name in changed_growth_rates:
-            continue
-
-        rate = pop["growth_rate"] * factor
-        growth_rate_cmd += f" -eg {time:.8g} {pop_index[pop_name]} {rate:.8g}"
-
-    return growth_rate_cmd
+    return ""
 
 
-def handle_size_change_event(event, config, activity, pop_index):
+def handle_size_change_event(event, config, activity, pop_index, growth_rate_map):
     size_change_cmd = ""
 
     population_size = config["population_size"]
@@ -244,13 +240,13 @@ def handle_size_change_event(event, config, activity, pop_index):
 
     if event.get("population") in (None, "all"):
         size_change_cmd += f" -eN {t:.8g} {event['size']/population_size}"
-        size_change_cmd += restore_growth_rates(config, activity, pop_index, t)
+        size_change_cmd += restore_growth_rates(config, activity, pop_index, growth_rate_map, t)
     else:
         pop = event["population"]
         if not activity[pop]:
             raise ValueError("Can't change size of inactive population")
         size_change_cmd += f" -en {t:.8g} {pop_index[pop]} {event['size']/population_size}"
-        size_change_cmd += restore_growth_rates(config, activity, pop_index, t, pop)
+        size_change_cmd += restore_growth_rates(config, activity, pop_index, growth_rate_map, t, pop)
 
     return size_change_cmd
 
@@ -287,17 +283,31 @@ def handle_migration_rate_change_event(event, config, activity, pop_index):
     return migration_change_cmd
 
 
-def handle_growth_rate_change_event(event, config, activity, pop_index):
+def handle_growth_rate_change_event(event, config, activity, pop_index, growth_rate_map):
     factor = 1/ (4 * config["population_size"])
     t = event["time"] * factor
     rate = event["rate"] * factor
 
     if event.get("population") in (None, "all"):
-        return f" -eG {t:.8g} {rate:.8g}"
+        if "populations" not in config:
+            growth_rate_map["single"] = rate
+            return f" -eG {t:.8g} {rate:.8g}"
+
+        growth_rate_cmd = ""
+
+        for pop in (p["name"] for p in config["populations"] if activity[p["name"]]):
+            growth_rate_map[pop] = rate
+            growth_rate_cmd += f" -eg {t:.8g} {pop_index[pop]} {rate:.8g}"
+        
+        return growth_rate_cmd
+            
     
     pop = event["population"]
+    growth_rate_map[pop] = rate
+
     if not activity[pop]:
         raise ValueError("Can't change growth rate of inactive population")
+
     return f" -eg {t:.8g} {pop_index[pop]} {rate:.8g}"
 
 
@@ -333,9 +343,10 @@ def handle_population_split_event(event, config, activity, pop_index):
         pop_index.pop(d)
 
     # Setting the growth rate of the ancestral population
-    population_split_cmd += restore_growth_rates(config, activity, pop_index, t, ancestral)
+    population_split_cmd += set_ancestral_growth_rate_at_split(config, pop_index, t, ancestral)
+    population_split_cmd += set_ancestral_migration_rates_at_split(config, activity, pop_index, t, ancestral)
 
-    return population_split_cmd, activity, pop_index
+    return population_split_cmd
 
 
 def handle_population_admixture_event(event, config, activity, pop_index, num_populations):
@@ -355,12 +366,10 @@ def handle_population_admixture_event(event, config, activity, pop_index, num_po
         raise ValueError("Proportions should add up to one")
 
     if not activity[derived]:
-        raise ValueError("Derived population should initially be active")
+        raise ValueError("Derived population should be active")
 
     if any(not activity[a] for a in ancestral):
         raise ValueError("Ancestral populations should all be active")
-
-    #TODO: Check whether the ancestral populations need to be active prior to the admixture event
 
     for i in range(0, len(ancestral)-1):
         num_populations += 1
@@ -374,11 +383,32 @@ def handle_population_admixture_event(event, config, activity, pop_index, num_po
     activity[derived] = False
     pop_index.pop(derived)
 
-    return population_admixture_cmd, activity, pop_index, num_populations
+    return population_admixture_cmd, num_populations
+
+
+def handle_populatin_pulse_migration(event, config, activity, pop_index, num_populations):
+    factor = 1/ (4 * config["population_size"])
+    t = event["time"] * factor
+
+    dest = event["dest"]
+    source = event["source"]
+
+    if not activity[dest]:
+        raise ValueError("Destination population must be active")
+
+    if not activity[source]:
+        raise ValueError("Source population must be active")
+
+    num_populations += 1
+    proportion = event["proportion"]
+
+    pulse_migration_cmd = f" -es {t} {pop_index[source]} {1 - proportion}"
+    pulse_migration_cmd += f" -ej {t} {num_populations} {pop_index[dest]}"
+
+    return pulse_migration_cmd, num_populations
 
 
 def build_ms_command(config):
-    ms_path = config.get("ms_path", "ms")
     total_sample_size = sum(p.get("sample_size", 0) for p in config.get("populations", [])) \
                         if "populations" in config else int(config["sample_size"])
     population_size = int(config["population_size"])
@@ -391,7 +421,7 @@ def build_ms_command(config):
 
     # Mutation
     theta = 4 * population_size * mut_rate * seq_length
-    cmd = f"ms {total_sample_size} {num_replicates} -t {theta:.8g}"
+    cmd = f" {total_sample_size} {num_replicates} -t {theta:.8g}"
 
     # Tree output
     if config.get("save_trees", True):
@@ -405,6 +435,7 @@ def build_ms_command(config):
 
     # Initialization of subpopulations
     if "populations" in config:
+        migration_rate_map = {}
         activity = get_initial_population_activity(config)
         num_populations, pop_index = get_initial_population_indices(config, activity)
 
@@ -412,18 +443,20 @@ def build_ms_command(config):
         cmd += set_population_sample_sizes(config, activity, pop_index)
         cmd += set_initial_migration_rates(config, activity, pop_index)
         cmd += set_initial_population_sizes(config, activity, pop_index)
-        cmd += set_initial_growth_rates(config, activity, pop_index)
+
+    growth_rates_cmd, growth_rate_map = set_initial_growth_rates(config, activity, pop_index)
+    cmd += growth_rates_cmd
 
     if not check_events_sorted(config):
         raise ValueError("Demography events are not sorted by time!")
 
-
     handlers = {
-        "size_change":              lambda ev: (handle_size_change_event(ev, config, activity, pop_index), activity, pop_index, num_populations),
-        "migration_rate_change":    lambda ev: (handle_migration_rate_change_event(ev, config, activity, pop_index), activity, pop_index, num_populations),
-        "growth_rate_change":       lambda ev: (handle_growth_rate_change_event(ev, config, activity, pop_index), activity, pop_index, num_populations),
-        "population_split":         lambda ev: (*handle_population_split_event(ev, config, activity, pop_index), num_populations),
-        "population_admixture":     lambda ev: handle_population_admixture_event(ev, config, activity, pop_index, num_populations),
+        "size_change":                  lambda ev: (handle_size_change_event(ev, config, activity, pop_index, growth_rate_map), num_populations),
+        "migration_rate_change":        lambda ev: (handle_migration_rate_change_event(ev, config, activity, pop_index), num_populations),
+        "growth_rate_change":           lambda ev: (handle_growth_rate_change_event(ev, config, activity, pop_index, growth_rate_map), num_populations),
+        "population_split":             lambda ev: (handle_population_split_event(ev, config, activity, pop_index), num_populations),
+        "population_admixture":         lambda ev: handle_population_admixture_event(ev, config, activity, pop_index, num_populations),
+        "population_pulse_migration":   lambda ev: handle_populatin_pulse_migration(ev, config, activity, pop_index, num_populations)
     }
 
     for event in config.get("demography_events", []):
@@ -431,7 +464,7 @@ def build_ms_command(config):
         if event_type not in handlers:
             raise ValueError(f"Unsupported event type: {event_type}")
 
-        cmd_part, activity, pop_index, num_populations = handlers[event_type](event)
+        cmd_part, num_populations = handlers[event_type](event)
         cmd += cmd_part
 
     return cmd
@@ -442,7 +475,7 @@ def run_ms_simulation(config):
     if not ms_path or not os.path.exists(ms_path):
         raise FileNotFoundError(f"ms executable not found at {ms_path}. Please check the path in config.")
 
-    command = build_ms_command(config)
+    command = "ms" + build_ms_command(config)
     output_file = config.get("ms_output_file", "results/ms/output.txt")
 
     print(f"🚀 Running ms: {command}")
@@ -457,3 +490,26 @@ def run_ms_simulation(config):
 
     with open(output_file, "w") as f:
         f.write(result.stdout)
+
+
+def run_msms_simulation(config):
+    msms_path = config.get("msms_path")
+    if not msms_path or not os.path.exists(msms_path):
+        raise FileNotFoundError(f"msms executable not found at {msms_path}. Please check the path in config.")
+
+    command = "msms" + build_ms_command(config)
+    output_file = config.get("msms_output_file", "results/msms/output.txt")
+
+    print(f"🚀 Running msms: {command}")
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+    cmd_parts = command.split()
+    cmd_parts[0] = msms_path
+
+    result = subprocess.run(cmd_parts, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"ms failed:\n{result.stderr}")
+
+    with open(output_file, "w") as f:
+        f.write(result.stdout)
+        f.write(result.stderr)

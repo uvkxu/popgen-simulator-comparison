@@ -4,7 +4,8 @@ from ms_runner import build_ms_command, set_initial_migration_rates, set_initial
                         restore_growth_rates, set_initial_population_sizes, set_ancestral_size_at_split, set_population_sample_sizes, \
                         get_initial_population_activity, get_initial_population_indices, handle_size_change_event, \
                         handle_migration_rate_change_event, handle_growth_rate_change_event, handle_population_split_event, \
-                        handle_population_admixture_event, set_recombination, has_gene_conversion, set_gene_conversion
+                        handle_population_admixture_event, set_recombination, has_gene_conversion, set_gene_conversion, \
+                        set_ancestral_growth_rate_at_split
 
 from test_configs import make_config_single_pop, make_config_two_pops_with_migration, make_config_with_gene_conversion, make_population_split_event_config, \
                             make_population_split_event_with_size_change_config, make_population_admixture_event_config
@@ -80,10 +81,10 @@ def extract_default_migration_rate(cmd):
 # ---------------------------------------
 
 @pytest.mark.parametrize("config,expected", [
-    (make_config_two_pops_with_migration(), "ms 10 1"), 
-    (make_config_single_pop(), "ms 15 3"),
-    (make_config_with_gene_conversion(), "ms 20 5"),
-    (make_population_split_event_config(), "ms 35 20")
+    (make_config_two_pops_with_migration(), " 10 1"), 
+    (make_config_single_pop(), " 15 3"),
+    (make_config_with_gene_conversion(), " 20 5"),
+    (make_population_split_event_config(), " 35 20")
 ])
 def test_total_sample_size_and_replicates(config, expected):
     cmd = build_ms_command(config)
@@ -341,25 +342,48 @@ def test_default_migration_rate_in_command(config, expected_default_rate):
 # Test of initialization of growth rates
 # ------------------------------------------
 
-@pytest.mark.parametrize("config,activity,pop_index,expected_default_rate,expected_individual_growth_rates", [
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 2.5e-7, [1, 1e-05]),
-    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 2.5e-7, []),
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 2.5e-7, [1, 1e-05]),
-    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 2.5e-7, []),
-    (make_config_single_pop(), {}, {}, [], []),
+@pytest.mark.parametrize("config,activity,pop_index,expected_default_rate", [
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 2.5e-7),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 2.5e-7),
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 2.5e-7),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 2.5e-7),
+    (make_config_single_pop(), {}, {}, []),
 ])
-def test_set_initial_growth_rates(config, activity, pop_index, expected_default_rate, expected_individual_growth_rates):
-    growth_cmd = set_initial_growth_rates(config, activity, pop_index)
+def test_set_default_growth_rate(config, activity, pop_index, expected_default_rate):
+    growth_cmd, _ = set_initial_growth_rates(config, activity, pop_index)
     found_default_rate = extract_by_flag(growth_cmd, "-G")
-    found_individual_growth_rates = extract_by_flag(growth_cmd, "-g")
-
     assert found_default_rate == expected_default_rate, f"Expected default growth rate {expected_default_rate}, found {found_default_rate}"
+
+
+@pytest.mark.parametrize("config,activity,pop_index,expected_individual_growth_rates", [
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, [1, 1e-05]),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, []),
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, [1, 1e-05]),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, []),
+    (make_config_single_pop(), {}, {}, []),
+])
+def test_set_individual_growth_rates(config, activity, pop_index, expected_individual_growth_rates):
+    growth_cmd, _ = set_initial_growth_rates(config, activity, pop_index)
+    found_individual_growth_rates = extract_by_flag(growth_cmd, "-g")
     assert found_individual_growth_rates == expected_individual_growth_rates, f"Expected individual growth rates {expected_individual_growth_rates}, found {found_individual_growth_rates}"
 
+
+@pytest.mark.parametrize("config,activity,pop_index,expected_growth_rate_map", [
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, {"pop1": 1e-05, "pop2": 2.5e-7}),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, {"pop2": 2.5e-7}),
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, {"pop1": 1e-05}),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, {}),
+    (make_config_single_pop(), {}, {}, {"single": 0}),
+])
+def test_set_initial_growth_rates_of_map(config, activity, pop_index, expected_growth_rate_map):
+    _, found_growth_rate_map = set_initial_growth_rates(config, activity, pop_index)
+
+    assert found_growth_rate_map == expected_growth_rate_map
 
 @pytest.mark.parametrize("config,G_flag_exists", [
     (make_config_two_pops_with_migration(), True),
     (make_config_single_pop(), False),
+    (make_config_with_gene_conversion(), True)
 ])
 def test_default_growth_flag_in_command(config, G_flag_exists):
     cmd = build_ms_command(config)
@@ -459,112 +483,116 @@ def test_migration_rate_change_flag_in_command(config,migration_change_exists):
 
 @pytest.mark.parametrize("event,config,activity,pop_index,time,expected_growth_rate_change", [
     ({"type": "growth_rate_change", "time": 200, "population": "pop2", "rate": 0.003}, make_config_two_pops_with_migration(), {"pop2": True}, {"pop2": 2}, 0.05, [2, 7.5e-7]),
-    ({"type": "growth_rate_change", "time": 200, "population": "pop2", "rate": 0.003}, make_config_two_pops_with_migration(), {"pop2": False}, {"pop2": 2}, 0.05, -1)
+    ({"type": "growth_rate_change", "time": 200, "population": "pop2", "rate": 0.003}, make_config_two_pops_with_migration(), {"pop2": False}, {"pop2": 2}, 0.05, -1),
+    ({"type": "growth_rate_change", "time": 800, "rate": 0.05}, make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 0.2, [[1, 1.25e-5], [2, 1.25e-5]]),
+    ({"type": "growth_rate_change", "time": 800, "rate": 0.05}, make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 0.2, [1, 1.25e-5]),
+    ({"type": "growth_rate_change", "time": 800, "rate": 0.05}, make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 0.2, [2, 1.25e-5]),
+    ({"type": "growth_rate_change", "time": 800, "rate": 0.05}, make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 0.2, []),
 ])
-def test_handle_growth_rate_change_event_single_population(event, config, activity, pop_index, time, expected_growth_rate_change):
+def test_handle_growth_rate_change_multiple_population_model(event, config, activity, pop_index, time, expected_growth_rate_change):
 
     if expected_growth_rate_change == -1:
         with pytest.raises(ValueError):
-            handle_growth_rate_change_event(event, config, activity, pop_index)
+            handle_growth_rate_change_event(event, config, activity, pop_index, {})
     else:
-        growth_change_cmd = handle_growth_rate_change_event(event, config, activity, pop_index)
+        growth_change_cmd = handle_growth_rate_change_event(event, config, activity, pop_index, {})
         found_growth_rate_change = extract_by_flag(growth_change_cmd, f"-eg {time}")
 
         assert found_growth_rate_change == expected_growth_rate_change, \
             f"Growth rate change mismatch at time {time} (expected {expected_growth_rate_change}, got {found_growth_rate_change})"
 
 
-@pytest.mark.parametrize("config, eg_flag_exists", [
-    (make_config_two_pops_with_migration(), True),
-    (make_config_single_pop(), False),
-    (make_config_with_gene_conversion(), False)
+@pytest.mark.parametrize("event,config,time,expected_growth_rate_change", [
+    ({"type": "growth_rate_change", "time": 200, "rate": 0.003}, make_config_single_pop(), 0.025, 3.75e-7),
+    ({"type": "growth_rate_change", "time": 1000, "rate": 0.07}, make_config_with_gene_conversion(), 0.025, 1.75e-6)
 ])
-def test_growth_change_single_population_flag_in_command(config, eg_flag_exists):
-    cmd = build_ms_command(config)
-
-    if eg_flag_exists:
-        assert "-eg" in cmd, "Expected growth rate change flag '-eg' in the command, but it is missing."
-    else:
-        assert "-eg" not in cmd, "Growth change rate change flag '-eg' found in the command, but it shouldn't be there."
-
-
-@pytest.mark.parametrize("event,config,activity,pop_index,time,expected_growth_rate_change", [
-    ({"type": "growth_rate_change", "time": 200, "rate": 0.003}, make_config_single_pop(), {}, {}, 0.025, 3.75e-7),
-    ({"type": "growth_rate_change", "time": 800, "rate": 0.05}, make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 0.2, 1.25e-5),
-    ({"type": "growth_rate_change", "time": 800, "rate": 0.05}, make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 0.2, 1.25e-5),
-    ({"type": "growth_rate_change", "time": 800, "rate": 0.05}, make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 0.2, 1.25e-5),
-    ({"type": "growth_rate_change", "time": 800, "rate": 0.05}, make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 0.2, 1.25e-5),
-])
-def test_handle_growth_rate_change_event_all_populations(event, config, activity, pop_index, time, expected_growth_rate_change):
-    cmd = handle_growth_rate_change_event(event, config, activity, pop_index)
+def test_handle_growth_rate_change_single_population_model(event, config, time, expected_growth_rate_change):
+    cmd = handle_growth_rate_change_event(event, config, {}, {}, {})
     found_growth_rate_change = extract_by_flag(cmd, f"-eG {time}")
 
     assert found_growth_rate_change == expected_growth_rate_change, \
         f"Growth rate change mismatch at time {time} (expected {expected_growth_rate_change}, got {found_growth_rate_change})"
 
 
-@pytest.mark.parametrize("config, eG_flag_exists", [
-    (make_config_two_pops_with_migration(), True),
-    (make_config_single_pop(), True),
-    (make_config_with_gene_conversion(), False),
-    (make_population_split_event_config(), False)
+@pytest.mark.parametrize("config, time", [
+    (make_config_two_pops_with_migration(), 0.05),
+    (make_config_two_pops_with_migration(), 0.2),
+    (make_population_split_event_with_size_change_config(), 0.004)
 ])
-def test_growth_change_all_populations_flag_in_command(config, eG_flag_exists):
+def test_growth_change_eg_flag_in_command(config, time):
     cmd = build_ms_command(config)
 
-    if eG_flag_exists:
-        assert "-eG" in cmd, "Expected growth rate change flag '-eG' in the command, but it is missing."
-    else:
-        assert "-eG" not in cmd, "Growth change rate change flag '-eG' found in the command, but it shouldn't be there."
+    assert f"-eg {time}" in cmd, f"Expected growth rate change flag '-eg {time}' in the command, but it is missing."
 
+
+@pytest.mark.parametrize("config, time", [
+    (make_config_single_pop(), 0.025),
+    (make_config_with_gene_conversion(), 0.025)
+])
+def test_growth_change_eG_flag_in_command(config, time):
+    cmd = build_ms_command(config)
+
+    assert f"-eG {time}" in cmd, f"Expected growth rate change flag '-eG {time}' in the command, but it is missing."
 
 # ----------------------------------------------------------------
 # Test size change events & restoration of population growth rates
 # ----------------------------------------------------------------
 
-@pytest.mark.parametrize("config,activity,pop_index,time,population,expected_growth", [
-    (make_config_two_pops_with_migration(), {"pop1": True}, {"pop1": 1}, 0.01, "pop1", 1e-5),
-    (make_config_two_pops_with_migration(), {"pop2": True}, {"pop2": 2}, 0.01, "pop2", 2.5e-7),
-    (make_config_two_pops_with_migration(), {"pop2": True}, {"pop2": 2}, 0.075, "pop2", 7.5e-7),
-    (make_config_two_pops_with_migration(), {"pop2": True}, {"pop2": 2}, 0.2, "pop2", 1.25e-5),
-    (make_config_two_pops_with_migration(), {"pop2": True}, {"pop2": 2}, 0.25, "pop2", 1.25e-5),
-
+@pytest.mark.parametrize("config,time,growth_rate_map,expected_growth", [
+    (make_config_single_pop(), 0, {"single": 0}, []),
+    (make_config_single_pop(), 0.025, {"single": 3.75e-7}, 3.75e-7),
+    (make_config_single_pop(), 0.5, {"single": 3.75e-7}, 3.75e-7)
 ])
-def test_restore_growth_rates_single_population(config, activity, pop_index, time, population, expected_growth):
-    growth_rate_cmd = restore_growth_rates(config, activity, pop_index, time, population)
-    found_growth = extract_by_flag(growth_rate_cmd, f"-eg {time} {pop_index[population]}")
+def test_restore_growth_rates_single_population_model(config, time, growth_rate_map, expected_growth):
+    growth_rate_cmd = restore_growth_rates(config, {}, {}, growth_rate_map, time)
+    found_growth = extract_by_flag(growth_rate_cmd, f"-eG {time}")
 
     assert found_growth == expected_growth, f"Growth rate restoration of single population failed (expected {expected_growth}, got {found_growth})"
 
 
-@pytest.mark.parametrize("config,activity,pop_index,time,expected_default_growth,expected_individual_growth", [
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 0.0375, 2.5e-7, [1, 1e-5]),
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 0.075, 2.5e-7, [[2, 7.5e-7], [1, 1e-5]]),
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 0.2, 1.25e-5, []),
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 0.25, 1.25e-5, [])
+@pytest.mark.parametrize("config,activity,pop_index,growth_rate_map,time,expected_growth", [
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, {"pop1": 1e-5, "pop2": 2.5e-7}, 0.0375, [[1, 1e-5], [2, 2.5e-7]]),
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, {"pop1": 1e-5, "pop2": 7.5e-7}, 0.075, [[1, 1e-5], [2, 7.5e-7]]),
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, {"pop1": 1.25e-5, "pop2": 1.25e-5}, 0.2, [[1, 1.25e-5], [2, 1.25e-5]]),
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, {"pop1": 1.25e-5, "pop2": 1.25e-5}, 0.25, [[1, 1.25e-5], [2, 1.25e-5]]),
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, {"pop1": 1.25e-5, "pop2": 1.25e-5}, 0.25, [1, 1.25e-5]),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, {"pop1": 1.25e-5, "pop2": 1.25e-5}, 0.25, [2, 1.25e-5]),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, {"pop1": 1.25e-5, "pop2": 1.25e-5}, 0.25, []),
 ])
-def test_restore_growth_rates_all_populations(config, activity, pop_index, time, expected_default_growth, expected_individual_growth):
-    growth_rate_cmd = restore_growth_rates(config, activity, pop_index, time)
-    found_individual_growth = extract_by_flag(growth_rate_cmd, f"-eg {time}")
-    found_default_growth = extract_by_flag(growth_rate_cmd, f"-eG {time}")
+def test_restore_growth_rates_multiple_population_model_multiple_target(config, activity, pop_index, growth_rate_map, time, expected_growth):
+    growth_rate_cmd = restore_growth_rates(config, activity, pop_index, growth_rate_map, time)
+    found_growth = extract_by_flag(growth_rate_cmd, f"-eg {time}")
 
-    assert found_individual_growth == expected_individual_growth, f"Growth rate restoration of individual populations failed (expected {expected_individual_growth}, got {found_individual_growth})"
-    assert found_default_growth == expected_default_growth, f"Default growth rate restoration failed (expected {expected_default_growth}, got {found_default_growth})"
+    assert found_growth == expected_growth, f"Growth rate restoration of individual populations failed (expected {expected_individual_growth}, got {found_individual_growth})"
 
 
-@pytest.mark.parametrize("event,config,activity,pop_index,time,expected_size_change", [
-        ({"type": "size_change", "time": 220, "population": "pop1", "size": 900}, make_config_two_pops_with_migration(), {"pop1": True}, {"pop1": 1}, 0.055, [1, 0.9]),
-        ({"type": "size_change", "time": 220, "population": "pop1", "size": 900}, make_config_two_pops_with_migration(), {"pop1": True}, {"pop1": 2}, 0.055, [2, 0.9]),
-        ({"type": "size_change", "time": 220, "population": "pop1", "size": 900}, make_config_two_pops_with_migration(), {"pop1": False}, {"pop1": 1}, 0.055, -1),
+@pytest.mark.parametrize("config,activity,pop_index,growth_rate_map,time,population,expected_growth", [
+    (make_config_two_pops_with_migration(), {"pop1": True}, {"pop1": 1}, {"pop1": 1e-5}, 0.01, "pop1", 1e-5),
+    (make_config_two_pops_with_migration(), {"pop2": True}, {"pop2": 2}, {"pop2": 2.5e-7}, 0.01, "pop2", 2.5e-7),
+    (make_config_two_pops_with_migration(), {"pop2": True}, {"pop2": 2}, {"pop2": 7.5e-7}, 0.075, "pop2", 7.5e-7),
+    (make_config_two_pops_with_migration(), {"pop2": True}, {"pop2": 2}, {"pop2": 1.25e-5}, 0.2, "pop2", 1.25e-5),
+    (make_config_two_pops_with_migration(), {"pop2": True}, {"pop2": 2}, {"pop2": 1.25e-5}, 0.25, "pop2", 1.25e-5),
+])
+def test_restore_growth_rates_multiple_population_model_single_target(config, activity, pop_index, growth_rate_map, time, population, expected_growth):
+    growth_rate_cmd = restore_growth_rates(config, activity, pop_index, growth_rate_map, time, population)
+    found_growth = extract_by_flag(growth_rate_cmd, f"-eg {time} {pop_index[population]}")
+
+    assert found_growth == expected_growth, f"Growth rate restoration of individual populations failed (expected {expected_growth}, got {found_growth})"
+
+
+@pytest.mark.parametrize("event,config,activity,pop_index,growth_rate_map,time,expected_size_change", [
+        ({"type": "size_change", "time": 220, "population": "pop1", "size": 900}, make_config_two_pops_with_migration(), {"pop1": True}, {"pop1": 1}, {"pop1": 1e-5}, 0.055, [1, 0.9]),
+        ({"type": "size_change", "time": 220, "population": "pop1", "size": 900}, make_config_two_pops_with_migration(), {"pop1": True}, {"pop1": 2}, {"pop1": 1e-5}, 0.055, [2, 0.9]),
+        ({"type": "size_change", "time": 220, "population": "pop1", "size": 900}, make_config_two_pops_with_migration(), {"pop1": False}, {"pop1": 1}, {"pop1": 1e-5}, 0.055, -1),
     ]
 )
-def test_handle_size_change_event_single_population(event, config, activity, pop_index, time, expected_size_change):
+def test_handle_size_change_multiple_population_model_single_target(event, config, activity, pop_index, growth_rate_map, time, expected_size_change):
 
     if expected_size_change == -1:
         with pytest.raises(ValueError):
-            handle_size_change_event(event, config, activity, pop_index)
+            handle_size_change_event(event, config, activity, pop_index, growth_rate_map)
     else:
-        size_change_cmd = handle_size_change_event(event, config, activity, pop_index)
+        size_change_cmd = handle_size_change_event(event, config, activity, pop_index, growth_rate_map)
         found_size_change = extract_by_flag(size_change_cmd, f"-en {time}")
 
         assert found_size_change == expected_size_change, f"Size change of single population mismatch (expected {expected_size_change}, got {found_size_change})"
@@ -572,7 +600,6 @@ def test_handle_size_change_event_single_population(event, config, activity, pop
 
 @pytest.mark.parametrize("config,en_flag_exists", [
         (make_config_two_pops_with_migration(), True),
-        (make_population_split_event_config(), False),
         (make_config_with_gene_conversion(), False),
         (make_config_single_pop(), False),
     ]
@@ -586,24 +613,13 @@ def test_size_change_single_population_flag_in_command(config, en_flag_exists):
         assert "-en" not in cmd, "Size change change flag '-en' found in the command, but it shouldn't be there."
 
 
-@pytest.mark.parametrize(
-    "config,time,pop_id,expected_growth_rate", [
-        (make_config_two_pops_with_migration(), 0.055, 1, 1e-5),
+@pytest.mark.parametrize("event,config,activity,pop_index,growth_rate_map,time,expected_size_change", [
+        ({"type": "size_change", "time": 500, "size": 1000}, make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, {"pop1": 1e-5, "pop2": 7.5e-7}, 0.125, 1.0),
+        ({"type": "size_change", "time": 300, "size": 5000}, make_config_single_pop(), {}, {}, {"single": 3.75e-7}, 0.0375, 2.5),
     ]
 )
-def test_single_population_growth_rate_after_size_change(config, time, pop_id, expected_growth_rate):
-    cmd = build_ms_command(config)
-    found_growth_rate = extract_by_flag(cmd, f"-eg {time} {pop_id}")
-    assert found_growth_rate == expected_growth_rate, \
-        f"Single population growth rate after size change at time {time} (expected {expected_growth_rate}, got {found_growth_rate})"
-
-
-@pytest.mark.parametrize("event,config,activity,pop_index,time,expected_size_change", [
-        ({"type": "size_change", "time": 500, "size": 1000}, make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 0.125, 1.0),
-    ]
-)
-def test_handle_size_change_event_all_populations(event, config, activity, pop_index, time, expected_size_change):
-    size_change_cmd = handle_size_change_event(event, config, activity, pop_index)
+def test_handle_size_change_event_all_populations(event, config, activity, pop_index, growth_rate_map, time, expected_size_change):
+    size_change_cmd = handle_size_change_event(event, config, activity, pop_index, growth_rate_map)
     found_size_change = extract_by_flag(size_change_cmd, f"-eN {time}")
 
     assert found_size_change == expected_size_change, f"Size change of all populations mismatch (expected {expected_size_change}, got {found_size_change})"
@@ -613,7 +629,7 @@ def test_handle_size_change_event_all_populations(event, config, activity, pop_i
         (make_config_two_pops_with_migration(), True),
         (make_population_split_event_config(), False),
         (make_config_with_gene_conversion(), False),
-        (make_config_single_pop(), False),
+        (make_config_single_pop(), True),
     ]
 )
 def test_size_change_all_populations_flag_in_command(config, eN_flag_exists):
@@ -625,79 +641,55 @@ def test_size_change_all_populations_flag_in_command(config, eN_flag_exists):
         assert "-eN" not in cmd, "Size change change flag '-eN' found in the command, but it shouldn't be there."
 
 
+@pytest.mark.parametrize("config,time,expected_growth", [
+    (make_config_single_pop(), 0.0374, []),
+    (make_config_single_pop(), 0.0375, 3.75e-7),
+])
+def test_single_population_model_growth_rate_after_size_change(config, time, expected_growth):
+    cmd = build_ms_command(config)
+    found_growth = extract_by_flag(cmd, f"-eG {time}")
+
+    assert found_growth == expected_growth, f"Restoration of growth rate mismatch at time {time} (expected {expected_growth}, got {found_growth})"
+
+
 @pytest.mark.parametrize(
-    "config,time,expected_default_growth_rate", [
-        (make_config_two_pops_with_migration(), 0.125, 2.5e-7),
+    "config,time,expected_growth", [
+        (make_config_two_pops_with_migration(), 0.125, [[1, 1e-5], [2, 7.5e-7]]),
+        (make_config_two_pops_with_migration(), 0.055, [1, 1e-5]),
     ]
 )
-def test_default_growth_rate_for_all_populations_after_size_change(config, time, expected_default_growth_rate):
+def test_multiple_population_model_growth_rates_after_size_change(config, time, expected_growth):
     cmd = build_ms_command(config)
-    found_default_growth_rate = extract_by_flag(cmd, f"-eG {time}")
-    assert found_default_growth_rate == expected_default_growth_rate, \
-        f"Default growth rate for all populations after size change at time {time} (expected {expected_default_growth_rate}, got {found_default_growth_rate})"
+    found_growth = extract_by_flag(cmd, f"-eg {time}")
 
-
-@pytest.mark.parametrize(
-    "config,time,expected_individual_growth_rates", [
-        (make_config_two_pops_with_migration(), 0.125, [[2, 7.5e-7], [1, 1e-5]]),
-    ]
-)
-def test_individual_population_growth_rates_after_size_change(config, time, expected_individual_growth_rates):
-    cmd = build_ms_command(config)
-    found_individual_growth_rates = extract_by_flag(cmd, f"-eg {time}")
-    assert found_individual_growth_rates == expected_individual_growth_rates, \
-        f"Individual population growth rates after size change at time {time} (expected {expected_individual_growth_rates}, got {found_individual_growth_rates})"
-
+    assert found_growth == expected_growth, \
+        f"Restoration of growth rate mismatch at time {time} (expected {expected_growth}, got {found_growth})"
 
 #----------------------------------------
 # Test population split event + helpers
 #----------------------------------------
 
 
-@pytest.mark.parametrize("event,config,activity_before,pop_index_before,activity_after",[
-        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": True, "pop2": True, "pop3": True, "pop4": False, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, {"pop1": False, "pop2": False, "pop3": False, "pop4": True, "pop5": True}),
-        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": False, "pop2": True, "pop3": True, "pop4": False, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, -1),
-        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": True, "pop2": False, "pop3": True, "pop4": False, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, -1),
-        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": True, "pop2": True, "pop3": False, "pop4": False, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, -1),
-        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": False, "pop2": False, "pop3": True, "pop4": False, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, -1),
-        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": False, "pop2": False, "pop3": False, "pop4": False, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, -1),
-        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, -1),
-        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_with_size_change_config(),  {"pop1": True, "pop2": True, "pop3": True, "pop4": False}, {"pop1": 1, "pop2": 2, "pop3": 3}, {"pop1": False, "pop2": False, "pop3": False, "pop4": True}),
-        ({"type": "population_split", "time": 180, "derived": ["pop2", "pop3", "pop4"], "ancestral": "pop5"}, make_population_admixture_event_config(), {"pop1": False, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, {"pop1": False, "pop2": False, "pop3": False, "pop4": False, "pop5": True})
+@pytest.mark.parametrize("event,config,activity_before,pop_index_before,time,expected_splits",[
+        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": True, "pop2": True, "pop3": True, "pop4": False, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, 0.005, [[2, 1], [3, 1]]),
+        ({"type": "population_split", "time": 180, "derived": ["pop2", "pop3", "pop4"], "ancestral": "pop5"}, make_population_admixture_event_config(), {"pop1": False, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 0.0045, [[3, 2], [4, 2]]),
+        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": False, "pop2": True, "pop3": True, "pop4": False, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, 0, -1),
+        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": True, "pop2": False, "pop3": True, "pop4": False, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, 0, -1),
+        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": True, "pop2": True, "pop3": False, "pop4": False, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, 0, -1),
+        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": False, "pop2": False, "pop3": True, "pop4": False, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, 0, -1),
+        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": False, "pop2": False, "pop3": False, "pop4": False, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, 0, -1),
+        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, 0, -1),
     ]
 )
-def test_handle_population_split_event_change_of_activity(event, config, activity_before, pop_index_before, activity_after):
-    if activity_after == -1:
+def test_handle_population_split_event(event, config, activity_before, pop_index_before, time, expected_splits):
+    if expected_splits == -1:
         with pytest.raises(ValueError):
             handle_population_split_event(event, config, activity_before, pop_index_before)
     else:
-        _, found_activity, _ = handle_population_split_event(event, config, activity_before, pop_index_before)
+        population_split_cmd = handle_population_split_event(event, config, activity_before, pop_index_before)
+        found_splits = extract_by_flag(population_split_cmd, f"-ej {time}")
 
-        assert found_activity == activity_after, f"Activity mismatch: expected {activity_after}, found {found_activity}"
-
-
-@pytest.mark.parametrize("event,config,activity_before,pop_index_before,pop_index_after",[
-        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": True, "pop2": True, "pop3": True, "pop4": False, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, {"pop4": 1, "pop5": 4}),
-        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_with_size_change_config(),  {"pop1": True, "pop2": True, "pop3": True, "pop4": False}, {"pop1": 1, "pop2": 2, "pop3": 3}, {"pop4": 1}),
-        ({"type": "population_split", "time": 180, "derived": ["pop2", "pop3", "pop4"], "ancestral": "pop5"}, make_population_admixture_event_config(), {"pop1": False, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, {"pop1": 1, "pop5": 2})
-    ]
-)
-def test_handle_population_split_event_change_of_pop_index(event, config, activity_before, pop_index_before, pop_index_after):
-    _, _, found_pop_index = handle_population_split_event(event, config, activity_before, pop_index_before)
-
-    assert found_pop_index == pop_index_after, f"Pop index mismatch: expected {pop_index_after}, found {found_pop_index}"
-
-
-@pytest.mark.parametrize("event,config,activity_before,pop_index_before,time,expected_splits",[
-        ({"type": "population_split", "time": 100, "derived": ["pop1", "pop2", "pop3"], "ancestral": "pop4"}, make_population_split_event_config(), {"pop1": True, "pop2": True, "pop3": True, "pop4": False, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, 0.005, [[2, 1], [3, 1]]),
-        ({"type": "population_split", "time": 180, "derived": ["pop2", "pop3", "pop4"], "ancestral": "pop5"}, make_population_admixture_event_config(), {"pop1": False, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 0.0045, [[3, 2], [4, 2]])
-    ]
-)
-def test_handle_population_split_event_change_of_command(event, config, activity_before, pop_index_before, time, expected_splits):
-    population_split_cmd, _, _  = handle_population_split_event(event, config, activity_before, pop_index_before)
-    found_splits = extract_by_flag(population_split_cmd, f"-ej {time}")
-
-    assert found_splits == expected_splits, f"Split mismatch at time {time}: expected {expected_splits}, found {found_splits}"
+        assert found_splits == expected_splits, f"Split mismatch at time {time}: expected {expected_splits}, found {found_splits}"
 
 
 @pytest.mark.parametrize("config,time",[
@@ -713,21 +705,21 @@ def test_population_split_flag_in_command(config, time):
 
 
 @pytest.mark.parametrize("config,pop_index,time,population,expected_size",[
-        (make_population_split_event_config(), {"pop4": 1}, 0.005, "pop4", []),
-        (make_population_split_event_with_size_change_config(), {"pop4": 1}, 0.005, "pop4", []),
+        (make_population_split_event_config(), {"pop4": 1}, 0.005, "pop4", 1.0),
+        (make_population_split_event_with_size_change_config(), {"pop4": 1}, 0.005, "pop4", 0.2),
         (make_population_admixture_event_config(), {"pop5": 2}, 0.0045, "pop5", 0.2)
     ]
 )
 def test_set_ancestral_size_at_split(config, pop_index, time, population, expected_size):
-    size_cmd = set_ancestral_size_at_split(config,pop_index, time, population)
+    size_cmd = set_ancestral_size_at_split(config, pop_index, time, population)
     found_size = extract_by_flag(size_cmd, f"-en {time} {pop_index[population]}")
 
     assert found_size == expected_size, f"Ancestral size mismatch at time {time} for population {population}: expected {expected_size}, found {found_size}"
 
 
 @pytest.mark.parametrize("config,time,ancestral,expected_size",[
-        (make_population_split_event_config(), 0.005, 1, []),
-        (make_population_split_event_with_size_change_config(), 0.005, 1, []),
+        (make_population_split_event_config(), 0.005, 1, 1.0),
+        (make_population_split_event_with_size_change_config(), 0.005, 1, 0.2),
         (make_population_admixture_event_config(), 0.0045, 2, 0.2)
     ]
 )
@@ -741,9 +733,22 @@ def test_if_ancestral_size_flag_in_command(config, time, ancestral, expected_siz
         assert f"-en {time} {ancestral}" not in cmd, f"Unexpected ancestral size adjustment found at time {time} for {ancestral}"
 
 
+@pytest.mark.parametrize("config,pop_index,time,population,expected_growth",[
+        (make_population_split_event_config(), {"pop4": 1}, 0.005, "pop4", 5e-8),
+        (make_population_split_event_with_size_change_config(), {"pop4": 1}, 0.005, "pop4", 5e-8),
+        (make_population_admixture_event_config(), {"pop5": 2}, 0.0045, "pop5", 2e-7)
+    ]
+)
+def test_set_ancestral_growth_rate_at_split(config, pop_index, time, population, expected_growth):
+    growth_cmd = set_ancestral_growth_rate_at_split(config, pop_index, time, population)
+    found_growth = extract_by_flag(growth_cmd, f"-eg {time} {pop_index[population]}")
+
+    assert found_growth == expected_growth, f"Ancestral growth rate mismatch at time {time} for population {population}: expected {expected_growth}, found {found_growth}"
+
+
 @pytest.mark.parametrize("config,time,ancestral,expected_growth_rate", [
         (make_population_split_event_config(), 0.005, 1, 5e-8),
-        (make_population_split_event_with_size_change_config(), 0.005, 1, 1.5e-6),
+        (make_population_split_event_with_size_change_config(), 0.005, 1, 5e-8),
         (make_population_admixture_event_config(), 0.0045, 2, 2e-7)
     ]
 )
@@ -753,13 +758,13 @@ def test_if_ancestral_growth_rate_flag_in_command(config, time, ancestral, expec
 
     assert found_growth_rate == expected_growth_rate, f"Growth rate flag mismatch at time {time} for {ancestral}: expected {expected_growth_rate}, found {found_growth_rate}"
 
-
 #------------------------------------
 # Test population admixture event 
 #------------------------------------
 
-@pytest.mark.parametrize("event,config,activity_before,pop_index_before,num_populations_before,activity_after",[
-    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, {"pop1": False, "pop2": True, "pop3": True, "pop4": True, "pop5": False}),
+
+@pytest.mark.parametrize("event,config,activity_before,pop_index_before,num_populations_before,num_populations_after",[
+    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, 6),
     ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.8, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, -1),
     ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.8, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, -1),
     ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": False, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, -1),
@@ -769,37 +774,23 @@ def test_if_ancestral_growth_rate_flag_in_command(config, time, ancestral, expec
     ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": False, "pop3": False, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, -1),
     ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": False, "pop3": False, "pop4": False, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, -1)
 ])
-def test_handle_population_admixture_event_of_activity(event, config, activity_before, pop_index_before, num_populations_before, activity_after):
-    if activity_after == -1:
+def test_handle_population_admixture_event_of_num_populations(event, config, activity_before, pop_index_before, num_populations_before, num_populations_after):
+    if num_populations_after == -1:
         with pytest.raises(ValueError):
             handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
     else:
-        _, found_activity, _, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
-        assert found_activity == activity_after, f"Expected activity {activity_after}, but found {found_activity}"
+        _, found_num_populations = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
 
-
-@pytest.mark.parametrize("event,config,activity_before,pop_index_before,num_populations_before,pop_index_after",[
-    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, {"pop2": 2, "pop3": 3, "pop4": 4})
-])
-def test_handle_population_admixture_event_of_pop_index(event, config, activity_before, pop_index_before, num_populations_before, pop_index_after):
-    _, _, found_pop_index, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
-    assert found_pop_index == pop_index_after, f"Expected pop_index {pop_index_after}, but found {found_pop_index}"
-
-
-@pytest.mark.parametrize("event,config,activity_before,pop_index_before,num_populations_before,num_populations_after",[
-    ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, 6)
-])
-def test_handle_population_admixture_event_of_num_populations(event, config, activity_before, pop_index_before, num_populations_before, num_populations_after):
-    _, _, _, found_num_populations = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
-    assert found_num_populations == num_populations_after, f"Expected num_populations {num_populations_after}, but found {found_num_populations}"
+        assert found_num_populations == num_populations_after, f"Expected num_populations {num_populations_after}, but found {found_num_populations}"
 
 
 @pytest.mark.parametrize("event,config,activity_before,pop_index_before,num_populations_before,time,derived,expected_proportions",[
     ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, 0.0025, 1, [0.5, 0.4])
 ])
 def test_handle_population_admixture_event_of_num_populations_of_proportions(event, config, activity_before, pop_index_before, num_populations_before, time, derived, expected_proportions):
-    population_admixture_cmd, _, _, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
+    population_admixture_cmd, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
     found_proportions = extract_by_flag(population_admixture_cmd, f"-es {time} {derived}")
+
     assert found_proportions == expected_proportions, f"Expected proportions {expected_proportions}, but found {found_proportions}"
 
 
@@ -807,8 +798,9 @@ def test_handle_population_admixture_event_of_num_populations_of_proportions(eve
     ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(), {"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, 0.0025, [[5, 2], [6, 3], [1, 4]])
 ])
 def test_handle_population_admixture_event_of_num_populations_of_splits(event, config, activity_before, pop_index_before, num_populations_before, time, expected_splits):
-    population_admixture_cmd, _, _, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
+    population_admixture_cmd, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
     found_splits = extract_by_flag(population_admixture_cmd, f"-ej {time}")
+
     assert found_splits == expected_splits, f"Expected splits {expected_splits}, but found {found_splits}"
 
 
@@ -826,3 +818,7 @@ def test_admixture_event_es_flag_in_command(config, time):
 def test_admixture_event_ej_flag_in_command(config, time):
     cmd = build_ms_command(config)
     assert f"-ej {time}" in cmd, f"Expected admixture join flag '-ej {time}' not found in command"
+
+
+# TODO: Test pulse mass migration
+# TODO: Test set_ancestral_migration_rates_at_split

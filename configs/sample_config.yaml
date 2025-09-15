@@ -7,11 +7,11 @@ recombination_rate: 1e-8
 mutation_rate: 1e-8
 default_growth_rate: 0.01
 default_migration_rate: 0.08
-gene_conversion_rate: 2e-6
-gene_conversion_tract_length: 5
 ms_path: C:/Users/Lenovo/OneDrive/Dokumente/Informatik-Studium/KIT/Masterarbeit/ms.folder/ms/msdir/ms.exe
+msms_path: C:/Users/Lenovo/OneDrive/Dokumente/Informatik-Studium/KIT/Masterarbeit/msms/bin/msms.exe
 ms_output_file: results/ms_output.txt
 msprime_output_file: results/msprime_output.txt
+msms_output_file: results/msms_output.txt
 
 populations:
   - name: pop1

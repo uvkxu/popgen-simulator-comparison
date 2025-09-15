@@ -9,7 +9,8 @@ def make_config_single_pop():
         "save_trees": True,
         "recombination_rate": 1e-8,
         "demography_events": [
-            {"type": "growth_rate_change", "time": 200, "rate": 0.003}
+            {"type": "growth_rate_change", "time": 200, "rate": 0.003},
+            {"type": "size_change", "time": 300, "size": 5000}
         ]
     }
 
@@ -21,8 +22,12 @@ def make_config_with_gene_conversion():
         "mutation_rate": 2e-7,
         "sequence_length": 100,
         "num_replicates": 5,
+        "default_growth_rate": 0.04,
         "gene_conversion_rate": 0.00001,
-        "gene_conversion_tract_length": 1
+        "gene_conversion_tract_length": 1,
+        "demography_events": [
+            {"type": "growth_rate_change", "time": 1000, "rate": 0.07}
+        ]
     }
 
 def make_config_two_pops_with_migration():
