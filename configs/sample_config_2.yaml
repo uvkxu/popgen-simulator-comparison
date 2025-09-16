@@ -4,7 +4,7 @@ save_trees: True
 population_size: 1000
 sequence_length: 100
 recombination_rate: 0.000001
-mutation_rate: 0.00001
+mutation_rate: 0.000001
 default_growth_rate: 0.007
 growth_rate: 0.1
 ms_path: C:/Users/Lenovo/OneDrive/Dokumente/Informatik-Studium/KIT/Masterarbeit/ms.folder/ms/msdir/ms.exe

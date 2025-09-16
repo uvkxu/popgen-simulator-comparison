@@ -142,7 +142,7 @@ def test_recombination_flag_in_command(config, expect_flag):
 @pytest.mark.parametrize("config,expected_rate,expected_tract_length",[
     (make_config_single_pop(), [], []),
     (make_config_with_gene_conversion(), 0.4, 1),
-    (make_config_two_pops_with_migration(), 0.0003, 3),
+    (make_config_two_pops_with_migration(), 0.3, 3),
     (make_population_split_event_config(), [], [])
 ])
 def test_set_gene_conversion(config, expected_rate, expected_tract_length):
@@ -285,15 +285,15 @@ def test_sample_sizes_in_command(config, num_populations, expected_sample_sizes)
 # Test of initialization of migration rates
 # ------------------------------------------
 
-@pytest.mark.parametrize("config,activity,pop_index,expected_default_rate,expected_migration", [
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 1.25e-5, [[2, 1, 2.5e-06], [1, 2, 2.5e-06]]),
-    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 1.25e-5, []),
-    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 1.25e-5, []),
-    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 1.25e-5, []),
-    (make_config_single_pop(), {}, {}, 0, []),
+@pytest.mark.parametrize("config,activity,pop_index,num_populations,expected_default_rate,expected_migration", [
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 2, 1.25e-5, [[2, 1, 2.5e-06], [1, 2, 2.5e-06]]),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 2, 1.25e-5, []),
+    (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 2, 1.25e-5, []),
+    (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 2, 1.25e-5, []),
+    (make_config_single_pop(), {}, {}, 0, 0, []),
 ])
-def test_set_initial_migration_rates(config, activity, pop_index, expected_default_rate, expected_migration):
-    mig_cmd = set_initial_migration_rates(config, activity, pop_index)
+def test_set_initial_migration_rates(config, activity, pop_index, num_populations, expected_default_rate, expected_migration):
+    mig_cmd = set_initial_migration_rates(config, activity, pop_index, num_populations)
     parts = mig_cmd.strip().split()
     found_migration = extract_by_flag(mig_cmd, "-m")
 
