@@ -208,6 +208,17 @@ def set_ancestral_migration_rates_at_split(config, activity, pop_index, time, po
     return migration_cmd
 
 
+def disable_migration_to_derived(config, activity, pop_index, time, populations):
+    migration_cmd = ""
+    populations = populations if isinstance(populations, list) else [populations]
+    
+    for dest in populations:
+        for source in (p["name"] for p in config["populations"] if activity[p["name"]]):
+            if source != dest:
+                migration_cmd += f" -em {time} {pop_index[dest]} {pop_index[source]} {0}"
+    
+    return migration_cmd
+
 
 def restore_growth_rates(config, activity, pop_index, growth_rate_map, time, population=None):
     if "populations" in config:
@@ -325,21 +336,30 @@ def handle_population_split_event(event, config, activity, pop_index):
     elif any(not activity[d] for d in derived):
         raise ValueError("Derived populations should initially be active")
 
+    
+    # Mark all derived populations as inactive
+    for d in derived:
+        activity[d] = False
+
+    # Disable migration into all derived populations except the first one,
+    # since the ancestral population inherits the index of the first derived population
+    population_split_cmd += disable_migration_to_derived(config, activity, pop_index, t, derived[1:])
+
+    # Mark the ancestral population as active
+    activity[ancestral] = True
+
+    # Assign the ancestral population the index of the first derived population,
     pop_index[ancestral] = pop_index[derived[0]]
 
     # Setting the population size of the ancestral population
-
     # TODO: Ask Stefanos if it is important to change the size before or after split
     population_split_cmd += set_ancestral_size_at_split(config, pop_index, t, ancestral)
 
     for i in range(1, len(derived)):
         population_split_cmd += f" -ej {t:.8g} {pop_index[derived[i]]} {pop_index[ancestral]}"
-
-    # Mark the ancestral population as active
-    activity[ancestral] = True
-    # Mark all derived populations as inactive
+    
+    # Remove all derived populations from pop_index
     for d in derived:
-        activity[d] = False
         pop_index.pop(d)
 
     # Setting the growth rate of the ancestral population
@@ -375,11 +395,13 @@ def handle_population_admixture_event(event, config, activity, pop_index, num_po
         num_populations += 1
         proportion = proportions[i]/sum(proportions[i:])
 
-        population_admixture_cmd += f" -es {t} {pop_index[derived]} {1 - proportion}"
-        population_admixture_cmd += f" -ej {t} {num_populations} {pop_index[ancestral[i]]}"
+        population_admixture_cmd += f" -es {t:.8g} {pop_index[derived]} {1 - proportion}"
+        population_admixture_cmd += f" -ej {t:.8g} {num_populations} {pop_index[ancestral[i]]}"
     
-    population_admixture_cmd += f" -ej {t} {pop_index[derived]} {pop_index[ancestral[-1]]}"
+    population_admixture_cmd += f" -ej {t:.8g} {pop_index[derived]} {pop_index[ancestral[-1]]}"
 
+    population_admixture_cmd += disable_migration_to_derived(config, activity, pop_index, t, derived)
+    
     activity[derived] = False
     pop_index.pop(derived)
 
@@ -402,8 +424,8 @@ def handle_populatin_pulse_migration(event, config, activity, pop_index, num_pop
     num_populations += 1
     proportion = event["proportion"]
 
-    pulse_migration_cmd = f" -es {t} {pop_index[source]} {1 - proportion}"
-    pulse_migration_cmd += f" -ej {t} {num_populations} {pop_index[dest]}"
+    pulse_migration_cmd = f" -es {t:.8g} {pop_index[source]} {1 - proportion}"
+    pulse_migration_cmd += f" -ej {t:.8g} {num_populations} {pop_index[dest]}"
 
     return pulse_migration_cmd, num_populations
 

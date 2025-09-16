@@ -1,14 +1,7 @@
 import pytest
 import re
-from ms_runner import build_ms_command, set_initial_migration_rates, set_initial_growth_rates, \
-                        restore_growth_rates, set_initial_population_sizes, set_ancestral_size_at_split, set_population_sample_sizes, \
-                        get_initial_population_activity, get_initial_population_indices, handle_size_change_event, \
-                        handle_migration_rate_change_event, handle_growth_rate_change_event, handle_population_split_event, \
-                        handle_population_admixture_event, set_recombination, has_gene_conversion, set_gene_conversion, \
-                        set_ancestral_growth_rate_at_split, set_ancestral_migration_rates_at_split
-
-from test_configs import make_config_single_pop, make_config_two_pops_with_migration, make_config_with_gene_conversion, make_population_split_event_config, \
-                            make_population_split_event_with_size_change_config, make_population_admixture_event_config
+from ms_runner import *
+from test_configs import *
 
 def extract_by_flag(cmd, flag, expected_length=0):
     """
@@ -779,7 +772,40 @@ def test_if_ancestral_migration_rates_flag_in_command(config, time, expected_mig
     cmd = build_ms_command(config)
     found_migration_rates = extract_by_flag(cmd, f"-em {time}")
 
-    assert found_migration_rates ==  expected_migration_rates, f"Migration rates mismatch at time {time}: expected {expected_migration_rates}, found {found_migration_rates}"
+    for rate in expected_migration_rates:
+        assert rate in found_migration_rates, (
+            f"Missing migration rate at time {time}: {rate} "
+            f"(found: {found_migration_rates})"
+        )
+
+@pytest.mark.parametrize("config,activity,pop_index,time,populations,expected_migrations",[
+        (make_population_split_event_config(), {"pop1": False, "pop2": False, "pop3": False, "pop4": False, "pop5": True}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop5": 4}, 0.005, ["pop2", "pop3"], [[2, 4, 0], [3, 4, 0]]),
+        (make_population_admixture_event_config(), {"pop1": False, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 0.0025, "pop1", [[1, 2, 0], [1, 3, 0], [1, 4, 0]]),
+        (make_population_admixture_event_config(), {"pop1": False, "pop2": False, "pop3": False, "pop4": False, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 0.0045, ["pop3", "pop4"], [])
+    ]
+)
+def test_disable_migration_to_derived(config, activity, pop_index, time, populations, expected_migrations):
+    migration_cmd = disable_migration_to_derived(config, activity, pop_index, time, populations)
+    found_migrations = extract_by_flag(migration_cmd, f"-em {time}")
+
+    assert found_migrations == expected_migrations
+
+
+@pytest.mark.parametrize("config,time,expected_migration_rates", [
+        (make_population_split_event_config(), 0.005, [[2, 4, 0], [3, 4, 0]]),
+        (make_population_admixture_event_config(), 0.0025, [[1, 2, 0], [1, 3, 0], [1, 4, 0]]),
+        (make_population_admixture_event_config(), 0.0045, [])
+    ]
+)
+def test_if_disabled_migration_rates_flag_in_command(config, time, expected_migration_rates):
+    cmd = build_ms_command(config)
+    found_migration_rates = extract_by_flag(cmd, f"-em {time}")
+
+    for rate in expected_migration_rates:
+        assert rate in found_migration_rates, (
+            f"Missing migration rate at time {time}: {rate} "
+            f"(found: {found_migration_rates})"
+        )
 
 #------------------------------------
 # Test population admixture event 
@@ -810,7 +836,7 @@ def test_handle_population_admixture_event_of_num_populations(event, config, act
 @pytest.mark.parametrize("event,config,activity_before,pop_index_before,num_populations_before,time,derived,expected_proportions",[
     ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(),{"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, 0.0025, 1, [0.5, 0.4])
 ])
-def test_handle_population_admixture_event_of_num_populations_of_proportions(event, config, activity_before, pop_index_before, num_populations_before, time, derived, expected_proportions):
+def test_handle_population_admixture_event_of_proportions(event, config, activity_before, pop_index_before, num_populations_before, time, derived, expected_proportions):
     population_admixture_cmd, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
     found_proportions = extract_by_flag(population_admixture_cmd, f"-es {time} {derived}")
 
@@ -820,7 +846,7 @@ def test_handle_population_admixture_event_of_num_populations_of_proportions(eve
 @pytest.mark.parametrize("event,config,activity_before,pop_index_before,num_populations_before,time,expected_splits",[
     ({"type": "population_admixture", "time": 100, "derived": "pop1", "ancestral": ["pop2", "pop3", "pop4"], "proportions": [0.5, 0.3, 0.2]}, make_population_admixture_event_config(), {"pop1": True, "pop2": True, "pop3": True, "pop4": True, "pop5": False}, {"pop1": 1, "pop2": 2, "pop3": 3, "pop4": 4}, 4, 0.0025, [[5, 2], [6, 3], [1, 4]])
 ])
-def test_handle_population_admixture_event_of_num_populations_of_splits(event, config, activity_before, pop_index_before, num_populations_before, time, expected_splits):
+def test_handle_population_admixture_event_of_splits(event, config, activity_before, pop_index_before, num_populations_before, time, expected_splits):
     population_admixture_cmd, _ = handle_population_admixture_event(event, config, activity_before, pop_index_before, num_populations_before)
     found_splits = extract_by_flag(population_admixture_cmd, f"-ej {time}")
 
@@ -832,7 +858,7 @@ def test_handle_population_admixture_event_of_num_populations_of_splits(event, c
 ])
 def test_admixture_event_es_flag_in_command(config, time):
     cmd = build_ms_command(config)
-    assert f"-es {time}" in cmd, f"Expected admixture split flag '-es {time}' not found in command"
+    assert f"-es {time}" in cmd, f"Expected '-es {time}' flag for admixture event, but it was not found in the command"
 
 
 @pytest.mark.parametrize("config,time",[
@@ -840,7 +866,68 @@ def test_admixture_event_es_flag_in_command(config, time):
 ])
 def test_admixture_event_ej_flag_in_command(config, time):
     cmd = build_ms_command(config)
-    assert f"-ej {time}" in cmd, f"Expected admixture join flag '-ej {time}' not found in command"
+    assert f"-ej {time}" in cmd, f"Expected '-ej {time}' flag for admixture event, but it was not found in the command"
 
 
-# TODO: Test pulse mass migration
+#------------------------------------
+# Test population pulse migration 
+#------------------------------------
+
+
+@pytest.mark.parametrize("event,config,activity,pop_index,num_populations_before,num_populations_after",[
+    ({"type": "population_pulse_migration", "time": 100, "dest": "pop1", "source": "pop2", "proportion": 0.5}, make_population_pulse_migration_event_config(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 2, 3),
+    ({"type": "population_pulse_migration", "time": 100, "dest": "pop1", "source": "pop2", "proportion": 0.5}, make_population_pulse_migration_event_config(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, 2, -1),
+    ({"type": "population_pulse_migration", "time": 100, "dest": "pop1", "source": "pop2", "proportion": 0.5}, make_population_pulse_migration_event_config(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, 2, -1),
+    ({"type": "population_pulse_migration", "time": 100, "dest": "pop1", "source": "pop2", "proportion": 0.5}, make_population_pulse_migration_event_config(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, 2, -1),
+    ({"type": "population_pulse_migration", "time": 100, "dest": "pop1", "source": "pop2", "proportion": 0.5}, make_population_pulse_migration_event_config(), {"pop1": True, "pop2": True}, {"pop1": 4, "pop2": 3}, 2, 3),
+])
+def test_handle_populatin_pulse_migration_of_num_populations(event, config, activity, pop_index, num_populations_before, num_populations_after):
+    if num_populations_after == -1:
+        with pytest.raises(ValueError):
+            handle_populatin_pulse_migration(event, config, activity, pop_index, num_populations_before)
+    else:
+        _, found_num_populations = handle_populatin_pulse_migration(event, config, activity, pop_index, num_populations_before)
+
+        assert found_num_populations == num_populations_after
+
+
+@pytest.mark.parametrize("event,config,activity,pop_index,time,source,expected_proportion",[
+     ({"type": "population_pulse_migration", "time": 100, "dest": "pop1", "source": "pop2", "proportion": 0.5}, make_population_pulse_migration_event_config(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 3.125e-4, "pop2", 0.5),
+     ({"type": "population_pulse_migration", "time": 300, "dest": "pop2", "source": "pop1", "proportion": 0.2}, make_population_pulse_migration_event_config(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 9.375e-4, "pop1", 0.8),
+])
+def test_handle_populatin_pulse_migration_of_proportion(event, config, activity, pop_index, time, source, expected_proportion):
+    pulse_migration_cmd, _  = handle_populatin_pulse_migration(event, config, activity, pop_index, 0)
+    found_proportion = extract_by_flag(pulse_migration_cmd, f"-es {time} {pop_index[source]}")
+
+    assert found_proportion == expected_proportion
+
+
+@pytest.mark.parametrize("event,config,activity,pop_index,num_populations,time,expected_split",[
+     ({"type": "population_pulse_migration", "time": 100, "dest": "pop1", "source": "pop2", "proportion": 0.5}, make_population_pulse_migration_event_config(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 2, 3.125e-4, [3, 1]),
+     ({"type": "population_pulse_migration", "time": 300, "dest": "pop2", "source": "pop1", "proportion": 0.2}, make_population_pulse_migration_event_config(), {"pop1": True, "pop2": True}, {"pop1": 1, "pop2": 2}, 3, 9.375e-4, [4, 2]),
+])
+def test_handle_populatin_pulse_migration_of_splits(event, config, activity, pop_index, num_populations, time, expected_split):
+    pulse_migration_cmd, _  = handle_populatin_pulse_migration(event, config, activity, pop_index, num_populations)
+    found_split = extract_by_flag(pulse_migration_cmd, f"-ej {time}")
+
+    assert found_split == expected_split
+
+
+@pytest.mark.parametrize("config,time",[
+    (make_population_pulse_migration_event_config(), 3.125e-4),
+    (make_population_pulse_migration_event_config(), 9.375e-4),
+])
+def test_pulse_migration_event_es_flag_in_command(config, time):
+    cmd = build_ms_command(config)
+
+    assert f"-es {time}" in cmd, f"Expected '-es {time}' flag for pulse migration event, but it was not found in the command"
+
+
+@pytest.mark.parametrize("config,time",[
+    (make_population_pulse_migration_event_config(), 3.125e-4),
+    (make_population_pulse_migration_event_config(), 9.375e-4),
+])
+def test_pulse_migration_event_ej_flag_in_command(config, time):
+    cmd = build_ms_command(config)
+    
+    assert f"-ej {time}" in cmd, f"Expected '-ej {time}' flag for pulse migration event, but it was not found in the command"

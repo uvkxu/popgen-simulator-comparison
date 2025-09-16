@@ -138,3 +138,20 @@ def make_population_admixture_event_config():
         ]
     }
 
+
+def make_population_pulse_migration_event_config():
+    return {
+        "ms_path": "ms",
+        "population_size": 80000,
+        "mutation_rate": 7e-8,
+        "sequence_length": 80,
+        "num_replicates": 12,
+        "populations": [
+            {"name": "pop1", "sample_size": 20, "initial_size": 5000},
+            {"name": "pop2", "initial_size": 500, "growth_rate": 0.06}
+        ],
+        "demography_events": [
+            {"type": "population_pulse_migration", "time": 100, "dest": "pop1", "source": "pop2", "proportion": 0.5},
+            {"type": "population_pulse_migration", "time": 300, "dest": "pop2", "source": "pop1", "proportion": 0.2},
+        ]
+    }
