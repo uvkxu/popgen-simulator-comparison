@@ -2,7 +2,14 @@ import os
 import msprime
 from ms_runner import get_initial_population_activity
 
+
 def update_activity(activity, derived=None, ancestral=None):
+    """
+    Update the activity status of populations.
+    
+    - Ancestral populations become active (True).
+    - Derived populations become inactive (False), e.g., after splits or admixture.
+    """
     derived = derived if isinstance(derived, list) else [derived]
     ancestral = ancestral if isinstance(ancestral, list) else [ancestral]
 
@@ -17,23 +24,38 @@ def update_activity(activity, derived=None, ancestral=None):
 
 
 def set_initial_migration_rates(demography, config, activity):
+    """
+    Initialize migration rates in the msprime Demography object.
+    
+    - Explicit migration rates are applied first.
+    - Default migration rates are applied between all active populations
+      where no explicit rate exists.
+    - Migration rates are symmetric unless specified otherwise.
+    """
     explicit_migrations = set()
     populations = config.get("populations", [])
     
+    # Apply explicitly defined migration rates
     for mig in config.get("migration_rates", []):
         demography.set_migration_rate(source=mig["source"], dest=mig["dest"], rate=mig["rate"])
         explicit_migrations.add((mig["dest"], mig["source"]))
 
     default_rate = config.get("default_migration_rate", 0.0)
     if default_rate != 0:
+        # Apply default rate to all active population pairs not already specified
         for dest in (p["name"] for p in populations):
             for src in (p["name"] for p in populations):
                 if dest != src and (dest, src) not in explicit_migrations:
                     demography.set_migration_rate(source=src, dest=dest, rate=default_rate)
 
 
-
 def handle_size_change(demography, event, activity, populations):
+    """
+    Handle population size change events.
+    
+    - If population is 'all' or None, apply the size change to all active populations.
+    - Otherwise, apply the size change to the specified population.
+    """
     time = event["time"]
     if event.get("population") in (None, "all"):
         for pop in (p["name"] for p in populations):
@@ -46,6 +68,12 @@ def handle_size_change(demography, event, activity, populations):
 
 
 def handle_growth_rate_change(demography, event, activity, populations):
+    """
+    Handle growth rate change events.
+    
+    - Similar to population size changes, growth rates can be applied to all active
+      populations or a specific population.
+    """
     time = event["time"]
     if event.get("population") in (None, "all"):
         for pop in (p["name"] for p in populations if activity[p["name"]]):
@@ -57,6 +85,12 @@ def handle_growth_rate_change(demography, event, activity, populations):
 
 
 def handle_migration_rate_change(demography, event, activity, populations):
+    """
+    Handle migration rate change events.
+    
+    - Can apply globally to all active population pairs or to specific source-destination pair.
+    - Ignores migration from/to inactive populations.
+    """
     time = event["time"]
     if event.get("population") in (None, "all"):
         for dst in (p["name"] for p in populations if activity[p["name"]]):
@@ -70,6 +104,12 @@ def handle_migration_rate_change(demography, event, activity, populations):
 
 
 def set_ancestral_growth_rate_at_split(demography, config, time, population):
+    """
+    Restore the growth rate for an ancestral population after a split event.
+    
+    - Uses the population-specific growth rate if defined,
+      otherwise uses the default growth rate.
+    """
     default_growth_rate = config.get("default_growth_rate", 0)
     populations = config.get("populations", [])
 
@@ -80,6 +120,13 @@ def set_ancestral_growth_rate_at_split(demography, config, time, population):
 
 
 def handle_population_split(demography, event, activity, config):
+    """
+    Handle a population split event.
+    
+    - Derived populations become inactive.
+    - Ancestral population becomes active.
+    - Growth rate of ancestral population is restored.
+    """
     demography.add_population_split(
         time=event["time"], derived=event["derived"], ancestral=event["ancestral"]
     )
@@ -89,6 +136,12 @@ def handle_population_split(demography, event, activity, config):
 
 
 def handle_population_admixture(demography, event, activity):
+    """
+    Handle an admixture event.
+    
+    - Derived population becomes inactive.
+    - Lineages are distributed among ancestral populations according to specified proportions.
+    """
     demography.add_admixture(
         time=event["time"],
         derived=event["derived"],
@@ -99,6 +152,11 @@ def handle_population_admixture(demography, event, activity):
 
 
 def handle_population_pulse_migration(demography, event):
+    """
+    Handle a pulse migration (mass migration) event.
+    
+    - Transfers a proportion of lineages from source to destination population at a given time.
+    """
     demography.add_mass_migration(
         time=event["time"],
         dest=event["dest"],
@@ -108,6 +166,12 @@ def handle_population_pulse_migration(demography, event):
 
 
 def create_msprime_demography(config):
+    """
+    Construct an msprime Demography object from a configuration dictionary.
+    
+    - Adds populations, sets initial growth and migration rates.
+    - Applies all demographic events in chronological order.
+    """
     demography = msprime.Demography()
     populations = config.get("populations", [])
     population_size = config["population_size"]
@@ -116,16 +180,17 @@ def create_msprime_demography(config):
 
     activity = get_initial_population_activity(config)
 
-    # Add populations
+    # Add populations with initial size and growth rate
     for pop in populations:
         name = pop["name"]
         size = pop.get("initial_size", population_size)
         growth = pop.get("growth_rate", default_growth_rate) if activity[name] else 0.0
         demography.add_population(name=name, initial_size=size, growth_rate=growth)
     
+    # Set up initial migration rates
     set_initial_migration_rates(demography, config, activity)
 
-    # Event handlers mapping
+    # Map event types to handler functions
     handlers = {
         "size_change":                  lambda ev: handle_size_change(demography, ev, activity, populations),
         "growth_rate_change":           lambda ev: handle_growth_rate_change(demography, ev, activity, populations),
@@ -135,7 +200,7 @@ def create_msprime_demography(config):
         "population_pulse_migration":   lambda ev: handle_population_pulse_migration(demography, ev),
     }
 
-    # Apply demographic events
+    # Apply demographic events in order
     for event in config.get("demography_events", []):
         event_type = event["type"]
 
@@ -144,16 +209,22 @@ def create_msprime_demography(config):
 
         handler = handlers[event_type]
 
-        # Handler may or may not update `activity`
+        # Some handlers update activity mapping
         result = handler(event)
         if result is not None:
             activity = result
 
-    # print(demography.debug())
-
     return demography
 
+
 def run_msprime_simulation(config):
+    """
+    Run a full msprime simulation based on the given configuration.
+    
+    - Creates populations and applies demographic events.
+    - Generates ancestry and mutations.
+    - Saves output in Newick tree format and ms-style sequence data.
+    """
     demography = create_msprime_demography(config)
 
     samples = []
@@ -167,6 +238,7 @@ def run_msprime_simulation(config):
                 )
             )
     
+    # Build parameters dictionary for msprime simulation
     params = {
         "samples": samples,
         "sequence_length": config["sequence_length"],
@@ -176,6 +248,7 @@ def run_msprime_simulation(config):
         "random_seed": 42,
     }
 
+    # Include optional recombination and gene conversion parameters
     for key in ("recombination_rate", "gene_conversion_rate", "gene_conversion_tract_length"):
         if key in config:
             params[key] = config[key]
@@ -197,7 +270,7 @@ def run_msprime_simulation(config):
                     f.write(tree.as_newick() + ";\n")
                 f.write("\n")  # optional blank line between trees and sequences
 
-            # Write sequences (ms-style)
+            # Write ms-style sequence data
             f.write(f"segsites: {mts.num_sites}\n")
             if mts.num_sites > 0:
                 positions = " ".join(f"{site.position / mts.sequence_length:.6f}" for site in mts.sites())
@@ -207,4 +280,3 @@ def run_msprime_simulation(config):
                     f.write("".join(map(str, row)) + "\n")
             
             f.write("\n")
-
