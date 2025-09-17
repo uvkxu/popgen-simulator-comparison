@@ -178,7 +178,7 @@ def test_create_msprime_demography_initialization_of_growth_rates(config, expect
         [0, 0, 0, 0.02, 0],
     ])
 ])
-def test_set_initial_migration_rates_default_and_explicit(config, expected):
+def test_set_initial_migration_rates(config, expected):
     demography = create_msprime_demography(config)
 
     actual_matrix = np.array(demography.migration_matrix)

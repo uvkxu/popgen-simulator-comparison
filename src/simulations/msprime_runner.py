@@ -40,8 +40,8 @@ def set_initial_migration_rates(demography, config, activity):
     default_rate = config.get("default_migration_rate", 0.0)
     if default_rate != 0:
         # Apply default rate to all active population pairs not already specified
-        for dest in (p["name"] for p in populations):
-            for src in (p["name"] for p in populations):
+        for dest in (p["name"] for p in populations if activity[p["name"]]):
+            for src in (p["name"] for p in populations if activity[p["name"]]):
                 if dest != src and (dest, src) not in explicit_migrations:
                     demography.set_migration_rate(source=src, dest=dest, rate=default_rate)
 
@@ -97,7 +97,7 @@ def handle_migration_rate_change(demography, event, activity, populations):
             for src in (p["name"] for p in populations if activity[p["name"]]):
                 if dst != src:
                     demography.add_migration_rate_change(
-                        time=time,source=src, dest=dst, rate=event["rate"]
+                        time=time, source=src, dest=dst, rate=event["rate"]
                     )
     else:
         demography.add_migration_rate_change(
