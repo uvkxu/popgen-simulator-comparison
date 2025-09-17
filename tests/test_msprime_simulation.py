@@ -54,6 +54,7 @@ def test_handle_population_split_and_admixture_update_activity():
     "config,epoch,expected", [
         (make_config_two_pops_with_migration(), 3, {"pop1": 900}),
         (make_config_two_pops_with_migration(), 4, {"pop1": 1000, "pop2": 1000}),
+        (make_config_single_pop(), 2, {"pop_0": 5000})
     ],
 )
 def test_handle_size_change(config,epoch,expected):
@@ -69,7 +70,8 @@ def test_handle_size_change(config,epoch,expected):
 @pytest.mark.parametrize(
     "config,epoch,expected", [
         (make_config_two_pops_with_migration(), 2, {"pop1": 0.04, "pop2": 0.003}),
-        (make_config_two_pops_with_migration(), 5, {"pop1": 0.05, "pop2": 0.05})
+        (make_config_two_pops_with_migration(), 5, {"pop1": 0.05, "pop2": 0.05}),
+        (make_config_single_pop(), 1, {"pop_0": 0.003})
     ],
 )
 def test_handle_growth_rate_change_event(config,epoch,expected):
@@ -148,6 +150,7 @@ def test_create_msprime_demography_initialization_of_names(config, expected):
 @pytest.mark.parametrize("config,expected", [
     (make_config_two_pops_with_migration(), {"pop1": 1000, "pop2": 990}),
     (make_population_split_event_config(), {"pop1": 1000, "pop2": 1000, "pop3": 5000, "pop4": 5000, "pop5": 2000}),
+    (make_config_with_gene_conversion(), {"pop_0": 10000})
 ])
 def test_create_msprime_demography_initialization_of_sizes(config, expected):
     demography = create_msprime_demography(config)
@@ -158,7 +161,8 @@ def test_create_msprime_demography_initialization_of_sizes(config, expected):
 @pytest.mark.parametrize("config,expected", [
     (make_config_two_pops_with_migration(), {"pop1": 0.04, "pop2": 0.001}),
     (make_population_split_event_config(), {"pop1": 0.0, "pop2": 0.06, "pop3": 0.0, "pop4": 0.0, "pop5": 0.007}),
-    (make_population_split_event_with_size_change_config(), {"pop1": 0.0, "pop2": 0.06, "pop3": 0.0, "pop4": 0.0})
+    (make_population_split_event_with_size_change_config(), {"pop1": 0.0, "pop2": 0.06, "pop3": 0.0, "pop4": 0.0}),
+    (make_config_with_gene_conversion(), {"pop_0": 0.04})
 ])
 def test_create_msprime_demography_initialization_of_growth_rates(config, expected):
     demography = create_msprime_demography(config)

@@ -6,9 +6,17 @@ from simulations.ms_runner import get_initial_population_activity
 def update_activity(activity, derived=None, ancestral=None):
     """
     Update the activity status of populations.
-    
+
     - Ancestral populations become active (True).
     - Derived populations become inactive (False), e.g., after splits or admixture.
+
+    Note: This function tracks whether a population is currently active so that 
+    other demographic events (e.g., migration rate change, size change) are applied 
+    only to active populations. 
+
+    In msprime, populations can be in three states: INACTIVE → ACTIVE → PREVIOUSLY_ACTIVE.  
+    Here, INACTIVE and PREVIOUSLY_ACTIVE are treated as equivalent, since we only 
+    need to distinguish between active and non-active populations.
     """
     if ancestral:
         ancestral = ancestral if isinstance(ancestral, list) else [ancestral]
@@ -25,9 +33,8 @@ def set_initial_migration_rates(demography, config, activity):
     Initialize migration rates in the msprime Demography object.
     
     - Explicit migration rates are applied first.
-    - Default migration rates are applied between all active populations
+    - Default migration rates are applied only between all active populations
       where no explicit rate exists.
-    - Migration rates are symmetric unless specified otherwise.
     """
     explicit_migrations = set()
     populations = config.get("populations", [])
@@ -40,8 +47,9 @@ def set_initial_migration_rates(demography, config, activity):
     default_rate = config.get("default_migration_rate", 0.0)
     if default_rate != 0:
         # Apply default rate to all active population pairs not already specified
-        for dest in (p["name"] for p in populations if activity[p["name"]]):
-            for src in (p["name"] for p in populations if activity[p["name"]]):
+        active_populations = [p["name"] for p in populations if activity[p["name"]]]
+        for dest in active_populations:
+            for src in active_populations:
                 if dest != src and (dest, src) not in explicit_migrations:
                     demography.set_migration_rate(source=src, dest=dest, rate=default_rate)
 
@@ -49,15 +57,22 @@ def set_initial_migration_rates(demography, config, activity):
 def handle_size_change(demography, event, activity, populations):
     """
     Handle population size change events.
-    
-    - If population is 'all' or None, apply the size change to all active populations.
-    - Otherwise, apply the size change to the specified population.
+
+    - If `population` is 'all' or None, the size change is applied to all active populations 
+    (or to the single population in a one-population model).
+    - Otherwise, the size change is applied only to the specified population.
     """
     time = event["time"]
     if event.get("population") in (None, "all"):
-        for pop in (p["name"] for p in populations):
-            if activity[pop]:
-                demography.add_population_parameters_change(time=time, initial_size=event["size"], population=pop)
+        if not populations: 
+            # Case: Single population model
+            demography.add_population_parameters_change(time=time, initial_size=event["size"])
+        else: 
+            # Case: Mulitple population model - apply to all active populations only
+            active_populations = [p["name"] for p in populations if activity[p["name"]]]
+            for pop in active_populations:
+                if activity[pop]:
+                    demography.add_population_parameters_change(time=time, initial_size=event["size"], population=pop)
     else:
         demography.add_population_parameters_change(
             time=time, initial_size=event["size"], population=event["population"]
@@ -73,8 +88,14 @@ def handle_growth_rate_change(demography, event, activity, populations):
     """
     time = event["time"]
     if event.get("population") in (None, "all"):
-        for pop in (p["name"] for p in populations if activity[p["name"]]):
-            demography.add_population_parameters_change(time=time, growth_rate=event["rate"], population=pop)
+        if not populations: 
+            # Case: Single population model
+            demography.add_population_parameters_change(time=time, growth_rate=event["rate"])
+        else:
+            # Case: Mulitple population model - apply to all active populations only
+            active_populations = [p["name"] for p in populations if activity[p["name"]]]
+            for pop in active_populations:
+                demography.add_population_parameters_change(time=time, growth_rate=event["rate"], population=pop)
     else:
         demography.add_population_parameters_change(
             time=time, growth_rate=event["rate"], population=event["population"]
@@ -93,8 +114,9 @@ def handle_migration_rate_change(demography, event, activity, populations):
         if "dest" in event or "source" in event:
             raise ValueError("Event must define either both 'dest' and 'source' or neither of them.")
 
-        for dst in (p["name"] for p in populations if activity[p["name"]]):
-            for src in (p["name"] for p in populations if activity[p["name"]]):
+        active_populations = [p["name"] for p in populations if activity[p["name"]]]
+        for dst in active_populations:
+            for src in active_populations:
                 if dst != src:
                     demography.add_migration_rate_change(
                         time=time, source=src, dest=dst, rate=event["rate"]
@@ -183,15 +205,19 @@ def create_msprime_demography(config):
     activity = get_initial_population_activity(config)
 
     # Add populations with initial size and growth rate
-    for pop in populations:
-        name = pop["name"]
-        size = pop.get("initial_size", population_size)
-        growth = pop.get("growth_rate", default_growth_rate) if activity[name] else 0.0
-        demography.add_population(name=name, initial_size=size, growth_rate=growth)
-    
-    # Set up initial migration rates
-    set_initial_migration_rates(demography, config, activity)
+    if "populations" in config:
+        for pop in populations:
+            name = pop["name"]
+            size = pop.get("initial_size", population_size)
+            growth = pop.get("growth_rate", default_growth_rate) if activity[name] else 0.0
+            demography.add_population(name=name, initial_size=size, growth_rate=growth)
 
+        # Set up initial migration rates
+        set_initial_migration_rates(demography, config, activity)
+    else:
+        demography.add_population(initial_size=population_size, growth_rate=default_growth_rate)
+    
+    
     # Map event types to handler functions
     handlers = {
         "size_change":                  lambda ev: handle_size_change(demography, ev, activity, populations),
@@ -228,15 +254,23 @@ def run_msprime_simulation(config):
     demography = create_msprime_demography(config)
 
     samples = []
-    for pop in config.get("populations", []):
-        if "sample_size" in pop:
-            samples.append(
-                msprime.SampleSet(
-                    num_samples=pop["sample_size"],
-                    population=pop["name"],
-                    time=0
+    if "populations" in config:
+        for pop in config.get("populations"):
+            if "sample_size" in pop:
+                samples.append(
+                    msprime.SampleSet(
+                        num_samples=pop["sample_size"],
+                        population=pop["name"],
+                        time=0
+                    )
                 )
-            )
+    else:
+        samples.append(
+            msprime.SampleSet(
+                        num_samples=config["sample_size"],
+                        population=0,
+                        time=0
+                    ))
     
     # Build parameters dictionary for msprime simulation
     params = {

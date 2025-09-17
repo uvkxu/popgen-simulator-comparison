@@ -9,7 +9,7 @@ import subprocess
 def set_recombination(config):
     # Construct the recombination part of the ms command.
     # Syntax in ms:
-    #   -r ρ nsites
+    #   -r ρ L
     # where
     #   ρ = 4 * N_e * r * L
     #   r = per-site recombination probability between adjacent sites
@@ -39,13 +39,13 @@ def has_gene_conversion(config):
 def set_gene_conversion(config):
     # Construct the gene conversion part of the ms command.
     # Syntax in ms:
-    #   -c f L
+    #   -c f λ
     # where
     #   f = g/r   if recombination is defined
     #       (g = per-site gene conversion initiation probability,
     #        r = per-site recombination probability between adjacent sites)
     #   f = 4 * N_e * g   if recombination is not defined
-    #   L = mean gene conversion tract length
+    #   λ = mean gene conversion tract length
 
     population_size = config["population_size"]
     recomb_rate = float(config.get("recombination_rate", 0))
@@ -107,13 +107,28 @@ def set_initial_migration_rates(config, activity, pop_index, num_populations):
 
 
 def set_initial_growth_rates(config, activity, pop_index):
+    """
+    Set up growth rate parameters for ms.
+
+    Returns
+    -------
+    growth_rate_cmd : str
+        The ms command string part defining growth rates.
+    growth_rate_map : dict
+        A mapping from population name to its current growth rate.
+        This map is important because in ms, after a size change event,
+        the growth rate of the affected population(s) is automatically
+        reset to 0. By returning and tracking growth_rate_map, we can
+        later restore the intended growth rates when reconstructing
+        the demography.
+    """
     # Construct the growth part of the ms command.
     # Syntax in ms:
     #   -G α        global growth rate for all populations
     #   -g i α      growth rate for population i
     #
     # where
-    #   α = growth rate scaled by 1 / (4N_e)
+    #   α = growth rate scaled by 1 / (4*N_e)
 
     factor = 1 / (4 * config["population_size"])
     default_growth_rate = config.get("default_growth_rate", 0.0) * factor
@@ -129,15 +144,15 @@ def set_initial_growth_rates(config, activity, pop_index):
         return growth_rate_cmd, {"single": default_growth_rate} 
 
     # Case: multiple populations with individual growth rates.
-    for pop in config["populations"]:
+    active_populations = [p for p in config["populations"] if activity[p["name"]]]
+    for pop in active_populations:
         pop_name = pop["name"]
-        if activity[pop_name]:
-            if "growth_rate" in pop:
-                rate = pop["growth_rate"] * factor
-                growth_rate_map[pop_name] = rate
-                growth_rate_cmd += f" -g {pop_index[pop_name]} {rate:.8g}"
-            elif default_growth_rate != 0:
-                growth_rate_map[pop_name] = default_growth_rate
+        if "growth_rate" in pop:
+            rate = pop["growth_rate"] * factor
+            growth_rate_map[pop_name] = rate
+            growth_rate_cmd += f" -g {pop_index[pop_name]} {rate:.8g}"
+        elif default_growth_rate != 0:
+            growth_rate_map[pop_name] = default_growth_rate
 
     return growth_rate_cmd, growth_rate_map
 
@@ -159,9 +174,10 @@ def set_initial_population_sizes(config, activity, pop_index):
     population_size = config["population_size"]
     subpop_sizes = ""
 
-    for pop in config.get("populations", []):
+    active_populations = [p for p in config["populations"] if activity[p["name"]]]
+    for pop in active_populations:
         pop_name = pop["name"]
-        if activity[pop_name] and "initial_size" in pop and pop["initial_size"] != population_size:
+        if "initial_size" in pop and pop["initial_size"] != population_size:
             subpop_sizes += f" -n {pop_index[pop_name]} {int(pop['initial_size']) / population_size}"
     
     return subpop_sizes
@@ -198,10 +214,9 @@ def set_population_sample_sizes(config, activity, pop_index):
 
 def get_initial_population_activity(config):
     # Initialize all populations as active by default
-    pop_names = [pop["name"] for pop in config.get("populations", [])]
-    activity = {pid: True for pid in pop_names}
+    activity = {p: True for p in (pop["name"] for pop in config.get("populations", []))}
     
-    # Mark ancestral populations as inactive at the start of splits
+    # Mark ancestral populations of population splits as inactive
     for event in config.get("demography_events", []):
        if event["type"] == "population_split":
             activity[event["ancestral"]] = False
@@ -214,14 +229,10 @@ def get_initial_population_indices(config, activity):
     pop_index = {}
     num_populations = 0
 
-    for pop in config.get("populations", []):
-        pop_name = pop["name"]
-
-        if not activity[pop_name]:
-            continue
-        
+    active_populations = [p["name"] for p in config.get("populations", []) if activity[p["name"]]]
+    for pop in active_populations:
         num_populations += 1
-        pop_index[pop_name] = num_populations
+        pop_index[pop] = num_populations
 
     return num_populations, pop_index
 
@@ -294,11 +305,11 @@ def handle_migration_rate_change_event(event, config, activity, pop_index):
             raise ValueError("Event must define either both 'dest' and 'source' or neither of them.")
 
         # Collect all populations that are currently active
-        populations = [p["name"] for p in config.get("populations", []) if activity[p["name"]]]
+        active_populations = [p["name"] for p in config.get("populations", []) if activity[p["name"]]]
 
         # Apply the migration rate to every pair of active populations
-        for dest in populations:
-            for source in populations:
+        for dest in active_populations:
+            for source in active_populations:
                 if dest != source:
                     migration_change_cmd += f" -em {t:.8g} {pop_index[dest]} {pop_index[source]} {rate:.8g}"
     else:
@@ -332,7 +343,8 @@ def handle_growth_rate_change_event(event, config, activity, pop_index, growth_r
 
         # Case multiple population model: apply to all active populations
         growth_rate_cmd = ""
-        for pop in (p["name"] for p in config["populations"] if activity[p["name"]]):
+        active_populations = [p["name"] for p in config["populations"] if activity[p["name"]]]
+        for pop in active_populations:
             growth_rate_map[pop] = rate
             growth_rate_cmd += f" -eg {t:.8g} {pop_index[pop]} {rate:.8g}"
         
@@ -518,6 +530,7 @@ def set_ancestral_migration_rates_at_split(config, activity, pop_index, time, po
 
             handled_migrations.add((dest, source))
     
+    # TODO: Ask Stefanos if it makes more sense to set them to the default migration rate
     # Set all other migrations involving the ancestral population to zero
     for pop in (p["name"] for p in config["populations"]):
         if activity[pop] and pop != population:
@@ -560,7 +573,8 @@ def restore_growth_rates(config, activity, pop_index, growth_rate_map, time, pop
                 growth_rate_cmd += f" -eg {time:.8g} {pop_index[pop]} {rate:.8g}"
         
         return growth_rate_cmd
-    elif growth_rate_map["single"] != 0:  # only one population in the whole model
+    elif growth_rate_map["single"] != 0:  
+        # only one population in the whole model
         return f" -eG {time:.8g} {growth_rate_map['single']:.8g}"
 
     return ""

@@ -409,7 +409,6 @@ def test_single_growth_flag_in_command(config, g_flag_exists):
     (make_config_two_pops_with_migration(), {"pop1": False, "pop2": True}, {"pop1": 1, "pop2": 2}, [2, 0.99]),
     (make_config_two_pops_with_migration(), {"pop1": True, "pop2": False}, {"pop1": 1, "pop2": 2}, []),
     (make_config_two_pops_with_migration(), {"pop1": False, "pop2": False}, {"pop1": 1, "pop2": 2}, []),
-    (make_config_single_pop(), {}, {}, []),
 ])
 def test_set_initial_population_sizes(config, activity, pop_index, expected_sizes):
     sizes_cmd = set_initial_population_sizes(config, activity, pop_index)
