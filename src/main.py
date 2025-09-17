@@ -1,10 +1,12 @@
 import sys
 import yaml
 import os
-from ms_runner import run_ms_simulation
-from msprime_runner import run_msprime_simulation
-from msms_runner import run_msms_simulation
 import msprime
+
+from simulations.ms_runner import run_ms_simulation
+from simulations.msprime_runner import run_msprime_simulation
+from simulations.msms_runner import run_msms_simulation
+
 
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))

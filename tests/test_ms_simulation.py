@@ -1,6 +1,6 @@
 import pytest
 import re
-from ms_runner import *
+from simulations.ms_runner import *
 from test_configs import *
 
 def extract_by_flag(cmd, flag, expected_length=0):

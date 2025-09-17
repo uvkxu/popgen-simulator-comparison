@@ -1,6 +1,6 @@
 import os
 import subprocess
-from ms_runner import build_ms_command
+from simulations.ms_runner import build_ms_command
 
 def run_msms_simulation(config):
     msms_path = config.get("msms_path")

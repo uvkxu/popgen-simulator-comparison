@@ -1,6 +1,6 @@
 import os
 import msprime
-from ms_runner import get_initial_population_activity
+from simulations.ms_runner import get_initial_population_activity
 
 
 def update_activity(activity, derived=None, ancestral=None):
@@ -10,17 +10,14 @@ def update_activity(activity, derived=None, ancestral=None):
     - Ancestral populations become active (True).
     - Derived populations become inactive (False), e.g., after splits or admixture.
     """
-    derived = derived if isinstance(derived, list) else [derived]
-    ancestral = ancestral if isinstance(ancestral, list) else [ancestral]
-
     if ancestral:
+        ancestral = ancestral if isinstance(ancestral, list) else [ancestral]
         for a in ancestral:
             activity[a] = True
     if derived:
+        derived = derived if isinstance(derived, list) else [derived]
         for d in derived:
             activity[d] = False
-    
-    return activity
 
 
 def set_initial_migration_rates(demography, config, activity):
@@ -92,11 +89,16 @@ def handle_migration_rate_change(demography, event, activity, populations):
     - Ignores migration from/to inactive populations.
     """
     time = event["time"]
-    if event.get("population") in (None, "all"):
+    if "dest" not in event or "source" not in event:
+        if "dest" in event or "source" in event:
+            raise ValueError("Event must define either both 'dest' and 'source' or neither of them.")
+
         for dst in (p["name"] for p in populations if activity[p["name"]]):
             for src in (p["name"] for p in populations if activity[p["name"]]):
                 if dst != src:
-                    demography.set_migration_rate(source=src, dest=dst, rate=event["rate"])
+                    demography.add_migration_rate_change(
+                        time=time,source=src, dest=dst, rate=event["rate"]
+                    )
     else:
         demography.add_migration_rate_change(
             time=time, source=event["source"], dest=event["dest"], rate=event["rate"]
@@ -129,9 +131,9 @@ def handle_population_split(demography, event, activity, config):
     demography.add_population_split(
         time=event["time"], derived=event["derived"], ancestral=event["ancestral"]
     )
-    set_ancestral_growth_rate_at_split(demography, config, event["time"], event["ancestral"])
 
-    return update_activity(activity, derived=event["derived"], ancestral=["ancestral"])
+    set_ancestral_growth_rate_at_split(demography, config, event["time"], event["ancestral"])
+    update_activity(activity, derived=event["derived"], ancestral=event["ancestral"])
 
 
 def handle_population_admixture(demography, event, activity):
@@ -147,7 +149,8 @@ def handle_population_admixture(demography, event, activity):
         ancestral=event["ancestral"],
         proportions=event["proportions"],
     )
-    return update_activity(activity, derived=event["derived"])
+    
+    update_activity(activity, derived=event["derived"])
 
 
 def handle_population_pulse_migration(demography, event):
@@ -207,13 +210,9 @@ def create_msprime_demography(config):
             raise ValueError(f"Unsupported event type: {event_type}")
 
         handler = handlers[event_type]
+        handler(event)
 
-        # Some handlers update activity mapping
-        result = handler(event)
-        if result is not None:
-            activity = result
-
-    print(demography.debug())
+    # print(demography.debug())
 
     return demography
 
@@ -281,3 +280,4 @@ def run_msprime_simulation(config):
                     f.write("".join(map(str, row)) + "\n")
             
             f.write("\n")
+
