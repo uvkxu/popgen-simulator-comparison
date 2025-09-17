@@ -115,8 +115,7 @@ def set_ancestral_growth_rate_at_split(demography, config, time, population):
 
     growth_rate = [pop.get("growth_rate", default_growth_rate) for pop in populations if pop["name"] == population][0]
 
-    if growth_rate != 0:
-        demography.add_population_parameters_change(time=time, growth_rate=growth_rate, population=population)
+    demography.add_population_parameters_change(time=time, growth_rate=growth_rate, population=population)
 
 
 def handle_population_split(demography, event, activity, config):
@@ -213,6 +212,8 @@ def create_msprime_demography(config):
         result = handler(event)
         if result is not None:
             activity = result
+
+    print(demography.debug())
 
     return demography
 
