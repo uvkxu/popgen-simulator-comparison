@@ -1,0 +1,24 @@
+num_replicates: 5
+population_size: 10000000
+sequence_length: 100
+mutation_rate: 4.83e-9
+default_migration_rate: 1.72e-6
+ms_path: C:/Users/Lenovo/OneDrive/Dokumente/Informatik-Studium/KIT/Masterarbeit/ms.folder/ms/msdir/ms.exe
+msms_path: C:/Users/Lenovo/OneDrive/Dokumente/Informatik-Studium/KIT/Masterarbeit/msms/bin/msms.exe
+
+populations:
+  - name: Mallard
+    initial_size: 1570000
+    growth_rate: 0.002
+    sample_size: 100
+  - name: Black_duck
+    initial_size: 1370000
+    sample_size: 100
+  - name: Ancestral
+    initial_size: 819535
+
+demography_events:
+  - type: population_split
+    time: 158076
+    derived: [Mallard, Black_duck]
+    ancestral: Ancestral

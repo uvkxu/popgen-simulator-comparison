@@ -1,35 +1,29 @@
+import os
 import sys
 import yaml
-import os
-import msprime
-
-from simulations.ms_runner import run_ms_simulation
-from simulations.msprime_runner import run_msprime_simulation
-from simulations.msms_runner import run_msms_simulation
-
+from pathlib import Path
+from simulations.run_all import run_all_simulations  # anpassen, wo die Funktion liegt
 
 def main():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    default_config = os.path.join(script_dir, "..", "configs", "sample_config_2.yaml")
+    script_dir = Path(__file__).resolve().parent
+    default_config = script_dir.parent / "configs" / "sample_config_2.yaml"
 
+    # CLI-Arg oder Default
     if len(sys.argv) > 1:
-        arg_path = sys.argv[1]
-        if not os.path.isabs(arg_path):
-            config_path = os.path.join(script_dir, "..", arg_path)
-        else:
-            config_path = arg_path
+        arg_path = Path(sys.argv[1])
+        config_path = arg_path if arg_path.is_absolute() else script_dir.parent / arg_path
     else:
         config_path = default_config
 
-    if not os.path.exists(config_path):
+    if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
+    # Laden der Config
     with open(config_path, "r") as f:
         cfg = yaml.safe_load(f)
 
-    run_ms_simulation(cfg)
-    run_msms_simulation(cfg)
-    run_msprime_simulation(cfg)
+    # Übergabe an run_all_simulations
+    run_all_simulations(config_path=str(config_path), config=cfg)
 
 if __name__ == "__main__":
     main()

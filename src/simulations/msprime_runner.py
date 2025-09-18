@@ -243,7 +243,7 @@ def create_msprime_demography(config):
     return demography
 
 
-def run_msprime_simulation(config):
+def run_msprime_simulation(config, output_file=None):
     """
     Run a full msprime simulation based on the given configuration.
     
@@ -289,7 +289,9 @@ def run_msprime_simulation(config):
 
     replicates = msprime.sim_ancestry(**params)
 
-    output_file = config.get("msprime_output_file", "results/msprime/output.txt")
+    if output_file is None:
+        output_file = config.get("ms_output_file", "results/msprime/output.txt")
+
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
     with open(output_file, "w") as f:

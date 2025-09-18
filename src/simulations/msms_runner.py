@@ -2,7 +2,7 @@ import os
 import subprocess
 from simulations.ms_runner import build_ms_command
 
-def run_msms_simulation(config):
+def run_msms_simulation(config, output_file=None):
     msms_path = config.get("msms_path")
     if not msms_path or not os.path.exists(msms_path):
         raise FileNotFoundError(f"msms executable not found at {msms_path}. Please check the path in config.")
@@ -11,7 +11,9 @@ def run_msms_simulation(config):
         raise ValueError("msms cannot be run with gene conversion")
 
     command = "msms" + build_ms_command(config).removeprefix("ms")
-    output_file = config.get("msms_output_file", "results/msms/output.txt")
+
+    if output_file is None:
+        output_file = config.get("ms_output_file", "results/msms/output.txt")
 
     print(f"🚀 Running msms: {command}")
     os.makedirs(os.path.dirname(output_file), exist_ok=True)

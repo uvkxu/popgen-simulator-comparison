@@ -643,13 +643,15 @@ def build_ms_command(config):
     return cmd
 
 
-def run_ms_simulation(config):
+def run_ms_simulation(config, output_file=None):
     ms_path = config.get("ms_path")
     if not ms_path or not os.path.exists(ms_path):
         raise FileNotFoundError(f"ms executable not found at {ms_path}. Please check the path in config.")
 
     command = build_ms_command(config)
-    output_file = config.get("ms_output_file", "results/ms/output.txt")
+
+    if output_file is None:
+        output_file = config.get("ms_output_file", "results/ms/output.txt")
 
     print(f"🚀 Running ms: {command}")
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -663,3 +665,5 @@ def run_ms_simulation(config):
 
     with open(output_file, "w") as f:
         f.write(result.stdout)
+
+    return output_file

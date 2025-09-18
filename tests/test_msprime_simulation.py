@@ -129,7 +129,7 @@ def test_growth_rate_and_size_of_ancestral_at_split(config, epoch, population, e
     demography = create_msprime_demography(config)
     population_at_epoch = [p for p in demography.debug().epochs[epoch].populations if p.name == population][0]
 
-    assert expected_growth_rate == population_at_epoch.growth_rate
+    assert np.isclose(expected_growth_rate, population_at_epoch.growth_rate)
     assert expected_size == population_at_epoch.start_size
 
 
@@ -180,7 +180,7 @@ def test_create_msprime_demography_initialization_of_growth_rates(config, expect
         [0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0.008],
         [0, 0, 0, 0.02, 0],
-    ])
+    ]),
 ])
 def test_set_initial_migration_rates(config, expected):
     demography = create_msprime_demography(config)
