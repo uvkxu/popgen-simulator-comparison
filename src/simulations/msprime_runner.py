@@ -63,22 +63,20 @@ def handle_size_change(demography, event, activity, populations):
     - Otherwise, the size change is applied only to the specified population.
     """
     time = event["time"]
-    
-    # If affected_populations is None, the growth rate is applied globally.
-    # This is only used for the single population model.
-    # In multi-population models, we instead restrict the change to active populations.
-    affected_populations = None
-    
-    if event.get("population") in (None, "all") and populations:
-        # Case: multiple population model – collect active populations only
-        affected_populations = [p["name"] for p in populations if activity[p["name"]]]
+    if event.get("population") in (None, "all"):
+        if not populations: 
+            # Case: Single population model
+            demography.add_population_parameters_change(time=time, initial_size=event["size"])
+        else: 
+            # Case: Mulitple population model - apply to all active populations only
+            active_populations = [p["name"] for p in populations if activity[p["name"]]]
+            for pop in active_populations:
+                if activity[pop]:
+                    demography.add_population_parameters_change(time=time, initial_size=event["size"], population=pop)
     else:
-        # Case: specified population
-        affected_populations = event["population"]
-
-    demography.add_population_parameters_change(
-        time=time, initial_size=event["size"], population=affected_populations
-    )
+        demography.add_population_parameters_change(
+            time=time, initial_size=event["size"], population=event["population"]
+        )
 
 
 def handle_growth_rate_change(demography, event, activity, populations):
@@ -89,22 +87,19 @@ def handle_growth_rate_change(demography, event, activity, populations):
       populations or a specific population.
     """
     time = event["time"]
-    
-    # If affected_populations is None, the growth rate is applied globally.
-    # This is only used for the single population model.
-    # In multi-population models, we instead restrict the change to active populations.
-    affected_populations = None
-    
-    if event.get("population") in (None, "all") and populations:
-        # Case: multiple population model – collect active populations only
-        affected_populations = [p["name"] for p in populations if activity[p["name"]]]
+    if event.get("population") in (None, "all"):
+        if not populations: 
+            # Case: Single population model
+            demography.add_population_parameters_change(time=time, growth_rate=event["rate"])
+        else:
+            # Case: Mulitple population model - apply to all active populations only
+            active_populations = [p["name"] for p in populations if activity[p["name"]]]
+            for pop in active_populations:
+                demography.add_population_parameters_change(time=time, growth_rate=event["rate"], population=pop)
     else:
-        # Case: specified population
-        affected_populations = event["population"]
-
-    demography.add_population_parameters_change(
-        time=time, growth_rate=event["rate"], population=affected_populations
-    )
+        demography.add_population_parameters_change(
+            time=time, growth_rate=event["rate"], population=event["population"]
+        )
 
 
 def handle_migration_rate_change(demography, event, activity, populations):
