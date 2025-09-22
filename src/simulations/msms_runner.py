@@ -3,7 +3,8 @@ import subprocess
 from simulations.ms_runner import build_ms_command
 
 def run_msms_simulation(config, output_file=None):
-    msms_path = config.get("msms_path")
+    default_msms_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../bin/msms.exe"))
+    msms_path = config.get("msms_path", default_msms_path)
     if not msms_path or not os.path.exists(msms_path):
         raise FileNotFoundError(f"msms executable not found at {msms_path}. Please check the path in config.")
 

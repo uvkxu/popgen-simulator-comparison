@@ -279,7 +279,7 @@ def run_msprime_simulation(config, output_file=None):
         "demography": demography,
         "num_replicates": config["num_replicates"],
         "ploidy": 1,
-        "random_seed": 42,
+        "discrete_genome": False
     }
 
     # Include optional recombination and gene conversion parameters
@@ -296,7 +296,8 @@ def run_msprime_simulation(config, output_file=None):
 
     with open(output_file, "w") as f:
         for rep_index, ts in enumerate(replicates, start=1):
-            mts = msprime.sim_mutations(ts, rate=config["mutation_rate"], random_seed=42)
+            mts = msprime.sim_mutations(ts, rate=config["mutation_rate"], model=msprime.BinaryMutationModel(), 
+                discrete_genome=False)
 
             f.write(f"// Replicate {rep_index}\n")
 

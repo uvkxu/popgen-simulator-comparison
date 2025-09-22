@@ -644,8 +644,8 @@ def build_ms_command(config):
 
 
 def run_ms_simulation(config, output_file=None):
-    ms_path = config.get("ms_path")
-    if not ms_path or not os.path.exists(ms_path):
+    default_ms_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../bin/ms.exe"))
+    if not ms_path or not os.path.exists(ms_path, default_ms_path):
         raise FileNotFoundError(f"ms executable not found at {ms_path}. Please check the path in config.")
 
     command = build_ms_command(config)
