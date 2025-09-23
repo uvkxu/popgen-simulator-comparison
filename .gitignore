@@ -15,6 +15,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!lib/msms.jar
 lib64/
 parts/
 sdist/
@@ -209,3 +210,6 @@ __marimo__/
 # Ignore all simulation outputs in data/raw, but keep folder structure
 data/raw/*
 !data/raw/.gitkeep
+
+# Ignore seedms
+seedms
