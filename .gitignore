@@ -14,9 +14,9 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+lib/*
+!lib/
 !lib/msms.jar
-lib64/
 parts/
 sdist/
 var/
@@ -212,4 +212,6 @@ data/raw/*
 !data/raw/.gitkeep
 
 # Ignore seedms
+/seedms
 seedms
+**/seedms
