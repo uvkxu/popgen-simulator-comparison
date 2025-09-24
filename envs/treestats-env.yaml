@@ -1,0 +1,8 @@
+name: treestats-env
+channels:
+  - conda-forge
+dependencies:
+  - r-base=4.3
+  - r-ape
+  # treestats is not on conda, so install it inside R with devtools:
+  - r-devtools

@@ -1,0 +1,57 @@
+sample_size: 20
+num_replicates: 5
+save_trees: True
+population_size: 10000
+sequence_length: 100
+recombination_rate: 1e-8
+mutation_rate: 1e-8
+default_growth_rate: 0.01
+default_migration_rate: 0.08
+ms_path: C:/Users/Lenovo/OneDrive/Dokumente/Informatik-Studium/KIT/Masterarbeit/ms.folder/ms/msdir/ms.exe
+msms_path: C:/Users/Lenovo/OneDrive/Dokumente/Informatik-Studium/KIT/Masterarbeit/msms/bin/msms.exe
+ms_output_file: results/ms_output.txt
+msprime_output_file: results/msprime_output.txt
+msms_output_file: results/msms_output.txt
+
+populations:
+  - name: pop1
+    initial_size: 5000
+    sample_size: 5
+    growth_rate: 0.002
+  - name: pop2
+    initial_size: 10000
+    sample_size: 5
+  - name: pop3
+    initial_size: 1200
+  - name: pop4
+    initial_size: 1000
+
+migration_rates:
+  - source: pop1
+    dest: pop2
+    rate: 0.1
+  - source: pop2
+    dest: pop1
+    rate: 0.1
+
+demography_events:
+  - type: size_change
+    time: 10
+    population: pop1
+    size: 1000
+
+  - type: growth_rate_change
+    time: 50
+    population: pop2
+    rate: 0.003
+
+  - type: migration_rate_change
+    time: 100
+    source: pop1
+    dest: pop2
+    rate: 0.2
+
+  - type: population_split
+    time: 150
+    derived: [pop1, pop2, pop3]
+    ancestral: pop4
