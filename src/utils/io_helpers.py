@@ -1,15 +1,16 @@
-import os
+from pathlib import Path
 from datetime import datetime
 
-def make_run_output_dir(config_path, base_dir="data/raw"):
+def make_run_output_dir(config_path, base_dir="data/raw", timestamp=False):
     """
     Create a directory for simulation results based on config file name and current timestamp.
-    Example:
-        configs/sim_split.yaml → data/raw/sim_split/2025-09-18_22-45-12/
     """
-    config_name = os.path.splitext(os.path.basename(config_path))[0]
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    config_name = Path(config_path).stem
+    run_dir = Path(base_dir) / config_name
 
-    run_dir = os.path.join(base_dir, config_name, timestamp)
-    os.makedirs(run_dir, exist_ok=True)
+    if timestamp:
+        ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        run_dir = run_dir / ts
+
+    run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
