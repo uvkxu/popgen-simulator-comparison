@@ -39,10 +39,13 @@ def set_initial_migration_rates(demography, config, activity):
     explicit_migrations = set()
     populations = config.get("populations", [])
     
-    # Apply explicitly defined migration rates
+    # Apply explicitly defined migration rates to all active populations
     for mig in config.get("migration_rates", []):
-        demography.set_migration_rate(source=mig["source"], dest=mig["dest"], rate=mig["rate"])
-        explicit_migrations.add((mig["dest"], mig["source"]))
+        dest, source = mig["dest"], mig["source"]
+
+        if activity[dest] and activity[source]:
+            demography.set_migration_rate(source=mig["source"], dest=mig["dest"], rate=mig["rate"])
+            explicit_migrations.add((mig["dest"], mig["source"]))
 
     default_rate = config.get("default_migration_rate", 0.0)
     if default_rate != 0:
@@ -142,6 +145,16 @@ def set_ancestral_growth_rate_at_split(demography, config, time, population):
     demography.add_population_parameters_change(time=time, growth_rate=growth_rate, population=population)
 
 
+def set_ancestral_migration_rates_at_split(demography, config, activity, time, population):
+    for mig in config.get("migration_rates", []):
+        dest, source = mig["dest"], mig["source"]
+
+        if (dest == population or source == population) and activity[dest] and activity[source]:
+            demography.add_migration_rate_change(
+                        time=time, source=source, dest=dest, rate=mig["rate"]
+                    )
+
+
 def handle_population_split(demography, event, activity, config):
     """
     Handle a population split event.
@@ -154,8 +167,10 @@ def handle_population_split(demography, event, activity, config):
         time=event["time"], derived=event["derived"], ancestral=event["ancestral"]
     )
 
-    set_ancestral_growth_rate_at_split(demography, config, event["time"], event["ancestral"])
     update_activity(activity, derived=event["derived"], ancestral=event["ancestral"])
+
+    set_ancestral_growth_rate_at_split(demography, config, event["time"], event["ancestral"])
+    set_ancestral_migration_rates_at_split(demography, config, activity, event["time"], event["ancestral"])
 
 
 def handle_population_admixture(demography, event, activity):
@@ -238,7 +253,7 @@ def create_msprime_demography(config):
         handler = handlers[event_type]
         handler(event)
 
-    # print(demography.debug())
+    print(demography.debug())
 
     return demography
 
