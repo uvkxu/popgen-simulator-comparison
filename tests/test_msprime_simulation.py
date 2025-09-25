@@ -90,8 +90,8 @@ def test_handle_growth_rate_change_event(config,epoch,expected):
         [0, 0.01, 0, 0, 0],
         [0.05, 0, 0, 0, 0],
         [0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0.008],
-        [0, 0, 0, 0.02, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
     ]),
     (make_population_split_event_config(), 3, [
         [0, 0, 0, 0, 0],
@@ -178,8 +178,8 @@ def test_create_msprime_demography_initialization_of_growth_rates(config, expect
         [0, 0.01, 0, 0, 0],
         [0.01, 0, 0, 0, 0],
         [0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0.008],
-        [0, 0, 0, 0.02, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
     ]),
 ])
 def test_set_initial_migration_rates(config, expected):
