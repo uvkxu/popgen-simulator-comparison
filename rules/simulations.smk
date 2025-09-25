@@ -1,11 +1,4 @@
-import os
-from glob import glob
-
-CONFIG_DIR = "configs"
-RAW_DATA_DIR = "data/raw"
-
-# Alle Config-Dateien ohne .yaml-Endung und ohne Pfad
-all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
+include: "../snakemake_vars.py"
 
 rule run_one_simulation:
     input:
@@ -18,7 +11,6 @@ rule run_one_simulation:
         "../envs/simulations-env.yaml"
     shell:
         """
-        # Übergabe nur des Dateinamens an main.py
         python src/main.py --configs {wildcards.config}.yaml
         """
 
