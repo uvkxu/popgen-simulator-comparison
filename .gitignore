@@ -208,7 +208,7 @@ marimo/_lsp/
 __marimo__/
 
 # Ignore all simulation outputs in data/raw, but keep folder structure
-data/raw/*
+data/*
 !data/raw/.gitkeep
 
 # Ignore seedms

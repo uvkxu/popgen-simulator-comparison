@@ -9,9 +9,11 @@ populations:
     initial_size: 1570000
     growth_rate: 0.002
     sample_size: 50
+
   - name: Black_duck
     initial_size: 1370000
     sample_size: 50
+    
   - name: Ancestral
     initial_size: 819535
 
