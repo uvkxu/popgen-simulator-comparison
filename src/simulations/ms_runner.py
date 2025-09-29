@@ -1,5 +1,6 @@
 import os
 import subprocess
+import numpy as np
 
 
 # ----------------------------------
@@ -100,6 +101,8 @@ def set_initial_migration_rates(config, activity, pop_index, num_populations):
     for mig in config.get("migration_rates", []):
         dest, source = mig["dest"], mig["source"]
         if activity[dest] and activity[source]:
+            print("Handling migration:", mig)
+            print("Type of rate:", type(mig["rate"]))
             rate = mig["rate"] * factor
             migration_cmd += f" -m {pop_index[dest]} {pop_index[source]} {rate:.8g}"
 
@@ -424,7 +427,7 @@ def handle_population_admixture_event(event, config, activity, pop_index, num_po
     # Sanity checks
     if len(ancestral) != len(proportions):
         raise ValueError("Number of proportions must match the number of ancestral populations")
-    if not sum(proportions) == 1:
+    if not np.isclose(sum(proportions), 1):
         raise ValueError("Proportions should sum to 1")
     if not activity[derived]:
         raise ValueError("Derived population must be active")
@@ -525,6 +528,8 @@ def set_ancestral_migration_rates_at_split(config, activity, pop_index, time, po
         dest, source = mig["dest"], mig["source"]
 
         if (dest == population or source == population) and activity[dest] and activity[source]:
+            print("Handling migration:", mig)
+            print("Type of rate:", type(mig["rate"]))
             rate = mig["rate"] * factor
             migration_cmd += f" -em {time} {pop_index[dest]} {pop_index[source]} {rate:.8g}"
 

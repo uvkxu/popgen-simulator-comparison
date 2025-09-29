@@ -66,18 +66,18 @@ migration_rates:
 
   - source: AFR
     dest: OOA
-    rate: 15e-5
+    rate: 1.5e-4
 
   - source: OOA
     dest: AFR
-    rate: 15e-5
+    rate: 1.5e-4
 
 demography_events:
   - type: population_admixture
     time: 12
     derived: ADMIX
     ancestral: [AFR, EUR, EAS]
-    proportions: [1/6, 2/6, 3/6]
+    proportions: [0.166666667, 0.333333333333, 0.5]
   
   - type: population_split
     time: 920

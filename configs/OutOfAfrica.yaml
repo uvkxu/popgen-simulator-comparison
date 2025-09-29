@@ -52,19 +52,19 @@ migration_rates:
 
   - source: CEU
     dest: YRI
-    rate: 3e-5
+    rate: 0.3e-4
 
   - source: YRI
     dest: CEU
-    rate: 3e-5
+    rate: 0.3e-4
 
   - source: YRI
     dest: OOA
-    rate: 25e-5
+    rate: 2.5e-4
 
   - source: OOA
     dest: YRI
-    rate: 25e-5
+    rate: 2.5e-4
 
 
 demography_events:
