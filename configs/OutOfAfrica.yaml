@@ -1,0 +1,84 @@
+num_replicates: 50
+population_size: 10000000
+sequence_length: 1000
+mutation_rate: 2.35e-8
+
+populations:
+  - name: YRI
+    description: Yoruba
+    initial_size: 12300
+    sample_size: 50
+    
+  - name: CEU
+    growth_rate: 0.004
+    description: Utah Residents (CEPH) with Northern and Western European Ancestry
+    initial_size: 29725.3
+    sample_size: 50
+
+  - name: CHB
+    growth_rate: 0.0055
+    description: Han Chinese in Beijing, China
+    initial_size: 54090.3
+    sample_size: 50
+
+  - name: OOA
+    initial_size: 2100
+    description: Bottleneck out-of-Africa population
+
+  - name: AMH
+    description: Anatomically modern humans
+    initial_size: 12300
+
+  - name: ANC 
+    description: Ancestral equilibrium population
+    initial_size: 7300
+
+migration_rates:
+  - source: CEU
+    dest: CHB
+    rate: 9.6e-5
+
+  - source: CHB
+    dest: CEU
+    rate: 9.6e-5
+
+  - source: YRI
+    dest: CHB
+    rate: 1.9e-5
+
+  - source: CHB
+    dest: YRI
+    rate: 1.9e-5
+
+  - source: CEU
+    dest: YRI
+    rate: 3e-5
+
+  - source: YRI
+    dest: CEU
+    rate: 3e-5
+
+  - source: YRI
+    dest: OOA
+    rate: 25e-5
+
+  - source: OOA
+    dest: YRI
+    rate: 25e-5
+
+
+demography_events:
+  - type: population_split
+    time: 848
+    derived: [CEU, CHB]
+    ancestral: OOA
+
+  - type: population_split
+    time: 5600
+    derived: [YRI, OOA]
+    ancestral: AMH
+
+  - type: population_split
+    time: 8800
+    derived: [AMH]
+    ancestral: ANC

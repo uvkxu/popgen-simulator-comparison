@@ -7,29 +7,39 @@ populations:
   - name: Basenji
     initial_size: 2639
     sample_size: 50
+
   - name: Dingo
     initial_size: 1914
     sample_size: 50
+
   - name: Chinese_wolf
     initial_size: 5426
     sample_size: 50
+
   - name: Israeli_wolf
     initial_size: 26092
     sample_size: 50
+
   - name: Croatian_wolf
     initial_size: 11427
     sample_size: 50
+
   - name: Golden_jackal
     initial_size: 19446
     sample_size: 50
+
   - name: Ancestral_Boxer_Basenji_Dingo
     initial_size: 1999
+
   - name: Ancestral_Israeli_Croatian_wolf
     initial_size: 1393
+
   - name: Ancestral_Israeli_Croatian_Chinese_wolf
     initial_size: 12627
+
   - name: Ancestral_dog_wolf
     initial_size: 44993
+
   - name: Ancestral_dog_wolf_Golden_jackal_root
     initial_size: 18169
 
@@ -37,21 +47,27 @@ migration_rates:
   - source: Israeli_wolf
     dest: Basenji
     rate: 0.18
+
   - source: Basenji
     dest: Israeli_wolf
     rate: 0.07
+
   - source: Chinese_wolf
     dest: Dingo
     rate: 0.03
+
   - source: Dingo
     dest: Chinese_wolf
     rate: 0.04
+
   - source: Israeli_wolf
     dest: Golden_jackal
     rate: 0.05
+
   - source: Golden_jackal
     dest: Ancestral_dog_wolf
     rate: 0.02
+
   - source: Ancestral_dog_wolf
     dest: Golden_jackal
     rate: 0.99
@@ -61,18 +77,22 @@ demography_events:
     time: 12795
     derived: [Basenji, Dingo]
     ancestral: Ancestral_Boxer_Basenji_Dingo
+
   - type: population_split
     time: 13389
     derived: [Israeli_wolf, Croatian_wolf]
     ancestral: Ancestral_Israeli_Croatian_wolf
+
   - type: population_split
     time: 13455
     derived: [Ancestral_Israeli_Croatian_wolf, Chinese_wolf]
     ancestral: Ancestral_Israeli_Croatian_Chinese_wolf
+
   - type: population_split
     time: 14874
     derived: [Ancestral_Israeli_Croatian_Chinese_wolf, Ancestral_Boxer_Basenji_Dingo]
     ancestral: Ancestral_dog_wolf
+    
   - type: population_split
     time: 398262
     derived: [Ancestral_dog_wolf, Golden_jackal]
