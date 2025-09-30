@@ -1,6 +1,7 @@
 import os
 import subprocess
 import numpy as np
+import re
 
 
 # ----------------------------------
@@ -17,11 +18,10 @@ def set_recombination(config):
     #   N_e = effective population size
     #   L = sequence length, number of sites
 
-    population_size = config["population_size"]
     seq_length = config["sequence_length"]
 
     # Compute population-scaled recombination rate (ρ)
-    rho = 4 * population_size * float(config.get("recombination_rate", 0)) * seq_length
+    rho = get_rate_multiplier(config) * float(config.get("recombination_rate", 0)) * (seq_length - 1)
 
     # Only add recombination if rho > 0 or if gene conversion is specified
     if rho > 0 or has_gene_conversion(config):
@@ -48,7 +48,6 @@ def set_gene_conversion(config):
     #   f = 4 * N_e * g   if recombination is not defined
     #   λ = mean gene conversion tract length
 
-    population_size = config["population_size"]
     recomb_rate = float(config.get("recombination_rate", 0))
 
     if has_gene_conversion(config):
@@ -58,7 +57,7 @@ def set_gene_conversion(config):
         # Compute f depending on whether recombination is defined:
         # - If r > 0: f = g / r
         # - If r = 0: f = 4 * N_e * g
-        f = gen_rate / recomb_rate if recomb_rate else 4 * population_size * gen_rate
+        f = gen_rate / recomb_rate if recomb_rate else get_rate_multiplier(config) * gen_rate
         return f" -c {f:.8g} {gen_tract_length}"
     return ""
 
@@ -89,21 +88,18 @@ def set_initial_migration_rates(config, activity, pop_index, num_populations):
     #    - Here, the rate is set directly: M_ij = 4 * N_e * m_ij
     #    - No additional scaling by (num_populations - 1) is needed.
 
-    factor = 1 / (4 * config["population_size"])
     migration_cmd = ""
 
     # Add global default migration rate (if specified).
     if "default_migration_rate" in config:
-        rate = config["default_migration_rate"] * factor * (num_populations - 1)
+        rate = config["default_migration_rate"] * get_rate_scaler(config) * (num_populations - 1)
         migration_cmd += f" {rate:.8g}"
 
     # Add individual migration rates (only between active populations).
     for mig in config.get("migration_rates", []):
         dest, source = mig["dest"], mig["source"]
         if activity[dest] and activity[source]:
-            print("Handling migration:", mig)
-            print("Type of rate:", type(mig["rate"]))
-            rate = mig["rate"] * factor
+            rate = mig["rate"] * get_rate_scaler(config)
             migration_cmd += f" -m {pop_index[dest]} {pop_index[source]} {rate:.8g}"
 
     return migration_cmd
@@ -133,8 +129,7 @@ def set_initial_growth_rates(config, activity, pop_index):
     # where
     #   α = growth rate scaled by 1 / (4*N_e)
 
-    factor = 1 / (4 * config["population_size"])
-    default_growth_rate = config.get("default_growth_rate", 0.0) * factor
+    default_growth_rate = config.get("default_growth_rate", 0.0) * get_rate_scaler(config)
     growth_rate_cmd = ""
     growth_rate_map = {}
 
@@ -151,7 +146,7 @@ def set_initial_growth_rates(config, activity, pop_index):
     for pop in active_populations:
         pop_name = pop["name"]
         if "growth_rate" in pop:
-            rate = pop["growth_rate"] * factor
+            rate = pop["growth_rate"] * get_rate_scaler(config)
             growth_rate_map[pop_name] = rate
             growth_rate_cmd += f" -g {pop_index[pop_name]} {rate:.8g}"
         elif default_growth_rate != 0:
@@ -174,14 +169,20 @@ def set_initial_population_sizes(config, activity, pop_index):
     #   x = relative size (N_i / N_e)
     #   and N_e = effective population_size
 
-    population_size = config["population_size"]
+    population_size = config.get("population_size", -1)
     subpop_sizes = ""
 
-    active_populations = [p for p in config["populations"] if activity[p["name"]]]
-    for pop in active_populations:
+    for pop in config["populations"]:
+        if population_size == -1 and pop.get("initial_size", -1) == -1:
+            raise ValueError(
+                f"Population '{pop['name']}' is missing a size specification: "
+                "please define either a global effective population size or an "
+                "initial size for this population."
+            )
+
         pop_name = pop["name"]
-        if "initial_size" in pop and pop["initial_size"] != population_size:
-            subpop_sizes += f" -n {pop_index[pop_name]} {int(pop['initial_size']) / population_size}"
+        if activity[pop_name] and "initial_size" in pop and pop["initial_size"] != population_size:
+            subpop_sizes += f" -n {pop_index[pop_name]} {int(pop['initial_size']) * get_size_scaler(config)}"
     
     return subpop_sizes
 
@@ -269,14 +270,11 @@ def handle_size_change_event(event, config, activity, pop_index, growth_rate_map
     # Note: Growth rates must be restored after changing population sizes,
     # since ms resets growth rates to zero whenever a size change occurs.
     size_change_cmd = ""
-
-    population_size = config["population_size"]
-    factor = 1/ (4 * population_size)
-    t = event["time"] * factor
+    t = event["time"] * get_rate_scaler(config)
 
     if event.get("population") in (None, "all"):
         # Global size change
-        size_change_cmd += f" -eN {t:.8g} {event['size']/population_size}"
+        size_change_cmd += f" -eN {t:.8g} {event['size'] * get_size_scaler(config)}"
         # Restore growth rates after size change
         size_change_cmd += restore_growth_rates(config, activity, pop_index, growth_rate_map, t)
     else:
@@ -284,7 +282,7 @@ def handle_size_change_event(event, config, activity, pop_index, growth_rate_map
         pop = event["population"]
         if not activity[pop]:
             raise ValueError("Can't change size of inactive population")
-        size_change_cmd += f" -en {t:.8g} {pop_index[pop]} {event['size']/population_size}"
+        size_change_cmd += f" -en {t:.8g} {pop_index[pop]} {event['size'] * get_size_scaler(config)}"
         # Restore growth rate after size change
         size_change_cmd += restore_growth_rates(config, activity, pop_index, growth_rate_map, t, pop)
 
@@ -298,9 +296,8 @@ def handle_migration_rate_change_event(event, config, activity, pop_index):
     # Migration rates are scaled: M_ij = 4 * N_e * m_ij
     migration_change_cmd = ""
 
-    factor = 1/ (4 * config["population_size"])
-    t = event["time"] * factor
-    rate = event["rate"] * factor
+    t = event["time"] * get_rate_scaler(config)
+    rate = event["rate"] * get_rate_scaler(config)
 
     # Case: global migration rate change (all active population pairs)
     if "dest" not in event or "source" not in event:
@@ -333,9 +330,8 @@ def handle_growth_rate_change_event(event, config, activity, pop_index, growth_r
     # ms syntax:
     #   -eg t i r     # set growth rate of population i to r at time t
     #   -eG t r       # set growth rate globally (for single-population models)
-    factor = 1/ (4 * config["population_size"])
-    t = event["time"] * factor
-    rate = event["rate"] * factor
+    t = event["time"] * get_rate_scaler(config)
+    rate = event["rate"] * get_rate_scaler(config)
 
     # Apply growth rate globally if no population is specified
     if event.get("population") in (None, "all"):
@@ -366,8 +362,8 @@ def handle_growth_rate_change_event(event, config, activity, pop_index, growth_r
 
 def handle_population_split_event(event, config, activity, pop_index):
     population_split_cmd = ""
-    factor = 1/ (4 * config["population_size"])
-    t = event["time"] * factor
+
+    t = event["time"] * get_rate_scaler(config)
 
     derived = event["derived"]
     ancestral = event["ancestral"]
@@ -395,10 +391,6 @@ def handle_population_split_event(event, config, activity, pop_index):
     # Reassign the ancestral population to take over the index of the first derived
     pop_index[ancestral] = pop_index[derived[0]]
 
-    # Set the population size of the ancestral population
-    # TODO: Ask Stefanos if size adjustment should happen before or after the split
-    population_split_cmd += set_ancestral_size_at_split(config, pop_index, t, ancestral)
-
     # Join all remaining derived populations into the ancestral one
     for i in range(1, len(derived)):
         population_split_cmd += f" -ej {t:.8g} {pop_index[derived[i]]} {pop_index[ancestral]}"
@@ -407,7 +399,8 @@ def handle_population_split_event(event, config, activity, pop_index):
     for d in derived:
         pop_index.pop(d)
 
-    # Set growth rate and migration rates for the ancestral population
+    # Set population size, growth rate and migration rates for the ancestral population
+    population_split_cmd += set_ancestral_size_at_split(config, pop_index, t, ancestral)
     population_split_cmd += set_ancestral_growth_rate_at_split(config, pop_index, t, ancestral)
     population_split_cmd += set_ancestral_migration_rates_at_split(config, activity, pop_index, t, ancestral)
 
@@ -417,8 +410,7 @@ def handle_population_split_event(event, config, activity, pop_index):
 def handle_population_admixture_event(event, config, activity, pop_index, num_populations):
     population_admixture_cmd = ""
 
-    factor = 1/ (4 * config["population_size"])
-    t = event["time"] * factor
+    t = event["time"] * get_rate_scaler(config)
 
     derived = event["derived"]
     ancestral = event["ancestral"]
@@ -461,8 +453,7 @@ def handle_population_admixture_event(event, config, activity, pop_index, num_po
 
 
 def handle_populatin_pulse_migration(event, config, activity, pop_index, num_populations):
-    factor = 1 / (4 * config["population_size"])
-    t = event["time"] * factor
+    t = event["time"] * get_rate_scaler(config)
 
     dest = event["dest"]
     source = event["source"]
@@ -496,12 +487,12 @@ def handle_populatin_pulse_migration(event, config, activity, pop_index, num_pop
 
 def set_ancestral_size_at_split(config, pop_index, time, population):    
     # Set the ancestral population size at the moment of split
-    population_size = config["population_size"]
+    population_size = config.get("population_size", -1)
     populations = config.get("populations", [])
 
     initial_size = [pop.get("initial_size", population_size) for pop in populations if pop["name"] == population][0]
 
-    return f" -en {time:.8g} {pop_index[population]} {initial_size/ population_size}"
+    return f" -en {time:.8g} {pop_index[population]} {initial_size * get_size_scaler(config)}"
 
 
 def set_ancestral_growth_rate_at_split(config, pop_index, time, population):
@@ -511,15 +502,13 @@ def set_ancestral_growth_rate_at_split(config, pop_index, time, population):
 
     growth_rate = [pop.get("growth_rate", default_growth_rate) for pop in populations if pop["name"] == population][0]
 
-    factor = 1 / (4 * config["population_size"])
-    adjusted_growth_rate = growth_rate * factor
+    adjusted_growth_rate = growth_rate * get_rate_scaler(config)
 
     return f" -eg {time:.8g} {pop_index[population]} {adjusted_growth_rate:.8g}"
 
 
 def set_ancestral_migration_rates_at_split(config, activity, pop_index, time, population):
     # Configure migration rates for the ancestral population at split
-    factor = 1 / (4 * config["population_size"])  # scaling factor
     migration_cmd = ""
     handled_migrations = set()
 
@@ -528,14 +517,11 @@ def set_ancestral_migration_rates_at_split(config, activity, pop_index, time, po
         dest, source = mig["dest"], mig["source"]
 
         if (dest == population or source == population) and activity[dest] and activity[source]:
-            print("Handling migration:", mig)
-            print("Type of rate:", type(mig["rate"]))
-            rate = mig["rate"] * factor
+            rate = mig["rate"] * get_rate_scaler(config)
             migration_cmd += f" -em {time} {pop_index[dest]} {pop_index[source]} {rate:.8g}"
 
             handled_migrations.add((dest, source))
     
-    # TODO: Ask Stefanos if it makes more sense to set them to the default migration rate
     # Set all other migrations involving the ancestral population to zero
     for pop in (p["name"] for p in config["populations"]):
         if activity[pop] and pop != population:
@@ -584,11 +570,33 @@ def restore_growth_rates(config, activity, pop_index, growth_rate_map, time, pop
 
     return ""
 
+def get_effective_population_size(config):
+    # Determine effective population size from either global or first population size
+    effective_population_size = config.get("population_size", -1)
+    if effective_population_size == -1:
+        effective_population_size = config.get("populations", [{}])[0].get("initial_size", -1)
+
+    if effective_population_size == -1:
+        raise ValueError(
+            "No valid effective population size found. "
+            "Please specify either a global 'population_size' in the config "
+            "or an 'initial_size' for the first population."
+        )
+    
+    return effective_population_size
+
+def get_rate_scaler(config):
+    return 1/ get_rate_multiplier(config)
+
+def get_rate_multiplier(config):
+    return 4 * get_effective_population_size(config)
+
+def get_size_scaler(config):
+    return 1/ get_effective_population_size(config)
 
 def build_ms_command(config):
     total_sample_size = sum(p.get("sample_size", 0) for p in config.get("populations", [])) \
                         if "populations" in config else int(config["sample_size"])
-    population_size = int(config["population_size"])
     num_replicates = int(config.get("num_replicates", 1))
     mut_rate = float(config["mutation_rate"])
     seq_length = int(config["sequence_length"])
@@ -597,12 +605,16 @@ def build_ms_command(config):
     activity = pop_index = {}
 
     # Mutation
-    theta = 4 * population_size * mut_rate * seq_length
+    theta = get_rate_multiplier(config) * mut_rate * seq_length
     cmd = f"ms {total_sample_size} {num_replicates} -t {theta:.8g}"
 
     # Tree output
     if config.get("save_trees", True):
         cmd += " -T"
+
+    # Set decimal places for site positions based on sequence length
+    n_digits = int(np.ceil(np.log10(seq_length)))
+    cmd += f" -p {n_digits}"
 
     # Recombination
     cmd += set_recombination(config)
@@ -648,6 +660,105 @@ def build_ms_command(config):
     return cmd
 
 
+def clean_output(ms_output, sequence_length=None, decimals=None, factor=1.0):
+    """
+    Clean and normalize ms output.
+
+    Args:
+        ms_output (str): Path to the raw ms output file.
+        sequence_length (int, optional): If set, floating-point positions are scaled 
+            to integer positions (0..sequence_length). 
+        decimals (int, optional): If set, positions are rounded to this many decimal places.
+        factor (float): Branch length scaling factor.
+
+    Returns:
+        list[str]: Cleaned ms output lines.
+    """
+    lines = ms_output.splitlines()
+
+    new_lines = []
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+
+        # Handle segsites + positions + haplotypes
+        if line.startswith("segsites:"):
+            segsites = int(line.split()[1])
+
+            if segsites == 0:
+                new_lines.append(line)
+                i += 1
+                continue
+
+            # --- positions line ---
+            pos_line = lines[i + 1].strip()
+            assert pos_line.startswith("positions:")
+            positions = list(map(float, pos_line.split()[1:]))
+
+            # --- haplotype matrix ---
+            haplotypes = []
+            j = i + 2
+            while j < len(lines):
+                hapline = lines[j].strip()
+                if not hapline or not set(hapline).issubset({"0", "1"}):
+                    break
+                haplotypes.append(list(map(int, hapline)))
+                j += 1
+            haplotypes = list(map(list, haplotypes))  # make mutable
+
+            # print(f"Len of haploytypes: {len(haplotypes)}")
+
+            # --- normalize positions ---
+            norm_positions = []
+            for p in positions:
+                if sequence_length is not None:
+                    # scale to discrete int
+                    p = int(round(p * sequence_length))
+                if decimals is not None and sequence_length is None:
+                    p = round(p, decimals)
+                norm_positions.append(p)
+
+            # --- merge duplicates---
+            merged_positions = [norm_positions[0]]
+            merged_haplotypes = [[h[0]] for h in haplotypes]  # start with first column
+
+            for idx in range(1, len(norm_positions)):
+                p = norm_positions[idx]
+                if p == merged_positions[-1]:
+                    # same as previous -> OR the bits into last column
+                    for k in range(len(haplotypes)):
+                        merged_haplotypes[k][-1] |= haplotypes[k][idx]
+                else:
+                    # new unique position -> add new column
+                    merged_positions.append(p)
+                    for k in range(len(haplotypes)):
+                        merged_haplotypes[k].append(haplotypes[k][idx])
+
+            # write new segsites + positions + haplotypes
+            new_lines.append(f"segsites: {len(merged_positions)}")
+            pos_str = " ".join(map(str, merged_positions))
+            new_lines.append("positions: " + pos_str)
+            for row in merged_haplotypes:
+                new_lines.append("".join(map(str, row)))
+
+            i = j
+            continue
+
+        # Handle tree lines with branch lengths
+        elif "(" in line and ":" in line:
+            def scale_branch(m):
+                return f":{float(m.group(1)) * factor:.6g}"
+            scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, line)
+            new_lines.append(scaled_line)
+
+        else:
+            new_lines.append(line)
+
+        i += 1
+
+    return "\n".join(new_lines) + "\n"
+    
+
 def run_ms_simulation(config, output_file=None):
     default_ms_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../bin/ms.exe"))
     ms_path = config.get("ms_path", default_ms_path)
@@ -670,6 +781,11 @@ def run_ms_simulation(config, output_file=None):
         raise RuntimeError(f"ms failed:\n{result.stderr}")
 
     with open(output_file, "w") as f:
-        f.write(result.stdout)
+        cleaned_result = clean_output(
+            ms_output = result.stdout, 
+            sequence_length = config.get("sequence_length", None),
+            factor = get_rate_multiplier(config)
+            )
+        f.write(cleaned_result)
 
     return output_file

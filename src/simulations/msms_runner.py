@@ -1,6 +1,20 @@
 import os
 import subprocess
-from simulations.ms_runner import build_ms_command
+from simulations.ms_runner import build_ms_command, clean_output, get_rate_multiplier
+
+
+def build_msms_command(config):
+    ms_cmd = build_ms_command(config)
+    parts = ms_cmd.removeprefix("ms").split()
+
+    if "-p" in parts:
+        index = parts.index("-p")
+        # remove "-p" and the following argument
+        parts.pop(index)
+        parts.pop(index)  # same index because the list has shifted
+
+    msms_cmd = "msms " + " ".join(parts)
+    return msms_cmd
 
 def run_msms_simulation(config, output_file=None):
     default_msms_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../bin/msms.exe"))
@@ -11,7 +25,7 @@ def run_msms_simulation(config, output_file=None):
     if "gene_conversion_rate" in config or "gene_conversion_tract_length" in config:
         raise ValueError("msms cannot be run with gene conversion")
 
-    command = "msms" + build_ms_command(config).removeprefix("ms")
+    command = build_msms_command(config)
 
     if output_file is None:
         output_file = config.get("ms_output_file", "results/msms/output.txt")
@@ -27,5 +41,10 @@ def run_msms_simulation(config, output_file=None):
         raise RuntimeError(f"ms failed:\n{result.stderr}")
 
     with open(output_file, "w") as f:
-        f.write(result.stdout)
+        cleaned_result = clean_output(
+            ms_output = result.stdout, 
+            sequence_length = config.get("sequence_length", None),
+            factor = get_rate_multiplier(config)
+            )
+        f.write(cleaned_result)
         f.write(result.stderr)
