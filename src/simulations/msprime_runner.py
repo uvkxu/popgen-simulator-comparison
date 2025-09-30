@@ -1,6 +1,6 @@
 import os
 import msprime
-from simulations.ms_runner import get_initial_population_activity
+from simulations.ms_runner import get_initial_population_activity, get_effective_population_size
 
 
 def update_activity(activity, derived=None, ancestral=None):
@@ -213,7 +213,7 @@ def create_msprime_demography(config):
     """
     demography = msprime.Demography()
     populations = config.get("populations", [])
-    population_size = config["population_size"]
+    population_size = get_effective_population_size(config)
     default_growth_rate = config.get("default_growth_rate", 0.0)
     default_migration_rate = config.get("default_migration_rate", 0.0)
 
@@ -253,7 +253,7 @@ def create_msprime_demography(config):
         handler = handlers[event_type]
         handler(event)
 
-    print(demography.debug())
+    # print(demography.debug())
 
     return demography
 
@@ -294,7 +294,7 @@ def run_msprime_simulation(config, output_file=None):
         "demography": demography,
         "num_replicates": config["num_replicates"],
         "ploidy": 1,
-        "discrete_genome": False
+        "discrete_genome": True
     }
 
     # Include optional recombination and gene conversion parameters
@@ -312,7 +312,7 @@ def run_msprime_simulation(config, output_file=None):
     with open(output_file, "w") as f:
         for rep_index, ts in enumerate(replicates, start=1):
             mts = msprime.sim_mutations(ts, rate=config["mutation_rate"], model=msprime.BinaryMutationModel(), 
-                discrete_genome=False)
+                discrete_genome=True)
 
             f.write(f"// Replicate {rep_index}\n")
 

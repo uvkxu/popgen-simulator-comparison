@@ -4,6 +4,8 @@ import numpy as np
 from simulations.ms_runner import *
 from test_configs import *
 
+# TODO: Add test for -p flag
+
 def extract_by_flag(cmd, flag, expected_length=0):
     """
     Extract numbers following a given flag from a command string.
@@ -185,8 +187,8 @@ def test_mutation_flag(config, expected_theta):
 
 
 @pytest.mark.parametrize("config,expected_rho,expected_nsites", [
-    (make_config_two_pops_with_migration(), 40, 1000),
-    (make_config_single_pop(), 0.04, 500),
+    (make_config_two_pops_with_migration(), 39.96, 1000),
+    (make_config_single_pop(), 0.03992, 500),
     (make_config_with_gene_conversion(), 0, 100),
     (make_population_split_event_config(), [], [])
 ])

@@ -1,5 +1,5 @@
 num_replicates: 5
-population_size: 10000
+population_size: 1000
 sequence_length: 1000
 mutation_rate: 4.83e-9
 default_migration_rate: 1.72e-6
