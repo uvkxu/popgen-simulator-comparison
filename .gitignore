@@ -211,7 +211,7 @@ __marimo__/
 data/*
 !data/raw/.gitkeep
 
-results/boxplots/*
+results/*
 
 # Ignore seedms
 /seedms
@@ -219,3 +219,6 @@ seedms
 **/seedms
 
 .snakemake/
+.vscode
+
+

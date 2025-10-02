@@ -2,6 +2,7 @@ include: "snakemake_vars.py"
 include: "rules/simulations.smk"
 include: "rules/preprocessing.smk"
 include: "rules/boxplots.smk"
+include: "rules/sanitycheck.smk"
 
 rule all:
     input:

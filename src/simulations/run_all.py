@@ -5,15 +5,12 @@ import os
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
-UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.append(UTILS_ROOT)
 
 from snakemake_vars import CONFIG_DIR, RAW_DATA_DIR, SIMULATORS, FILE_FORMATS
 from pathlib import Path
 from ms_runner import run_ms_simulation
 from msms_runner import run_msms_simulation
 from msprime_runner import run_msprime_simulation, run_mspms_simulation
-from utils.io_helpers import make_run_output_dir
 
 SIM_FUNCTIONS = {
     "ms": run_ms_simulation,
@@ -21,12 +18,9 @@ SIM_FUNCTIONS = {
     "msms": run_msms_simulation
 }
 
-def run_all_simulations(config_path, config, output_dir=None, simulators=SIMULATORS, reps=1):
-    if output_dir is None:
-        base_run_dir = make_run_output_dir(config_path)
-    else:
-        base_run_dir = Path(output_dir)
-        base_run_dir.mkdir(parents=True, exist_ok=True)
+def run_all_simulations(config_path, config, output_dir, simulators=SIMULATORS, reps=1):
+    base_run_dir = Path(output_dir)
+    base_run_dir.mkdir(parents=True, exist_ok=True)
 
     for i in range(reps):
         if reps == 1:

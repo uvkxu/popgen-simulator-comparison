@@ -1,16 +1,90 @@
 from pathlib import Path
-from datetime import datetime
+import pandas as pd
 
-def make_run_output_dir(config_path, base_dir="data/raw", timestamp=False):
+def collect_csv_files(input_dir, csv_types=None):
     """
-    Create a directory for simulation results based on config file name and current timestamp.
+    Recursively collect CSV files from input_dir.
+    
+    Returns a flat list of Path objects.
     """
-    config_name = Path(config_path).stem
-    run_dir = Path(base_dir) / config_name
+    input_dir = Path(input_dir)
+    if not input_dir.exists():
+        raise FileNotFoundError(f"Input directory {input_dir} does not exist.")
 
-    if timestamp:
-        ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        run_dir = run_dir / ts
+    if csv_types is None:
+        # collect all CSVs recursively
+        csv_files = list(input_dir.rglob("*.csv"))
+    else:
+        # collect only specified CSV types
+        csv_files = []
+        for csv_name in csv_types:
+            csv_files.extend(input_dir.rglob(csv_name))
 
-    run_dir.mkdir(parents=True, exist_ok=True)
-    return run_dir
+    if not csv_files:
+        return None
+
+    return csv_files
+
+def assign_simulator_labels(csv_files):
+    """
+    Load CSVs and add a 'simulator' column based on filename.
+    Expects a list of Path objects.
+    """
+    if csv_files is None:
+        return []
+
+    all_dfs = []
+
+    for file in csv_files:
+        df = pd.read_csv(file)
+        fname = file.name.lower()
+
+        if "msprime" in fname:
+            df['simulator'] = 'msprime'
+        elif "msms" in fname:
+            df['simulator'] = 'msms'
+        elif "ms" in fname:
+            df['simulator'] = 'ms'
+        else:
+            continue  # skip unexpected files
+
+        all_dfs.append(df)
+
+    return all_dfs
+
+def assign_rep_labels(csv_files, num_reps=2):
+    """
+    Add a 'rep' column to CSV files based on the parent 'repX' folder.
+    Only include files where rep number <= num_reps.
+    
+    Parameters:
+        csv_files (list of Path): list of CSV file paths
+        num_reps (int): maximum number of repetitions to include
+    
+    Returns:
+        list of pd.DataFrame: each DataFrame has an additional 'rep' column
+    """
+    if not csv_files:
+        return []
+
+    all_dfs = []
+
+    for file in csv_files:
+        # Parent folder (assume structure .../repX/filename.csv)
+        parent_folder = file.parent.name.lower()
+
+        if parent_folder.startswith("rep"):
+            try:
+                rep_num = int(parent_folder.replace("rep", ""))
+            except ValueError:
+                continue  # skip if rep folder doesn't have a number
+            if rep_num > num_reps:
+                continue  # skip if rep > allowed
+        else:
+            continue  # skip files not in a rep folder
+
+        df = pd.read_csv(file)
+        df['rep'] = rep_num
+        all_dfs.append(df)
+    
+    return all_dfs
