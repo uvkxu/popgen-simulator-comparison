@@ -1,6 +1,6 @@
 import os
 import subprocess
-from simulations.ms_runner import build_ms_command, clean_output, get_rate_multiplier
+from ms_runner import build_ms_command, clean_output, get_rate_multiplier
 
 
 def build_msms_command(config):
@@ -28,7 +28,7 @@ def run_msms_simulation(config, output_file=None):
     command = build_msms_command(config)
 
     if output_file is None:
-        output_file = config.get("ms_output_file", "results/msms/output.txt")
+        output_file = config.get("msms_output_file", "results/msms/output.txt")
 
     print(f"🚀 Running msms: {command}")
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -38,7 +38,7 @@ def run_msms_simulation(config, output_file=None):
 
     result = subprocess.run(cmd_parts, capture_output=True, text=True)
     if result.returncode != 0:
-        raise RuntimeError(f"ms failed:\n{result.stderr}")
+        raise RuntimeError(f"msms failed:\n{result.stderr}")
 
     with open(output_file, "w") as f:
         cleaned_result = clean_output(

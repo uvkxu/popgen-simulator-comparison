@@ -211,6 +211,8 @@ __marimo__/
 data/*
 !data/raw/.gitkeep
 
+results/boxplots/*
+
 # Ignore seedms
 /seedms
 seedms

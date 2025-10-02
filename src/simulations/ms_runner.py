@@ -518,7 +518,7 @@ def set_ancestral_migration_rates_at_split(config, activity, pop_index, time, po
 
         if (dest == population or source == population) and activity[dest] and activity[source]:
             rate = mig["rate"] * get_rate_scaler(config)
-            migration_cmd += f" -em {time} {pop_index[dest]} {pop_index[source]} {rate:.8g}"
+            migration_cmd += f" -em {time:.8g} {pop_index[dest]} {pop_index[source]} {rate:.8g}"
 
             handled_migrations.add((dest, source))
     
@@ -526,9 +526,9 @@ def set_ancestral_migration_rates_at_split(config, activity, pop_index, time, po
     for pop in (p["name"] for p in config["populations"]):
         if activity[pop] and pop != population:
             if (pop, population) not in handled_migrations:
-                migration_cmd += f" -em {time} {pop_index[pop]} {pop_index[population]} {0}"
+                migration_cmd += f" -em {time:.8g} {pop_index[pop]} {pop_index[population]} {0}"
             if (population, pop) not in handled_migrations:
-                migration_cmd += f" -em {time} {pop_index[population]} {pop_index[pop]} {0}"
+                migration_cmd += f" -em {time:.8g} {pop_index[population]} {pop_index[pop]} {0}"
     
     return migration_cmd
 
@@ -542,7 +542,7 @@ def disable_migration_to_derived(config, activity, pop_index, time, populations)
     for dest in populations:
         for source in (p["name"] for p in config["populations"] if activity[p["name"]]):
             if source != dest:
-                migration_cmd += f" -em {time} {pop_index[dest]} {pop_index[source]} {0}"
+                migration_cmd += f" -em {time:.8g} {pop_index[dest]} {pop_index[source]} {0}"
     
     return migration_cmd
 
