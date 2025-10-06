@@ -11,3 +11,5 @@ dependencies:
   - r-gmp
   - r-matrix
   - r-rspectra
+  - r-e1071
+  - r-igraph

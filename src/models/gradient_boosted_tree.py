@@ -39,7 +39,7 @@ def main():
     # ----------------------------
     # 1. Read CSV files and label them by simulator
     # ----------------------------
-    CSV_TYPES = [FILE_FORMATS["treestats"].format(SIM=sim) for sim in selected_simulators]
+    CSV_TYPES = [FILE_FORMATS["stats"].format(SIM=sim) for sim in selected_simulators]
 
     csv_files_dict = collect_csv_files(input_folder, CSV_TYPES)
     all_dfs = assign_simulator_labels(csv_files_dict)
