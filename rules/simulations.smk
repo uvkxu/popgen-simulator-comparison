@@ -9,6 +9,6 @@ rule run_one_config_all_simulations:
         "../envs/simulations-env.yaml"
     shell:
         """
-        python src/simulations/run_all.py --configs {wildcards.config}.yaml --reps {REPS}
+        python src/simulations/run_all.py --configs {wildcards.config}.yaml --reps {REPS} --rec_reps {REC_REPS}
         """
 

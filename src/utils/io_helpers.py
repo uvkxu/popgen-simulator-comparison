@@ -25,7 +25,7 @@ def collect_csv_files(input_dir, csv_types=None):
 
     return csv_files
 
-def assign_simulator_labels(csv_files):
+def assign_simulator_labels(csv_files, selected_simulators):
     """
     Load CSVs and add a 'simulator' column based on filename.
     Expects a list of Path objects.
@@ -39,14 +39,9 @@ def assign_simulator_labels(csv_files):
         df = pd.read_csv(file)
         fname = file.name.lower()
 
-        if "msprime" in fname:
-            df['simulator'] = 'msprime'
-        elif "msms" in fname:
-            df['simulator'] = 'msms'
-        elif "ms" in fname:
-            df['simulator'] = 'ms'
-        else:
-            continue  # skip unexpected files
+        for sim in selected_simulators:
+            if sim in fname:
+                df['simulator'] = sim
 
         all_dfs.append(df)
 

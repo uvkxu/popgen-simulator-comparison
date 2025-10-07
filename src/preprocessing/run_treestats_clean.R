@@ -23,18 +23,6 @@ if (dir.exists(input_path)) {
   txt_files <- input_path
 }
 
-# --- Additional feature functions ---
-compute_laplacian_extra <- function(tr) {
-  lap <- stats_laplace(tr)
-  lap_vals <- lap$values[lap$values > 0]
-  fiedler <- if(length(lap_vals) > 1) sort(lap_vals)[2] else NA
-  lap_entropy <- -sum((lap_vals/sum(lap_vals)) * log(lap_vals/sum(lap_vals)))
-  data.frame(
-    lap_fiedler = fiedler,
-    lap_sum = sum(lap_vals),
-    lap_entropy = lap_entropy
-  )
-}
 
 compute_adjacency_features <- function(tr) {
   g <- ape::as.igraph.phylo(tr, directed = FALSE)
@@ -43,6 +31,7 @@ compute_adjacency_features <- function(tr) {
   ec <- eigen_centrality(g)$vector
   data.frame(
     adj_sum = sum(degs),
+    adj_max = max(degs),
     adj_var_degree = var(degs),
     adj_min_max_ratio = min(degs)/max(degs),
     adj_eigen_centrality_max = max(ec),
@@ -52,7 +41,6 @@ compute_adjacency_features <- function(tr) {
 
 compute_subtree_features <- function(tr) {
   data.frame(
-    median_ladder_length = median(tr$edge[,2] - tr$edge[,1]),
     pitchfork_freq = sum(table(tr$edge[,1]) == 3)/Ntip(tr),
     quartet_imbalance = tryCatch(treestats::q_stat(tr), error=function(e) NA),
     cherries_ratio = tryCatch(treestats::cherries(tr)/Ntip(tr), error=function(e) NA)
@@ -110,7 +98,10 @@ process_file <- function(infile, input_base, output_base) {
       laplace_mean = lap_stats$mean,
       laplace_var  = lap_stats$var,
       laplace_skew = lap_stats$skew,
-      laplace_kurt = lap_stats$kurt
+      laplace_kurt = lap_stats$kurt,
+      laplace_fiedler = lap_stats$fiedler,
+      laplace_entropy = lap_stats$entropy,
+      laplace_sum = lap_stats$sum
     )
     
     # --- Extra features ---

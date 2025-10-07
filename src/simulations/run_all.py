@@ -9,36 +9,34 @@ sys.path.append(PROJECT_ROOT)
 from snakemake_vars import CONFIG_DIR, RAW_DATA_DIR, SIMULATORS, FILE_FORMATS
 from pathlib import Path
 from ms_runner import run_ms_simulation
-from msms_runner import run_msms_simulation
+from msms_runner import run_msms_simulation, run_msms_ms_simulation
 from msprime_runner import run_msprime_simulation, run_mspms_simulation
 
 SIM_FUNCTIONS = {
     "ms": run_ms_simulation,
     "msprime": run_mspms_simulation,
-    "msms": run_msms_simulation
+    "msms": run_msms_simulation,
+    "msms_ms":  run_msms_ms_simulation
 }
 
-def run_all_simulations(config_path, config, output_dir, simulators=SIMULATORS, reps=1):
+def run_all_simulations(config_path, config, output_dir, simulators=SIMULATORS, reps=1, rec_reps=None):
     base_run_dir = Path(output_dir)
     base_run_dir.mkdir(parents=True, exist_ok=True)
 
-    for i in range(reps):
-        if reps == 1:
-            rep_dir = base_run_dir
-        else:
-            rep_dir = base_run_dir / f"rep{i+1}"  # rep1, rep2, ...
-            rep_dir.mkdir(parents=True, exist_ok=True)
+    num_reps = rec_reps if rec_reps and config.get("recombination_rate", 0) != 0 else reps
+
+    for i in range(num_reps):
+        rep_dir = base_run_dir if num_reps == 1 else base_run_dir / f"rep{i+1}"
+        rep_dir.mkdir(parents=True, exist_ok=True)
 
         for sim in simulators:
             if sim not in SIM_FUNCTIONS:
                 print(f"⚠️ Simulator {sim} unknown, skipping")
                 continue
-
             output_file = rep_dir / FILE_FORMATS["raw"].format(SIM=sim)
             SIM_FUNCTIONS[sim](config, output_file=output_file)
 
     print(f"✅ Simulations finished successfully! Results saved in: {base_run_dir}")
-
 
 
 parser = argparse.ArgumentParser(
@@ -75,6 +73,11 @@ parser.add_argument(
     default=1,
     help="Number of repetitions (default: 1)"
 )
+parser.add_argument(
+    "--rec_reps",
+    type=int,
+    help="Number of repetitions to perform specifically for configurations that include recombination"
+)
 
 args = parser.parse_args()
 
@@ -109,7 +112,8 @@ for config_path in config_files:
         config=cfg,
         output_dir=config_outdir,
         simulators=simulators,
-        reps=args.reps
+        reps=args.reps,
+        rec_reps=args.rec_reps
     )
 
 

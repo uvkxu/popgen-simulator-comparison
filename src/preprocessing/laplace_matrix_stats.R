@@ -65,13 +65,21 @@ stats_laplace <- function(phy,
       var_val <- var(eigen_vals)
       skew_val <- e1071::skewness(eigen_vals)
       kurt_val <- e1071::kurtosis(eigen_vals)
+      lap_vals <- eigen_vals[eigen_vals > 0]
+      fiedler <- if(length(lap_vals) > 1) sort(lap_vals)[2] else NA
+      lap_entropy <- -sum((lap_vals/sum(lap_vals)) * log(lap_vals/sum(lap_vals)))
+      lap_sum <- sum(lap_vals)
       return(list("max" = max_val,
                   "min" = min_val,
                   "var" = var_val,
                   "skew" = skew_val,
                   "mean" = mean_val,
                   "kurt" = kurt_val,
-                  "values" = eigen_vals))
+                  "values" = eigen_vals,
+                  "fiedler" = fiedler,
+                  "entropy" = lap_entropy,
+                  "sum" = lap_sum
+                  ))
     }
   }
   stop("input object has to be phylo or ltable")
