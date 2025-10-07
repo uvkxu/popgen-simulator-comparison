@@ -394,6 +394,7 @@ def handle_population_split_event(event, config, activity, pop_index):
     # Join all remaining derived populations into the ancestral one
     for i in range(1, len(derived)):
         population_split_cmd += f" -ej {t:.8g} {pop_index[derived[i]]} {pop_index[ancestral]}"
+        population_split_cmd += f" -en {t:.8g} {pop_index[derived[i]]} {0}"
     
     # Remove all derived populations from index mapping
     for d in derived:
@@ -440,9 +441,11 @@ def handle_population_admixture_event(event, config, activity, pop_index, num_po
         # Step 2: Immediately merge temporary subpopulation into the corresponding ancestral population
         # -ej t i j   -> move all lineages from subpopulation i to ancestral j at time t
         population_admixture_cmd += f" -ej {t:.8g} {num_populations} {pop_index[ancestral[i]]}"
+        population_admixture_cmd += f" -en {t:.8g} {num_populations} {0}"
 
     # Last ancestral population receives all remaining lineages from the derived population
     population_admixture_cmd += f" -ej {t:.8g} {pop_index[derived]} {pop_index[ancestral[-1]]}"
+    population_admixture_cmd += f" -en {t:.8g} {pop_index[derived]} {0}"
 
     # Disable any future migrations to the derived population and mark it as inactive
     population_admixture_cmd += disable_migration_to_derived(config, activity, pop_index, t, derived)
@@ -476,6 +479,7 @@ def handle_populatin_pulse_migration(event, config, activity, pop_index, num_pop
     # Step 2: Immediately merge the temporary subpopulation into the destination
     # -ej t i j   -> at time t, all lineages in temporary population i move to destination j
     pulse_migration_cmd += f" -ej {t:.8g} {num_populations} {pop_index[dest]}"
+    pulse_migration_cmd += f" -en {t:.8g} {num_populations} {0}"
 
     return pulse_migration_cmd, num_populations
 
@@ -518,7 +522,7 @@ def set_ancestral_migration_rates_at_split(config, activity, pop_index, time, po
 
         if (dest == population or source == population) and activity[dest] and activity[source]:
             rate = mig["rate"] * get_rate_scaler(config)
-            migration_cmd += f" -em {time} {pop_index[dest]} {pop_index[source]} {rate:.8g}"
+            migration_cmd += f" -em {time:.8g} {pop_index[dest]} {pop_index[source]} {rate:.8g}"
 
             handled_migrations.add((dest, source))
     
@@ -526,9 +530,9 @@ def set_ancestral_migration_rates_at_split(config, activity, pop_index, time, po
     for pop in (p["name"] for p in config["populations"]):
         if activity[pop] and pop != population:
             if (pop, population) not in handled_migrations:
-                migration_cmd += f" -em {time} {pop_index[pop]} {pop_index[population]} {0}"
+                migration_cmd += f" -em {time:.8g} {pop_index[pop]} {pop_index[population]} {0}"
             if (population, pop) not in handled_migrations:
-                migration_cmd += f" -em {time} {pop_index[population]} {pop_index[pop]} {0}"
+                migration_cmd += f" -em {time:.8g} {pop_index[population]} {pop_index[pop]} {0}"
     
     return migration_cmd
 
@@ -542,7 +546,7 @@ def disable_migration_to_derived(config, activity, pop_index, time, populations)
     for dest in populations:
         for source in (p["name"] for p in config["populations"] if activity[p["name"]]):
             if source != dest:
-                migration_cmd += f" -em {time} {pop_index[dest]} {pop_index[source]} {0}"
+                migration_cmd += f" -em {time:.8g} {pop_index[dest]} {pop_index[source]} {0}"
     
     return migration_cmd
 

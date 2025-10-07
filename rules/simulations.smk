@@ -1,22 +1,14 @@
 include: "../snakemake_vars.py"
 
-rule run_one_simulation:
+rule run_one_config_all_simulations:
     input:
         config_file=lambda wildcards: f"{CONFIG_DIR}/{wildcards.config}.yaml"
     output:
-        msprime_out=f"{RAW_DATA_DIR}/{{config}}/msprime.txt",
-        ms_out=f"{RAW_DATA_DIR}/{{config}}/ms.txt",
-        msms_out=f"{RAW_DATA_DIR}/{{config}}/msms.txt"
+        directory(f"{RAW_DATA_DIR}/{{config}}")
     conda:
         "../envs/simulations-env.yaml"
     shell:
         """
-        python src/main.py --configs {wildcards.config}.yaml
+        python src/simulations/run_all.py --configs {wildcards.config}.yaml --reps {REPS} --rec_reps {REC_REPS}
         """
-
-rule run_all_simulations:
-    input:
-        expand(f"{RAW_DATA_DIR}/{{config}}/msprime.txt", config=all_configs),
-        expand(f"{RAW_DATA_DIR}/{{config}}/ms.txt", config=all_configs),
-        expand(f"{RAW_DATA_DIR}/{{config}}/msms.txt", config=all_configs)
 

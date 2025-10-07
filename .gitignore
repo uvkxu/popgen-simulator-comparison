@@ -211,9 +211,14 @@ __marimo__/
 data/*
 !data/raw/.gitkeep
 
+results/*
+
 # Ignore seedms
 /seedms
 seedms
 **/seedms
 
 .snakemake/
+.vscode
+
+
