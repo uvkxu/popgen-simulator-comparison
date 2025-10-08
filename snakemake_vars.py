@@ -11,6 +11,7 @@ TREESTATS_DATA_DIR = PROCESSED_DATA_DIR / "treestats"
 BOXPLOTS_RESULTS_DIR = RESULTS_DIR / "boxplots"
 TOPFEATURES_RESULTS_DIR = RESULTS_DIR/ "top_features"
 SANITY_RESULTS_DIR = RESULTS_DIR / "sanity_checks"
+TREEPLOTS_RESULTS_DIR = RESULTS_DIR/ "treeplots"
 
 SIMULATORS = ["ms", "msprime", "msms", "msms_ms"]
 REPS = 5
