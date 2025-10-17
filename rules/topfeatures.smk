@@ -2,28 +2,26 @@ include: "../snakemake_vars.py"
 
 rule compute_top_features_single_config:
     input:
-        directory(f"{TREESTATS_DATA_DIR}/{{config}}")
+        lambda wildcards: f"{TREESTATS_DATA_DIR}/{wildcards.config}/.done"
     output:
-        directory(f"{TOPFEATURES_RESULTS_DIR}/{{config}}")
+        dummy=f"{TOPFEATURES_RESULTS_DIR}/{{config}}/.done"
     conda:
         "../envs/models-env.yaml"
     shell:
         """
         python src/models/get_top_features.py {TREESTATS_DATA_DIR}/{wildcards.config} {TOPFEATURES_RESULTS_DIR}/{wildcards.config}
+        touch {output.dummy}
         """
-
-rule compute_top_features_every_config:
-    input:
-        expand(f"{TOPFEATURES_RESULTS_DIR}/{{config}}", config=all_configs)
 
 rule compute_top_features_altogether:
     input:
-        directory(f"{TREESTATS_DATA_DIR}")
+        expand(f"{TREESTATS_DATA_DIR}/{{config}}/.done", config=all_configs)
     output:
-        directory(f"{TOPFEATURES_RESULTS_DIR}/all")
+        dummy = f"{TOPFEATURES_RESULTS_DIR}/all/.done"
     conda:
         "../envs/models-env.yaml"
     shell:
         """
         python src/models/get_top_features.py {TREESTATS_DATA_DIR} {TOPFEATURES_RESULTS_DIR}/all
+        touch {output.dummy}
         """

@@ -2,14 +2,14 @@ include: "../snakemake_vars.py"
 
 rule compute_treestats:
     input:
-        directory(f"{RAW_DATA_DIR}/{{config}}")
+        lambda wildcards: f"{RAW_DATA_DIR}/{wildcards.config}/.done"
     output:
-        directory(f"{TREESTATS_DATA_DIR}/{{config}}")
+        dummy=f"{TREESTATS_DATA_DIR}/{{config}}/.done"
     conda:
         "../envs/treestats-env.yaml"
     shell:
         """
         Rscript -e 'if(!requireNamespace("treestats", quietly=TRUE)) devtools::install_github("thijsjanzen/treestats")'
         Rscript src/preprocessing/run_treestats_clean.R {RAW_DATA_DIR}/{wildcards.config} {TREESTATS_DATA_DIR}/{wildcards.config}
+        touch {output.dummy}
         """
-

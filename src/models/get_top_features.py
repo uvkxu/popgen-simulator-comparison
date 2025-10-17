@@ -19,8 +19,8 @@ sys.path.append(UTILS_ROOT)
 from snakemake_vars import SIMULATORS, FILE_FORMATS
 from utils.io_helpers import collect_csv_files, assign_simulator_labels
 
-def evaluate_feature(X, y, feature, classifiers, repeats=3, test_size=0.2):
-    """Train each classifier on a single feature multiple times and return mean accuracy per classifier."""
+def evaluate_feature(X, y, feature, classifiers, repeats=2, test_size=0.2):
+    """Train each classifier on a single feature multiple times and return max accuracy per classifier."""
     acc_dict = {clf_name: [] for clf_name in classifiers}
     X_feat = X[[feature]].values
 
@@ -31,9 +31,9 @@ def evaluate_feature(X, y, feature, classifiers, repeats=3, test_size=0.2):
             preds = clf.predict(X_valid)
             acc_dict[clf_name].append(accuracy_score(y_valid, preds))
 
-    return {clf_name: np.mean(acc_list) for clf_name, acc_list in acc_dict.items()}
+    return {clf_name: np.max(acc_list) for clf_name, acc_list in acc_dict.items()}
 
-def evaluate_classifiers(X, y, classifiers, repeats=3, test_size=0.2):
+def evaluate_classifiers(X, y, classifiers, repeats=2, test_size=0.2):
     """Evaluate classifiers on all features together."""
     acc_dict = {clf_name: [] for clf_name in classifiers}
 
@@ -53,7 +53,7 @@ def main():
 
     input_folder = Path(sys.argv[1])
     output_folder = Path(sys.argv[2])
-    acc_factor = 1.1
+    acc_factor = 1.2
     selected_simulators = SIMULATORS
 
     for arg in sys.argv[3:]:
@@ -110,14 +110,14 @@ def main():
 
         for feature in features:
             acc_per_clf = evaluate_feature(X, y, feature, classifiers)
-            mean_acc = np.mean(list(acc_per_clf.values()))
-            if mean_acc >= min_accuracy:
+            max_acc = np.max(list(acc_per_clf.values()))
+            if max_acc >= min_accuracy:
                 passed_features.append(feature)
-            record = {"feature": feature, "mean_accuracy": mean_acc}
+            record = {"feature": feature, "max_accuracy": max_acc}
             record.update(acc_per_clf)
             feature_records.append(record)
 
-        feature_records_sorted = sorted(feature_records, key=lambda x: x["mean_accuracy"], reverse=True)
+        feature_records_sorted = sorted(feature_records, key=lambda x: x["max_accuracy"], reverse=True)
 
         # --- 6. Evaluate classifiers with all features ---
         all_features_acc = evaluate_classifiers(X, y, classifiers)
@@ -141,10 +141,16 @@ def main():
         summary_records = []
 
         # ALL_FEATURES row
-        summary_records.append({"feature": "ALL_FEATURES", "mean_accuracy": np.mean(list(all_features_acc.values())), **all_features_acc})
+        summary_records.append({"feature": "ALL_FEATURES", "max_accuracy": np.max(list(all_features_acc.values())), **all_features_acc})
 
         # PASSED_FEATURES row
-        summary_records.append({"feature": "PASSED_FEATURES", "mean_accuracy": np.mean([v for v in passed_acc.values() if v is not None]), **passed_acc})
+        valid_values = [v for v in passed_acc.values() if v is not None]
+        if valid_values:
+            max_acc = np.max(valid_values)
+        else:
+            max_acc = None  # or float('nan'), depending on your downstream usage
+
+        summary_records.append({"feature": "PASSED_FEATURES", "max_accuracy": max_acc, **passed_acc})
 
         # Blank row
         summary_records.append({col: np.nan for col in feature_records_sorted[0].keys()})
@@ -169,7 +175,7 @@ def main():
         df_summary = pd.DataFrame(summary_records)
 
         # Column order
-        cols = ["feature", "mean_accuracy"] + [c for c in classifiers.keys()]
+        cols = ["feature", "max_accuracy"] + [c for c in classifiers.keys()]
         df_summary = df_summary[cols]
 
         output_file = output_folder / f"feature_ranking_{sim_part}_with_summary.csv"

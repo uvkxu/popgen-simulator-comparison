@@ -12,9 +12,9 @@ BOXPLOTS_RESULTS_DIR = RESULTS_DIR / "boxplots"
 TOPFEATURES_RESULTS_DIR = RESULTS_DIR/ "top_features"
 SANITY_RESULTS_DIR = RESULTS_DIR / "sanity_checks"
 
-SIMULATORS = ["ms", "msprime", "msms", "msms_ms"]
+SIMULATORS = ["ms", "msprime", "msms"] #msms_ms behaves the same as just msms
 REPS = 5
-REC_REPS = 200
+REC_REPS = 50
 NUM_SANITY_CLASSES = 5
 SANITY_REPS = 5
 
