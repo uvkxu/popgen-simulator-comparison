@@ -1,4 +1,4 @@
-num_replicates: 50
+num_replicates: 100
 population_size: 1000
 sequence_length: 1000
 mutation_rate: 4.83e-9

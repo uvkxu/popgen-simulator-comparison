@@ -76,7 +76,7 @@ source("src/preprocessing/extra_features.R")
 library(ape)
 library(treestats)
 
-calculate_all_stats <- function(phylo, normalize = FALSE, weighted = TRUE) {
+calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
 
     if (weighted) {
         stats <- list()

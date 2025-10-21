@@ -1,0 +1,393 @@
+#!/usr/bin/env python3
+import os
+import re
+import argparse
+import json
+import numpy as np
+import allel
+import pandas as pd
+from scipy.stats import skew, kurtosis
+from itertools import combinations
+
+# ============================================================
+# --- Parsing ms-like output ---
+# ============================================================
+def parse_ms_like_output(output):
+    lines = output.strip().splitlines()
+    command_line = lines[0]
+    sample_sizes = []
+
+    match = re.search(r'-I\s+\d+((?:\s+\d+)+)', command_line)
+    if match:
+        sample_sizes = [int(x) for x in match.group(1).split()]
+    else:
+        parts = command_line.strip().split()
+        if len(parts) >= 2 and re.match(r'\d+', parts[1]):
+            # erste Zahl nach dem Simulator
+            sample_sizes = [int(parts[1])]
+        else:
+            sample_sizes = []
+
+    blocks = output.strip().split('//')
+    all_positions, all_genotypes = [], []
+
+    for block in blocks:
+        # Skip empty or invalid blocks but preserve alignment in output lists
+        if not block:
+            continue
+
+        # Extract number of segregating sites (segsites)
+        segsites_match = re.search(r'segsites:\s*(\d+)', block)
+        segsites = int(segsites_match.group(1)) if segsites_match else -1
+
+        if segsites == -1:
+            continue
+
+        # If there are no segregating sites, append empty placeholders and skip
+        if segsites == 0:
+            all_positions.append(np.empty(0, dtype=np.int8))
+            all_genotypes.append(np.empty((0, 0), dtype=np.int8))
+            continue
+
+        allele_lines = block.splitlines()
+        pos_line_idx = next((i for i, l in enumerate(allele_lines) if l.startswith('positions:')), None)
+        if pos_line_idx is None:
+            continue
+
+        positions = np.array([float(x) for x in allele_lines[pos_line_idx].split()[1:]])
+        all_positions.append(positions)
+
+        genotypes = []
+        for line in allele_lines[pos_line_idx + 1:]:
+            line = line.strip()
+            if re.fullmatch(r'[01]+', line):
+                genotypes.append([int(c) for c in line])
+            else:
+                break
+
+        if len(genotypes) > 0:
+            all_genotypes.append(np.array(genotypes, dtype=np.int64))
+
+    return sample_sizes, all_positions, all_genotypes
+
+
+# ============================================================
+# --- Compute stats ---
+# ============================================================
+from itertools import combinations
+
+def compute_stats(haps: allel.HaplotypeArray, positions, pops={}):
+    def choose_block_length(n_variants, target_blocks=10, min_blen=5):
+        """
+        Choose block length for block-jackknife.
+
+        Parameters
+        ----------
+        n_variants : int
+            Number of variants in the current region.
+        target_blocks : int, optional
+            Desired number of blocks for jackknife. Default is 10.
+        min_blen : int, optional
+            Minimum block length in number of variants. Default is 5.
+
+        Returns
+        -------
+        blen : int
+            Block length in number of variants.
+        """
+        if n_variants == 0:
+            return 1  # avoid division by zero
+        blen = max(min_blen, n_variants // target_blocks)
+        return blen
+
+    def ac_for(indices):
+        indices = [i for i in indices if i < haps.shape[1]]  # limit to valid range
+        hsub = haps.take(indices, axis=1)
+
+        # Handle case: no segregating sites (empty haplotype matrix)
+        if hsub.shape[0] == 0 or hsub.shape[1] == 0:
+            ac = np.zeros((0, 2), dtype=np.int64)
+            return ac, hsub
+
+        return hsub.count_alleles(), hsub
+
+    def stats_from(ac, hsub):
+        if hsub.size == 0:
+            return {
+                'pi': 0.0,
+                'theta_w': 0.0,
+                'tajimas_d': 0.0,
+                'haplotype_homozygosity': 1.0,
+                'n_unique_haplotypes': 1,
+                'sfs_skewness': 0.0,
+                'sfs_kurtosis': 0.0,
+                'mean_ld': 0.0,
+                'var_ld': 0.0,
+                'mean_pairwise_distance': 0.0
+            }
+
+        n_hap = hsub.shape[1]
+
+        # Diversity
+        pi = allel.sequence_diversity(positions, ac)
+        theta_w = allel.watterson_theta(positions, ac)
+        try:
+            tajd = allel.tajima_d(ac)
+            if np.isnan(tajd):
+                tajd = 0.0
+        except Exception:
+            tajd = 0.0
+
+        # Haplotype matrix
+        hmat = hsub
+        if hmat.size == 0:
+            hap_homo = 1.0
+            n_unique = 1
+        else:
+            cols = np.ascontiguousarray(hmat.T)
+            uniq, counts = np.unique(cols, axis=0, return_counts=True)
+            freqs = counts / counts.sum()
+            hap_homo = np.sum(freqs ** 2)
+            n_unique = len(counts)
+
+        # Derived counts
+        if ac.shape[1] > 1:
+            derived_counts = ac[:, 1]
+        else:
+            derived_counts = np.zeros(ac.shape[0], dtype=int)
+
+        max_k = n_hap
+        if derived_counts.size == 0:
+            sfs = np.zeros(max_k + 1, dtype=int)
+        else:
+            minor_counts = np.minimum(derived_counts, max_k - derived_counts)
+            sfs = np.bincount(minor_counts.astype(int), minlength=max_k + 1)
+
+        # SFS moments
+        try:
+            sfs_skew = skew(sfs)
+            if np.isnan(sfs_skew):
+                sfs_skew = 0.0
+        except Exception:
+            sfs_skew = 0.0
+
+        try:
+            sfs_kurt = kurtosis(sfs)
+            if np.isnan(sfs_kurt):
+                sfs_kurt = 0.0
+        except Exception:
+            sfs_kurt = 0.0
+
+        # LD
+        try:
+            r = allel.rogers_huff_r(hsub)
+            r2 = r ** 2
+            if r2.size == 0 or np.all(np.isnan(r2)):
+                mean_ld = 0.0
+                var_ld = 0.0
+            else:
+                mean_ld = float(np.nanmean(r2))
+                var_ld = float(np.nanvar(r2))
+        except Exception:
+            mean_ld = 0.0
+            var_ld = 0.0
+
+        # Mean pairwise distance (Hamming)
+        try:
+            d = allel.pairwise_distance(hsub, metric='hamming')
+            mean_dist = float(np.mean(d)) if d.size > 0 else 0.0
+        except Exception:
+            mean_dist = 0.0
+
+        # Garud’s H statistics
+        try:
+            h1, h12, h123, h2_h1 = allel.garud_h(hsub)
+        except Exception:
+            h1, h12, h123, h2_h1 = 0, 0, 0, 0 
+
+        # Haplotype diversity
+        try:
+            hap_div = allel.haplotype_diversity(hsub)
+        except Exception:
+            hap_div = 0.0
+
+        return {
+            'pi': float(pi),
+            'theta_w': float(theta_w),
+            'tajimas_d': float(tajd),
+            'haplotype_homozygosity': float(hap_homo),
+            'n_unique_haplotypes': int(n_unique),
+            'sfs_skewness': float(sfs_skew),
+            'sfs_kurtosis': float(sfs_kurt),
+            'mean_ld': float(mean_ld),
+            'var_ld': float(var_ld),
+            'mean_pairwise_distance': float(mean_dist),
+            'h1': float(h1),
+            'h12': float(h12),
+            'h123': float(h123),
+            'h2_h1': float(h2_h1),
+            'hap_div': float(hap_div)
+        }
+
+    results = {}
+    all_indices = [i for i in range(0, haps.shape[1])]
+    
+    ac_all, hsub_all = ac_for(all_indices)
+
+    results['pooled'] = stats_from(ac_all, hsub_all)
+    results['num_segsites'] = len(positions)
+
+    if len(pops) > 1:
+        # Compute allele counts for each population for Patterson stats
+        ac_dict = {}
+        for pname, indices in pops.items():
+            ac, _ = ac_for(indices)
+            ac_dict[pname] = ac
+
+        # --- Compute per-population stats ---
+        results['per_population'] = {}
+        for pname, indices in pops.items():
+            ac, hsub = ac_for(indices)
+            results['per_population'][pname] = stats_from(ac, hsub)
+
+        # --- Compute Patterson statistics ---
+        pop_names = list(pops.keys())
+
+        # F2 for all pairs
+        for a, b in combinations(pop_names, 2):
+            ac_a, ac_b = ac_dict[a], ac_dict[b]
+            nvar = min(ac_a.shape[0], ac_b.shape[0])
+            blen = min(choose_block_length(nvar), nvar // 2)
+
+            if all(ac.shape[0] > 0 and ac.shape[1] == 2 for ac in [ac_a, ac_b]):
+                try:
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        fst, se, vb, vj = allel.average_hudson_fst(ac_a, ac_b, blen=blen)
+                    fst = np.nan_to_num(fst, nan=np.nan)
+                except Exception:
+                    fst = 0.0
+
+                f2 = allel.patterson_f2(ac_a, ac_b)
+                results[f"f2_{a}_{b}"] = float(np.mean(f2))
+                results[f"fst_{a}_{b}"] = float(fst)
+            else:
+                results[f"f2_{a}_{b}"] = 0.0
+                results[f"fst_{a}_{b}"] = 0.0
+
+        # F3* for all triplets
+        for c, a, b in combinations(pop_names, 3):
+            ac_c, ac_a, ac_b = ac_dict[c], ac_dict[a], ac_dict[b]
+            if all(ac.shape[0] > 0 and ac.shape[1] == 2 for ac in [ac_a, ac_b, ac_c]):
+                T, B = allel.patterson_f3(ac_c, ac_a, ac_b)
+                results[f"f3star_{c}_{a}_{b}"] = float(np.sum(T) / np.sum(B)) if np.sum(B) > 0 else 0.0
+            else:
+                results[f"f3star_{c}_{a}_{b}"] = 0.0
+
+    return results
+
+
+# ============================================================
+# --- Helper to compute per-block stats and flatten ---
+# ============================================================
+def calculate_block_stats(positions, genotypes, sample_sizes):
+    n_haplotypes = sum(sample_sizes)
+    haps = allel.HaplotypeArray(genotypes.T)
+    n_haps = haps.shape[1]
+    no_segsites = False
+
+    if n_haps == 0:
+        assert genotypes.size == 0, "Genotypes muss leer sein"
+        assert positions.size == 0, "Positions muss leer sein, wenn es keine mutation gab"
+
+    # Flatten dictionary for CSV
+    flat = {}
+    if len(sample_sizes) > 1:
+        pops = {}
+        start = 0
+
+        for i, s in enumerate(sample_sizes):
+            pops[f"pop{i+1}"] = list(range(start, start + s))
+            start += s
+        
+        for pname in list(pops.keys()):
+            pops[pname] = [i for i in pops[pname] if i < n_haps]
+
+        stats = compute_stats(haps, positions, pops)
+
+        for pname, vals in stats['per_population'].items():
+            for k, v in vals.items():
+                if isinstance(v, (list, dict)):
+                    v = json.dumps(v)
+                flat[f"{pname}_{k}"] = v
+    else:
+        stats = compute_stats(haps, positions)
+
+    for k, v in stats.items():
+            if k not in ['per_population', 'pooled']:
+                flat[k] = v
+
+    for k, v in stats['pooled'].items():
+        if isinstance(v, (list, dict)):
+            v = json.dumps(v)
+        flat[f"pooled_{k}"] = v
+
+    return flat
+
+
+# ============================================================
+# --- Main function ---
+# ============================================================
+def main(input_dir, output_dir):
+    # Ensure the main output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Walk recursively through all subdirectories in the input folder
+    for root, _, files in os.walk(input_dir):
+        # Determine relative path from input_dir to current folder (e.g. "rep1", "rep2")
+        rel_path = os.path.relpath(root, input_dir)
+
+        # Create corresponding subfolder structure inside output_dir
+        target_dir = os.path.join(output_dir, rel_path)
+        os.makedirs(target_dir, exist_ok=True)
+
+        # Process all ms-like files in the current directory
+        for fname in files:
+            if not fname.endswith('.txt') and not fname.endswith('.ms'):
+                continue
+
+            input_path = os.path.join(root, fname)
+            with open(input_path) as f:
+                content = f.read()
+
+            # Parse ms/msms/msprime-like simulator output
+            sample_sizes, all_positions, all_genotypes = parse_ms_like_output(content)
+            rows = []
+                
+            # Compute statistics for each block in the file
+            for positions, genotypes in zip(all_positions, all_genotypes):
+                stats = calculate_block_stats(positions, genotypes, sample_sizes)
+                rows.append(stats)
+
+            # Save per-block statistics as CSV if any data was generated
+            if rows:
+                df = pd.DataFrame(rows)
+                out_name = os.path.splitext(fname)[0] + '_stats.csv'
+                output_path = os.path.join(target_dir, out_name)
+
+                # Save with fixed float precision for reproducibility
+                df.to_csv(output_path, index=False, float_format='%.10f')
+                print(f"✅ Saved {len(rows)} blocks to {output_path}")
+
+
+# ============================================================
+# --- CLI entry point ---
+# ============================================================
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Compute population genetic statistics from ms-like output and save as CSV.'
+    )
+    parser.add_argument('input_dir', help='Directory containing ms/msms/msprime output files')
+    parser.add_argument('output_dir', help='Directory to write CSV files')
+    args = parser.parse_args()
+
+    main(args.input_dir, args.output_dir)

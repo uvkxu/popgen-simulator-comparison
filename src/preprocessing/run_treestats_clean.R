@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-source("src/preprocessing/calc_all_statistics.R")
+source("src/preprocessing/calc_all_treestatistics.R")
 
 # --- Argument parsing ---
 args <- commandArgs(trailingOnly = TRUE)
@@ -55,13 +55,13 @@ process_file <- function(infile, input_base, output_base) {
 
     # --- Weighted-Stats ---
     tree_stats <- tryCatch(
-      calculate_all_stats(tr, normalize = FALSE, weighted = TRUE),
+      calculate_all_treestats(tr, normalize = FALSE, weighted = TRUE),
       error = function(e) NULL
     )
 
     # --- Unweighted-Stats ---
     tree_stats_unweighted <- tryCatch(
-      calculate_all_stats(tr_unweighted, normalize = FALSE, weighted = FALSE),
+      calculate_all_treestats(tr_unweighted, normalize = FALSE, weighted = FALSE),
       error = function(e) NULL
     )
 

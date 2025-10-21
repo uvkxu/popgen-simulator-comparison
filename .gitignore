@@ -221,4 +221,5 @@ seedms
 .snakemake/
 .vscode
 
-
+**/Snakefile
+Snakefile
