@@ -81,6 +81,8 @@ calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
     if (weighted) {
         stats <- list()
 
+        stats$zero_branch_count <- sum(phylo$edge.length == 0)
+
         stats$sackin             <- try_stat(phylo, treestats::sackin,
                                             normalize, c("yule", "none"))
 

@@ -47,7 +47,7 @@ stats_laplace <- function(tr, weighted=TRUE) {
   
     eig <- eigen(lap_mat, symmetric = TRUE)
     eigen_vals <- eig$values
-    eigen_vals <- round(eigen_vals, digits = 12)
+    eigen_vals <- round(eigen_vals, digits = 10)
 
     fiedler_val <- min(eigen_vals[eigen_vals > 0])
 
