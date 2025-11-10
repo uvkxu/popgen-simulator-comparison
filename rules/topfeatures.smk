@@ -13,6 +13,19 @@ rule compute_top_features_treestats_single_config:
         touch {output.dummy}
         """
 
+rule compute_top_features_treestats_single_config_no_zero_branches:
+    input:
+        lambda wildcards: f"{TREESTATS_DATA_DIR}/{wildcards.config}/.done"
+    output:
+        dummy=f"results/top_features/treestats_zero/{{config}}/.done"
+    conda:
+        "../envs/models-env.yaml"
+    shell:
+        """
+        python src/models/get_top_features.py {TREESTATS_DATA_DIR}/{wildcards.config} results/top_features/treestats_zero/{wildcards.config} --filter_zero_branches --resample=under
+        touch {output.dummy}
+        """
+
 rule compute_top_features_treestats_altogether:
     input:
         expand(f"{TREESTATS_DATA_DIR}/{{config}}/.done", config=all_configs)

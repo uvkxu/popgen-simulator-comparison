@@ -1,6 +1,7 @@
 from pathlib import Path
 
 CONFIG_DIR = Path("configs")
+CMD_DIR = Path("commands")
 DATA_DIR = Path("data")
 RESULTS_DIR = Path("results")
 
@@ -13,8 +14,12 @@ BOXPLOTS_RESULTS_DIR = RESULTS_DIR / "boxplots"
 TOPFEATURES_RESULTS_DIR = RESULTS_DIR/ "top_features"
 TREESTATS_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "treestats"
 ALLELSTATS_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "allelstats"
+TREESTATS_BOXPLOTS_DIR = BOXPLOTS_RESULTS_DIR/ "treestats"
+ALLELSTATS_BOXPLOTS_DIR = BOXPLOTS_RESULTS_DIR/ "allelstats"
 
 SANITY_RESULTS_DIR = RESULTS_DIR / "sanity_checks"
+
+CMD_SUBDIR = "commands"
 
 SIMULATORS = ["ms", "msprime", "msms"] #msms_ms behaves the same as just msms
 REPS = 10

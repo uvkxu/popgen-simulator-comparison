@@ -225,3 +225,6 @@ seedms
 Snakefile
 
 resultico/
+
+.Rhistory
+.RData

@@ -7,6 +7,7 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.utils import resample
 import sys
 import os
 from itertools import combinations
@@ -19,14 +20,20 @@ sys.path.append(UTILS_ROOT)
 from snakemake_vars import SIMULATORS, FILE_FORMATS
 from utils.io_helpers import collect_csv_files, assign_simulator_labels
 
-def evaluate_feature(X, y, feature, classifiers, repeats=2, test_size=0.2):
+def evaluate_feature(X, y, feature, classifiers, repeats=2, test_size=0.2, balance_train=None):
     """Train each classifier on a single feature multiple times and return max accuracy per classifier."""
     acc_dict = {clf_name: [] for clf_name in classifiers}
     X_feat = X[[feature]].values
 
     for clf_name, clf in classifiers.items():
-        for _ in range(repeats):
+        for r in range(repeats):
             X_train, X_valid, y_train, y_valid = train_test_split(X_feat, y, test_size=test_size)
+
+            if balance_train == "over":
+                X_train, y_train = balanced_train_oversample(X_train, y_train, random_state=42 + r)
+            elif balance_train == "under":
+                X_train, y_train = balanced_train_undersample(X_train, y_train, random_state=42 + r)
+            
             clf.fit(X_train, y_train)
             preds = clf.predict(X_valid)
             acc_dict[clf_name].append(accuracy_score(y_valid, preds))
@@ -46,21 +53,97 @@ def evaluate_classifiers(X, y, classifiers, repeats=2, test_size=0.2):
 
     return {clf_name: np.mean(acc_list) for clf_name, acc_list in acc_dict.items()}
 
+
+def balance_train_oversample(X_train, y_train, random_state=None):
+    """
+    Oversample minority classes in the training data so all classes are equally represented.
+
+    Parameters
+    ----------
+    X_train : pd.DataFrame or np.ndarray
+        Training feature matrix.
+    y_train : pd.Series or np.ndarray
+        Training target labels.
+    random_state : int, optional
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    X_resampled, y_resampled : balanced training data
+    """
+    if isinstance(X_train, np.ndarray):
+        X_train = pd.DataFrame(X_train)
+    if isinstance(y_train, np.ndarray):
+        y_train = pd.Series(y_train)
+
+    df_train = X_train.copy()
+    df_train["target"] = y_train.values
+
+    max_size = df_train["target"].value_counts().max()
+    df_list = []
+
+    for label, df_class in df_train.groupby("target"):
+        df_resampled = resample(
+            df_class,
+            replace=True,
+            n_samples=max_size,
+            random_state=random_state,
+        )
+        df_list.append(df_resampled)
+
+    df_balanced = pd.concat(df_list, axis=0).sample(frac=1, random_state=random_state).reset_index(drop=True)
+
+    y_balanced = df_balanced["target"]
+    X_balanced = df_balanced.drop(columns=["target"])
+
+    return X_balanced, y_balanced
+
+
+def balanced_train_undersample(X_train, y_train, random_state=None):
+    """Return an undersampled, class-balanced version of (X_train, y_train)."""
+    df = pd.DataFrame(X_train).copy()
+    df['__target__'] = y_train
+    counts = df['__target__'].value_counts()
+    min_count = counts.min()
+
+    balanced = []
+    for cls in counts.index:
+        cls_df = df[df['__target__'] == cls]
+        sampled = cls_df.sample(n=min_count, random_state=random_state)
+        balanced.append(sampled)
+
+    df_bal = pd.concat(balanced).sample(frac=1, random_state=random_state)  # shuffle
+    y_bal = df_bal['__target__'].values
+    X_bal = df_bal.drop(columns='__target__').values
+    return X_bal, y_bal
+    
+
 def main():
     if len(sys.argv) < 3:
-        print("Usage: python get_top_features.py <input_folder> <output_folder> [--acc_factor=FLOAT] [--simulators=sim1,sim2,...]")
+        print("Usage: python get_top_features.py <input_folder> <output_folder> "
+              "[--acc_factor=FLOAT] [--simulators=sim1,sim2,...] "
+              "[--filter_zero_branches] [--resample=none|under|over]")
         sys.exit(1)
 
     input_folder = Path(sys.argv[1])
     output_folder = Path(sys.argv[2])
     acc_factor = 1.2
     selected_simulators = SIMULATORS
+    filter_zero_branches = False
+    resample_mode = "none"
 
     for arg in sys.argv[3:]:
         if arg.startswith("--acc_factor"):
             acc_factor = float(arg.split("=")[1])
         elif arg.startswith("--simulators"):
             selected_simulators = arg.split("=")[1].split(",")
+        elif arg == "--filter_zero_branches":
+            filter_zero_branches = True  # 🟢 activate filtering
+        elif arg.startswith("--resample="):
+            resample_mode = arg.split("=")[1].strip().lower()
+            if resample_mode not in ["none", "under", "over"]:
+                print("Invalid --resample value. Use one of: none, under, over.")
+                sys.exit(1)
 
     # --- 1. Generate simulator groups ---
     simulator_groups = list(set(combinations(selected_simulators, 2)))
@@ -77,6 +160,46 @@ def main():
         csv_files_dict = collect_csv_files(input_folder, CSV_TYPES)
         all_dfs = assign_simulator_labels(csv_files_dict, group)
         data = pd.concat(all_dfs, ignore_index=True)
+        meta_rows = []
+
+        # --- 🧹 Optional Filtering ---
+        if filter_zero_branches:
+            before = len(data)
+            class_counts_before = data["simulator"].value_counts().to_dict()
+            cond = (data["zero_branch_count"] == 0) & (data["tree_type"] != 0) & (data["cut_edge_weight"] != -1)
+            data = data[cond]
+            after = len(data)
+            print(f"Filtered out {before - after} entries (zero_branch_count != 0 or tree_type == 0 or cut_edge_weight == -1) "
+                  f"({after}/{before} remaining).")
+
+            class_counts_after = data["simulator"].value_counts().to_dict()
+
+            meta_rows = [
+                f"Trees before filtering: {before}",
+                f"Trees after filtering: {after}",
+                f"Class distribution after filtering: {class_counts_after}"
+            ]
+            
+            # 🛑 Check if enough data left
+            if any(sim not in class_counts_after or class_counts_after[sim]/class_counts_before[sim] < 0.25 for sim in group):
+                print("⚠️ Too many trees removed due to zero branches — not enough data left for training.")
+                
+                # Save informative CSV
+                output_folder.mkdir(exist_ok=True)
+                sim_part = "_".join(group)
+                output_file = output_folder / f"feature_ranking_{sim_part}_with_summary.csv"
+                
+                df_empty = pd.DataFrame({
+                    "message": [
+                        "Too many trees removed due to zero_branch_count > 0.",
+                        "Not enough data left to train classifiers.",
+                        f"Remaining samples: {after} (originally {before}).",
+                        "No analysis performed."
+                    ]
+                })
+                df_empty.to_csv(output_file, index=False)
+                print(f"⚠️ Created summary file with warning message: {output_file}")
+                continue  # skip to next group
 
         # --- 2. Handle Inf and missing values ---
         data.replace([np.inf, -np.inf], np.nan, inplace=True)
@@ -109,13 +232,24 @@ def main():
         passed_features = []
 
         for feature in features:
-            acc_per_clf = evaluate_feature(X, y, feature, classifiers)
-            max_acc = np.max(list(acc_per_clf.values()))
-            if max_acc >= min_accuracy:
+            try:
+                acc_per_clf = evaluate_feature(X, y, feature, classifiers, balance_train=resample_mode)
+                max_acc = np.nanmax(list(acc_per_clf.values()))
+            except ValueError as e:
+                if "only one class" in str(e):
+                    print(f"⚠️ Skipping feature '{feature}' – only one class present in training data.")
+                    acc_per_clf = {clf: np.nan for clf in classifiers}
+                    max_acc = np.nan
+                else:
+                    raise
+
+            if not np.isnan(max_acc) and max_acc >= min_accuracy:
                 passed_features.append(feature)
+
             record = {"feature": feature, "max_accuracy": max_acc}
             record.update(acc_per_clf)
             feature_records.append(record)
+
 
         feature_records_sorted = sorted(feature_records, key=lambda x: x["max_accuracy"], reverse=True)
 
@@ -180,6 +314,9 @@ def main():
 
         output_file = output_folder / f"feature_ranking_{sim_part}_with_summary.csv"
         df_summary.to_csv(output_file, index=False)
+        if meta_rows:
+            with open(output_file, "a") as f:
+                f.write("\n".join(meta_rows) + "\n")
         print(f"Feature ranking and classifier accuracies saved to {output_file}")
 
 if __name__ == "__main__":

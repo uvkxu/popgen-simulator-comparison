@@ -5,9 +5,56 @@ import argparse
 import json
 import numpy as np
 import allel
+import random
 import pandas as pd
 from scipy.stats import skew, kurtosis
 from itertools import combinations
+import sys
+import yaml
+import tempfile
+from pypythia.prediction import predict_difficulty
+from pypythia.msa import *
+from pathlib import Path
+
+UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(UTILS_ROOT)
+
+from utils.io_helpers import clean_segsites
+    
+def generate_msa(positions, genotypes, seq_length, sample_size):
+    """Generate an MSA from ms-like genotypes and random ancestral sequence."""
+    bases = ['A', 'C', 'G', 'T']
+    n_haps = genotypes.shape[0] if genotypes.size > 0 else 0
+
+    assert((sample_size == n_haps) or n_haps == 0)
+
+    # 1. Generate random ancestral sequence
+    ancestral_seq = [random.choice(bases) for _ in range(seq_length)]
+
+    # 2. Copy ancestral sequence for all haplotypes
+    haplotypes = [ancestral_seq.copy() for _ in range(sample_size)]
+
+    # 3. For each segregating site: introduce derived alleles
+    if n_haps != 0:
+        for j, idx in enumerate(positions):
+            for i in range(n_haps):
+                if genotypes[i, j] == 1:
+                    # Derived allele: different base from ancestral
+                    try:
+                        anc = haplotypes[i][idx]
+                    except IndexError:
+                        print("⚠️ IndexError encountered while accessing haplotypes.")
+                        print(f"  Sequence length: {seq_length}")
+                        print(f"  Index attempted: {idx}")
+                        print(f"  Positions: {positions}")
+                        print(f"  Haplotype index: {i}")
+                        # Optionally, re-raise the error after printing debug info
+                        raise
+
+                    possible = [b for b in bases if b != anc]
+                    haplotypes[i][idx] = random.choice(possible)
+
+    return ["".join(seq) for seq in haplotypes]
 
 # ============================================================
 # --- Parsing ms-like output ---
@@ -54,7 +101,7 @@ def parse_ms_like_output(output):
         if pos_line_idx is None:
             continue
 
-        positions = np.array([float(x) for x in allele_lines[pos_line_idx].split()[1:]])
+        positions = np.array([int(x) for x in allele_lines[pos_line_idx].split()[1:]])
         all_positions.append(positions)
 
         genotypes = []
@@ -69,7 +116,6 @@ def parse_ms_like_output(output):
             all_genotypes.append(np.array(genotypes, dtype=np.int64))
 
     return sample_sizes, all_positions, all_genotypes
-
 
 # ============================================================
 # --- Compute stats ---
@@ -334,12 +380,47 @@ def calculate_block_stats(positions, genotypes, sample_sizes):
     return flat
 
 
+def parse_sample_size_and_seq_length_from_dir(dirname):
+    #print(f"Das ist der dirname: {dirname}")
+    """
+    Extract sample_size and sequence_length from directory name, assuming 
+    naming scheme like 'popsize-50_seq-1000_...' 
+    """
+    sample_size = None
+    seq_length = None
+
+    m = re.search(r'sample_sizes-(\d+)', dirname)
+    if m:
+        sample_size = int(m.group(1))
+
+    m = re.search(r'sequence_lengths-(\d+)', dirname)
+    if m:
+        seq_length = int(m.group(1))
+
+    if sample_size is None or seq_length is None:
+        raise ValueError(f"Could not parse sample_size or seq_length from {dirname}")
+
+    return sample_size, seq_length
+
+
 # ============================================================
 # --- Main function ---
 # ============================================================
-def main(input_dir, output_dir):
+def main(input_dir, output_dir, input_config):
     # Ensure the main output directory exists
     os.makedirs(output_dir, exist_ok=True)
+
+    sample_size = 0
+    seq_length = 0
+
+    if input_config:
+        with open(input_config, "r") as f:
+            cfg = yaml.safe_load(f)
+
+        sample_size = sum(p.get("sample_size", 0) for p in cfg.get("populations", [])) \
+                            if "populations" in cfg else int(cfg.get("sample_size"))
+
+        seq_length = int(cfg.get("sequence_length"))
 
     # Walk recursively through all subdirectories in the input folder
     for root, _, files in os.walk(input_dir):
@@ -355,18 +436,74 @@ def main(input_dir, output_dir):
             if not fname.endswith('.txt') and not fname.endswith('.ms'):
                 continue
 
-            input_path = os.path.join(root, fname)
+            input_path = Path(root)/ fname
             with open(input_path) as f:
                 content = f.read()
+
+            if not input_config:
+                parent_folder = input_path.parent.name
+                sample_size, seq_length = parse_sample_size_and_seq_length_from_dir(parent_folder)
+
+                if not sample_size or not seq_length:
+                    raise ValueError(
+                        f"Could not extract sample_size or sequence_length from folder '{parent_folder}'. "
+                        "Please provide a valid input_config or ensure the folder name encodes these values."
+                    )
+            
+            # TODO: clean content
+            content = clean_segsites(
+                sim_output = content, 
+                sequence_length = seq_length
+                )
 
             # Parse ms/msms/msprime-like simulator output
             sample_sizes, all_positions, all_genotypes = parse_ms_like_output(content)
             rows = []
                 
             # Compute statistics for each block in the file
-            for positions, genotypes in zip(all_positions, all_genotypes):
-                stats = calculate_block_stats(positions, genotypes, sample_sizes)
-                rows.append(stats)
+            for block_idx, (positions, genotypes) in enumerate(zip(all_positions, all_genotypes)):
+                allel_stats = calculate_block_stats(positions, genotypes, sample_sizes)
+                rows.append(allel_stats)
+
+                # --- Create an MSA object ---
+                seqs = generate_msa(positions, genotypes, seq_length, sample_size)
+
+                # Create names for the samples (taxa)
+                taxa = np.array([f"sample_{i+1}" for i in range(sample_size)])
+
+                # Convert list of strings into a 2D NumPy array with dtype='S1'
+                seq_matrix = np.array([list(s) for s in seqs], dtype='S1')
+
+                # Initialize the MSA object
+                msa = MSA(
+                    taxa=taxa,
+                    sequences=seq_matrix,
+                    data_type=DataType.DNA,   # or DataType("DNA"), depending on the implementation
+                    name=f"{fname}_block{block_idx}"
+                )
+
+                # Create a temporary file to store the MSA in PHYLIP format
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".phy", delete=False) as tmp_msa_file:
+                    # Write the MSA object to a file (make sure your MSA class supports this)
+                    msa.write(tmp_msa_file.name)  # or msa.write_phylip(tmp_msa_file.name)
+                    tmp_msa_path = pathlib.Path(tmp_msa_file.name)
+
+                try:
+                    # Call predict_difficulty using the file path instead of the MSA object
+                    difficulty = predict_difficulty(
+                        msa_file=tmp_msa_path,
+                        raxmlng=pathlib.Path("/home/kuchvict/miniforge3/envs/allelstats/bin/raxml-ng"),       # set this if RAxML-NG is not in your PATH
+                        deduplicate=False,
+                        store_results=False # avoid saving extra result files
+                    )
+                    allel_stats["difficulty"] = difficulty
+                finally:
+                    # Clean up the temporary file after prediction
+                    os.remove(tmp_msa_path)
+
+                allel_stats["bollback_multinomial"] = msa.bollback_multinomial()
+                allel_stats["pattern_entropy"] = msa.pattern_entropy()
+                allel_stats["entropy"] = msa.entropy()
 
             # Save per-block statistics as CSV if any data was generated
             if rows:
@@ -388,6 +525,7 @@ if __name__ == '__main__':
     )
     parser.add_argument('input_dir', help='Directory containing ms/msms/msprime output files')
     parser.add_argument('output_dir', help='Directory to write CSV files')
+    parser.add_argument('--input_config', help='Optional config file for simulator parameters', default=None)
     args = parser.parse_args()
 
-    main(args.input_dir, args.output_dir)
+    main(args.input_dir, args.output_dir, args.input_config)

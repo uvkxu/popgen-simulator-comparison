@@ -1,7 +1,7 @@
 import os
 import msprime
 from ms_runner import get_initial_population_activity, get_effective_population_size, \
-                                    get_rate_multiplier, build_ms_command, clean_output
+                                    get_rate_multiplier, build_ms_command
 import subprocess
 
 
@@ -344,11 +344,22 @@ def build_msprime_command(config):
     return msms_cmd
 
 
-def run_mspms_simulation(config, output_file=None):
-    command = build_msprime_command(config)
+def run_mspms_simulation(config=None, command=None, output_file=None):
+    if config is not None:
+        command = build_msprime_command(config)
+    elif command is not None:
+        # Falls der übergebene Command nicht mit "mspms" anfängt → füge es hinzu
+        stripped = command.strip()
+        if not (stripped.startswith("mspms") or stripped.startswith("python -m mspms")):
+            command = f"mspms {stripped}"
+    else:
+        raise ValueError("Either 'config' or 'command' must be provided.")
 
     if output_file is None:
-        output_file = config.get("msprime_output_file", "results/msprime/output.txt")
+        if config:
+            output_file = config.get("msprime_output_file", "results/msprime/output.txt")
+        else:
+            output_file = "results/msprime/output.txt"
 
     print(f"🚀 Running msprime: {command}")
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -360,10 +371,7 @@ def run_mspms_simulation(config, output_file=None):
         raise RuntimeError(f"msprime failed:\n{result.stderr}")
 
     with open(output_file, "w") as f:
-        cleaned_result = clean_output(
-            ms_output = result.stdout, 
-            sequence_length = config.get("sequence_length", None),
-            factor = get_rate_multiplier(config)
-            )
-        f.write(cleaned_result)
+        f.write(result.stdout)
         f.write(result.stderr)
+    
+    return output_file

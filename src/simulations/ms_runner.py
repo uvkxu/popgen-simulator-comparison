@@ -662,134 +662,63 @@ def build_ms_command(config):
         cmd += cmd_part
 
     return cmd
-
-
-def clean_output(ms_output, sequence_length=None, decimals=None, factor=1.0):
-    """
-    Clean and normalize ms output.
-
-    Args:
-        ms_output (str): Path to the raw ms output file.
-        sequence_length (int, optional): If set, floating-point positions are scaled 
-            to integer positions (0..sequence_length). 
-        decimals (int, optional): If set, positions are rounded to this many decimal places.
-        factor (float): Branch length scaling factor.
-
-    Returns:
-        list[str]: Cleaned ms output lines.
-    """
-    lines = ms_output.splitlines()
-
-    new_lines = []
-    i = 0
-    while i < len(lines):
-        line = lines[i].strip()
-
-        # Handle segsites + positions + haplotypes
-        if line.startswith("segsites:"):
-            segsites = int(line.split()[1])
-
-            if segsites == 0:
-                new_lines.append(line)
-                i += 1
-                continue
-
-            # --- positions line ---
-            pos_line = lines[i + 1].strip()
-            assert pos_line.startswith("positions:")
-            positions = list(map(float, pos_line.split()[1:]))
-
-            # --- haplotype matrix ---
-            haplotypes = []
-            j = i + 2
-            while j < len(lines):
-                hapline = lines[j].strip()
-                if not hapline or not set(hapline).issubset({"0", "1"}):
-                    break
-                haplotypes.append(list(map(int, hapline)))
-                j += 1
-            haplotypes = list(map(list, haplotypes))  # make mutable
-
-            # print(f"Len of haploytypes: {len(haplotypes)}")
-
-            # --- normalize positions ---
-            norm_positions = []
-            for p in positions:
-                if sequence_length is not None:
-                    # scale to discrete int
-                    p = int(round(p * sequence_length))
-                if decimals is not None and sequence_length is None:
-                    p = round(p, decimals)
-                norm_positions.append(p)
-
-            # --- merge duplicates---
-            merged_positions = [norm_positions[0]]
-            merged_haplotypes = [[h[0]] for h in haplotypes]  # start with first column
-
-            for idx in range(1, len(norm_positions)):
-                p = norm_positions[idx]
-                if p == merged_positions[-1]:
-                    # same as previous -> OR the bits into last column
-                    for k in range(len(haplotypes)):
-                        merged_haplotypes[k][-1] |= haplotypes[k][idx]
-                else:
-                    # new unique position -> add new column
-                    merged_positions.append(p)
-                    for k in range(len(haplotypes)):
-                        merged_haplotypes[k].append(haplotypes[k][idx])
-
-            # write new segsites + positions + haplotypes
-            new_lines.append(f"segsites: {len(merged_positions)}")
-            pos_str = " ".join(map(str, merged_positions))
-            new_lines.append("positions: " + pos_str)
-            for row in merged_haplotypes:
-                new_lines.append("".join(map(str, row)))
-
-            i = j
-            continue
-
-        # Handle tree lines with branch lengths
-        elif "(" in line and ":" in line:
-            def scale_branch(m):
-                return f":{float(m.group(1)) * factor:.6g}"
-            scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, line)
-            new_lines.append(scaled_line)
-
-        else:
-            new_lines.append(line)
-
-        i += 1
-
-    return "\n".join(new_lines) + "\n"
     
 
-def run_ms_simulation(config, output_file=None):
-    default_ms_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../bin/ms.exe"))
-    ms_path = config.get("ms_path", default_ms_path)
-    if not ms_path or not os.path.exists(ms_path):
-        raise FileNotFoundError(f"ms executable not found at {ms_path}. Please check the path in config.")
+def run_ms_simulation(config=None, command=None, output_file=None):
+    """
+    Run an ms simulation either from a config dictionary or from a direct command string.
 
-    command = build_ms_command(config)
+    Parameters
+    ----------
+    config : dict, optional
+        Configuration dictionary used to build the ms command.
+    command : str, optional
+        Direct ms command to run (overrides config if provided).
+    output_file : str, optional
+        Path to the file where ms output will be written.
+
+    Returns
+    -------
+    str
+        Path to the output file containing the ms results.
+    """
+    default_ms_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../bin/ms.exe"))
+    
+    if config is not None:
+        ms_path = config.get("ms_path", default_ms_path)
+        if not ms_path or not os.path.exists(ms_path):
+            raise FileNotFoundError(f"ms executable not found at {ms_path}. Please check the path in config.")
+
+        command = build_ms_command(config)
+        cmd_parts = command.split()
+        cmd_parts[0] = ms_path
+    elif command is not None:
+        # Command mode: user provides full ms command
+        ms_path = default_ms_path  # assume ms.exe is in the same place
+        cmd_parts = command.split()
+        first_token = os.path.basename(cmd_parts[0])  # strip path
+        if first_token != "ms" and first_token != "ms.exe":
+            # Prepend ms path so the command can run
+            cmd_parts.insert(0, ms_path)
+    else:
+        raise ValueError("Either 'config' or 'command' must be provided.")
 
     if output_file is None:
-        output_file = config.get("ms_output_file", "results/ms/output.txt")
+        if config:
+            output_file = config.get("ms_output_file", "results/ms/output.txt")
+        else:
+            output_file = "results/ms/output.txt"
 
-    print(f"🚀 Running ms: {command}")
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    print(f"🚀 Running ms: {' '.join(cmd_parts)}")
 
-    cmd_parts = command.split()
-    cmd_parts[0] = ms_path
-
+    # Run ms
     result = subprocess.run(cmd_parts, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(f"ms failed:\n{result.stderr}")
 
+    # Clean and write result
     with open(output_file, "w") as f:
-        cleaned_result = clean_output(
-            ms_output = result.stdout, 
-            sequence_length = config.get("sequence_length", None),
-            factor = get_rate_multiplier(config)
-            )
-        f.write(cleaned_result)
+        f.write(result.stdout)
 
     return output_file
