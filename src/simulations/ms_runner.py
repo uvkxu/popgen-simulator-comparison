@@ -92,14 +92,14 @@ def set_initial_migration_rates(config, activity, pop_index, num_populations):
 
     # Add global default migration rate (if specified).
     if "default_migration_rate" in config:
-        rate = config["default_migration_rate"] * get_rate_scaler(config) * (num_populations - 1)
+        rate = config["default_migration_rate"] * get_rate_multiplier(config) * (num_populations - 1)
         migration_cmd += f" {rate:.8g}"
 
     # Add individual migration rates (only between active populations).
     for mig in config.get("migration_rates", []):
         dest, source = mig["dest"], mig["source"]
         if activity[dest] and activity[source]:
-            rate = mig["rate"] * get_rate_scaler(config)
+            rate = mig["rate"] * get_rate_multiplier(config)
             migration_cmd += f" -m {pop_index[dest]} {pop_index[source]} {rate:.8g}"
 
     return migration_cmd
@@ -129,7 +129,7 @@ def set_initial_growth_rates(config, activity, pop_index):
     # where
     #   α = growth rate scaled by 1 / (4*N_e)
 
-    default_growth_rate = config.get("default_growth_rate", 0.0) * get_rate_scaler(config)
+    default_growth_rate = config.get("default_growth_rate", 0.0) * get_rate_multiplier(config)
     growth_rate_cmd = ""
     growth_rate_map = {}
 
@@ -146,7 +146,7 @@ def set_initial_growth_rates(config, activity, pop_index):
     for pop in active_populations:
         pop_name = pop["name"]
         if "growth_rate" in pop:
-            rate = pop["growth_rate"] * get_rate_scaler(config)
+            rate = pop["growth_rate"] * get_rate_multiplier(config)
             growth_rate_map[pop_name] = rate
             growth_rate_cmd += f" -g {pop_index[pop_name]} {rate:.8g}"
         elif default_growth_rate != 0:
@@ -297,7 +297,7 @@ def handle_migration_rate_change_event(event, config, activity, pop_index):
     migration_change_cmd = ""
 
     t = event["time"] * get_rate_scaler(config)
-    rate = event["rate"] * get_rate_scaler(config)
+    rate = event["rate"] * get_rate_multiplier(config)
 
     # Case: global migration rate change (all active population pairs)
     if "dest" not in event or "source" not in event:
@@ -331,7 +331,7 @@ def handle_growth_rate_change_event(event, config, activity, pop_index, growth_r
     #   -eg t i r     # set growth rate of population i to r at time t
     #   -eG t r       # set growth rate globally (for single-population models)
     t = event["time"] * get_rate_scaler(config)
-    rate = event["rate"] * get_rate_scaler(config)
+    rate = event["rate"] * get_rate_multiplier(config)
 
     # Apply growth rate globally if no population is specified
     if event.get("population") in (None, "all"):
@@ -506,7 +506,7 @@ def set_ancestral_growth_rate_at_split(config, pop_index, time, population):
 
     growth_rate = [pop.get("growth_rate", default_growth_rate) for pop in populations if pop["name"] == population][0]
 
-    adjusted_growth_rate = growth_rate * get_rate_scaler(config)
+    adjusted_growth_rate = growth_rate * get_rate_multiplier(config)
 
     return f" -eg {time:.8g} {pop_index[population]} {adjusted_growth_rate:.8g}"
 
@@ -521,7 +521,7 @@ def set_ancestral_migration_rates_at_split(config, activity, pop_index, time, po
         dest, source = mig["dest"], mig["source"]
 
         if (dest == population or source == population) and activity[dest] and activity[source]:
-            rate = mig["rate"] * get_rate_scaler(config)
+            rate = mig["rate"] * get_rate_multiplier(config)
             migration_cmd += f" -em {time:.8g} {pop_index[dest]} {pop_index[source]} {rate:.8g}"
 
             handled_migrations.add((dest, source))
@@ -598,7 +598,7 @@ def get_rate_multiplier(config):
 def get_size_scaler(config):
     return 1/ get_effective_population_size(config)
 
-def build_ms_command(config):
+def build_command(config):
     total_sample_size = sum(p.get("sample_size", 0) for p in config.get("populations", [])) \
                         if "populations" in config else int(config["sample_size"])
     num_replicates = int(config.get("num_replicates", 1))
@@ -610,15 +610,15 @@ def build_ms_command(config):
 
     # Mutation
     theta = get_rate_multiplier(config) * mut_rate * seq_length
-    cmd = f"ms {total_sample_size} {num_replicates} -t {theta:.8g}"
+    cmd = f" {total_sample_size} {num_replicates} -t {theta:.8g}"
 
     # Tree output
     if config.get("save_trees", True):
         cmd += " -T"
 
     # Set decimal places for site positions based on sequence length
-    n_digits = int(np.ceil(np.log10(seq_length)))
-    cmd += f" -p {n_digits}"
+    # n_digits = int(np.ceil(np.log10(seq_length)))
+    # cmd += f" -p {n_digits}"
 
     # Recombination
     cmd += set_recombination(config)

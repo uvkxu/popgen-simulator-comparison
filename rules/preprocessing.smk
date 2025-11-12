@@ -35,7 +35,7 @@ rule compute_allelstats_config:
         "../envs/allelstats-env.yaml"
     shell:
         """
-        python src/preprocessing/calc_all_allelstatistics.py {RAW_DATA_DIR}/{wildcards.config} {ALLELSTATS_DATA_DIR}/{wildcards.config} --input_config {CONFIG_DIR}/{wildcards.config}.yaml
+        python src/preprocessing/calc_all_allelstatistics.py {RAW_DATA_DIR}/{wildcards.config} {ALLELSTATS_DATA_DIR}/{wildcards.config}
         touch {output.dummy}
         """
 

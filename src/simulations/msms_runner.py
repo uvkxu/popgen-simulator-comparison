@@ -41,7 +41,7 @@ def run_msms_simulation(config=None, command=None, output_file=None, run_msms_ms
         # Ensure command starts with msms path
         cmd_parts = command.split()
         first_token = os.path.basename(cmd_parts[0])
-        if first_token != "msms" or first_token != "msms.exe":
+        if first_token != "msms" and first_token != "msms.exe":
             cmd_parts.insert(0, msms_path)
     else:
         raise ValueError("Either 'config' or 'command' must be provided.")

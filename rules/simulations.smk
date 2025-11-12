@@ -1,6 +1,6 @@
 include: "../snakemake_vars.py"
 
-rule run_one_config_all_simulations:
+rule run_one_config_all_simulations_demes:
     input:
        lambda wildcards: f"{CONFIG_DIR}/{wildcards.config}.yaml"
     output:
@@ -9,10 +9,9 @@ rule run_one_config_all_simulations:
         "../envs/simulations-env.yaml"
     shell:
         """
-        python src/simulations/run_all.py --configs {wildcards.config}.yaml --reps {REPS} --rec_reps {REC_REPS}
+        python src/simulations/demes_run_all.py --configs {wildcards.config}.yaml --reps {REPS} --rec_reps {REC_REPS} --cmddir {CMD_DIR} --cmd_variables variables.txt
         touch {output.dummy}
         """
-
 
 rule run_commands_variables:
     input:

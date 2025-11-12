@@ -14,3 +14,4 @@ dependencies:
   - r-e1071
   - r-igraph
   - r-dplyr
+  - r-yaml

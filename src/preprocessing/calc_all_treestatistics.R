@@ -76,6 +76,7 @@ source("src/preprocessing/extra_features.R")
 library(ape)
 library(treestats)
 library(igraph)
+library(yaml)
 
 calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
 
@@ -314,11 +315,10 @@ calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
   } else {
         stats <- list()
 
-        stats$crown_age_uw          <- try_stat(phylo, treestats::crown_age)
         stats$tree_height_uw        <- try_stat(phylo, treestats::tree_height)
         stats$pigot_rho_uw          <- try_stat(phylo, treestats::pigot_rho)
 
-        stats$phylogenetic_div_uw   <- try_stat(phylo, treestats::phylogenetic_diversity)
+        stats$num_branches   <- try_stat(phylo, treestats::phylogenetic_diversity)
 
         temp_stats <- tryCatch(expr = {treestats::laplacian_spectrum(phylo) }, #nolint
                                 error = function(e) {return(NA) }) #nolint
@@ -439,156 +439,158 @@ try_stat <- function(phylo,
 }
 
 
-extract_sequence_length <- function(lines) {
-  # Split content into replicates by //
-  blocks <- strsplit(paste(lines, collapse = "\n"), "//")[[1]]
-  block_sums <- c()
-
-  for (block in blocks) {
-    # Extract only the numbers inside square brackets
-    matches <- regmatches(block, gregexpr("\\[(\\d+)\\]", block))[[1]]
-    if (length(matches) > 0) {
-      # Remove brackets and convert to numeric
-      nums <- as.numeric(gsub("\\[|\\]", "", matches))
-      block_sums <- c(block_sums, sum(nums))
-    }
-  }
-
-  if (length(block_sums) == 0) return(NA_real_)
-
-  # If all replicates have same length, just return one
-  if (length(unique(block_sums)) == 1) {
-    return(block_sums[1])
-  } else {
-    warning("Different sequence lengths detected between replicates.")
-    return(block_sums)
-  }
-}
-
-
 # --- Argument parsing ---
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) < 2) stop("Usage: Rscript run_treestats_clean.R <input_txt|input_dir> <output_dir>")
+if (length(args) < 2) stop("Usage: Rscript run_treestats_clean.R <input_dir> <output_dir>")
 
-input_path <- args[1]
+input_dir <- args[1]
 output_dir <- args[2]
 
-if (!file.exists(input_path)) stop("Input file/directory does not exist: ", input_path)
+if (!dir.exists(input_dir)) stop("Input directory does not exist: ", input_dir)
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-# --- Collect input files recursively ---
-if (dir.exists(input_path)) {
-  txt_files <- list.files(input_path, pattern = "\\.txt$", full.names = TRUE, recursive = TRUE)
-  if (length(txt_files) == 0) stop("No .txt files found in directory: ", input_path)
-} else {
-  txt_files <- input_path
-}
+# --- Durchsuche Ordner nach YAML-Dateien ---
+yaml_files <- list.files(input_dir, pattern = "\\.ya?ml$", full.names = TRUE, recursive = TRUE)
+if (length(yaml_files) == 0) stop("No metadata.yaml files found in input directory: ", input_dir)
 
-# --- Main file processor ---
-process_file <- function(infile, input_base, output_base) {
-  rel_path <- sub(paste0("^", normalizePath(input_base, winslash = "/"), "/?"), "", normalizePath(infile, winslash = "/"))
-  outfile <- file.path(output_base, paste0(tools::file_path_sans_ext(rel_path), "_stats.csv"))
-  dir.create(dirname(outfile), recursive = TRUE, showWarnings = FALSE)
+# --- Hauptschleife über alle metadata.yaml-Dateien ---
+# --- Hauptschleife über alle metadata.yaml-Dateien ---
+for (yaml_path in yaml_files) {
+  cat("📄 Processing metadata:", yaml_path, "\n")
+  metadata <- yaml::read_yaml(yaml_path)
 
-  lines <- readLines(infile, warn = FALSE)
-
-  has_recomb <- any(grepl("^\\[\\d+\\]", lines))
-  if (has_recomb) {
-    cat("🧬 Recombination detected in", infile, "\n")
-    seq_length <- extract_sequence_length(lines)
+  # Überprüfen, ob erforderliche Felder vorhanden sind
+  required <- c("sequence_length", "cleaned_outputs")
+  missing <- setdiff(required, names(metadata))
+  if (length(missing) > 0) {
+    warning("⚠️ Missing fields in ", yaml_path, ": ", paste(missing, collapse = ", "))
+    next
   }
 
-  # --- filter only valid Newick lines ---
-  is_tree_line <- grepl("\\(", lines) & grepl(";+", lines) &
-    !grepl("^\\s*//", lines) &
-    !grepl("^\\s*segsites", lines, ignore.case = TRUE) &
-    !grepl("^\\s*positions", lines, ignore.case = TRUE)
+  seq_length <- metadata$sequence_length
+  cleaned_outputs <- metadata$cleaned_outputs
+  has_recomb <- "recombination_rate" %in% names(metadata) &&
+               !is.null(metadata$recombination_rate) &&
+               metadata$recombination_rate != 0
 
-  tree_lines <- trimws(sub(";+$", ";", lines[is_tree_line]))
-  results_list <- list()
-  skipped <- 0L
+  yaml_dir <- dirname(yaml_path)
 
-  for (i in seq_along(tree_lines)) {
-    txt <- tree_lines[i]
-    tr <- tryCatch(ape::read.tree(text = txt), error = function(e) e)
-    if (inherits(tr, "error")) { 
-      skipped <- skipped + 1L
-      next 
-    }
+  # --- Alle txt-Dateien rekursiv im Ordner der YAML-Datei finden ---
+  txt_files <- list.files(yaml_dir, pattern = "\\.txt$", 
+                          full.names = TRUE, recursive = TRUE)
 
-    # --- Create unweighted tree ---
-    tr_unweighted <- tr
-    tr_unweighted$edge.length <- rep(1, nrow(tr_unweighted$edge))
+  if (length(txt_files) == 0) {
+    warning("⚠️ No _cleaned_output.txt files found in ", yaml_dir)
+    next
+  }
 
-    # --- Weighted-Stats ---
-    tree_stats <- tryCatch(
-      calculate_all_treestats(tr, normalize = FALSE, weighted = TRUE),
-      error = function(e) NULL
-    )
+  # --- Mapping für Tree Features erzeugen ---
+  tree_features_mapping <- list()
 
-    # --- Unweighted-Stats ---
-    tree_stats_unweighted <- tryCatch(
-      calculate_all_treestats(tr_unweighted, normalize = FALSE, weighted = FALSE),
-      error = function(e) NULL
-    )
-
-    # Skip this tree if computation failed
-    if (is.null(tree_stats) || is.null(tree_stats_unweighted)) {
-      skipped <- skipped + 1L
+  # --- Für jede txt-Datei Tree-Features berechnen ---
+  for (infile in txt_files) {
+    sim_name <- names(cleaned_outputs)[basename(unlist(cleaned_outputs)) == basename(infile)]
+  
+    if (length(sim_name) == 0) {
+      warning("⚠️ No matching cleaned_output key found for ", infile)
       next
+    } else if (length(sim_name) > 1) {
+      warning("⚠️ Multiple cleaned_outputs match txt file ", infile, " → using first match")
+      sim_name <- sim_name[1]
+    }
+    
+    sim_name <- sim_name[1]
+    
+    rel_path <- dirname(infile)
+    rel_path <- gsub(paste0("^", yaml_dir), "", rel_path)   # entferne yaml_dir prefix
+    rel_path <- gsub("^/|^\\\\", "", rel_path)              # entferne führenden slash/backslash
+
+    # output Ordner für diese txt-Datei
+    rel_out_dir <- file.path(output_dir, basename(yaml_dir), rel_path)
+    dir.create(rel_out_dir, recursive = TRUE, showWarnings = FALSE)
+
+    outfile <- file.path(rel_out_dir, paste0(sim_name, "_tree_features.csv"))
+
+    cat("🌲 Calculating tree statistics for", sim_name, "→", outfile, "\n")
+
+    lines <- readLines(infile, warn = FALSE)
+
+    # --- Filter only valid Newick lines ---
+    is_tree_line <- grepl("\\(", lines) & grepl(";+", lines) &
+      !grepl("^\\s*//", lines) &
+      !grepl("^\\s*segsites", lines, ignore.case = TRUE) &
+      !grepl("^\\s*positions", lines, ignore.case = TRUE)
+
+    tree_lines <- trimws(sub(";+$", ";", lines[is_tree_line]))
+    results_list <- list()
+    skipped <- 0L
+
+    for (i in seq_along(tree_lines)) {
+      txt <- tree_lines[i]
+      tr <- tryCatch(ape::read.tree(text = txt), error = function(e) e)
+      if (inherits(tr, "error")) { 
+        skipped <- skipped + 1L
+        next 
+      }
+
+      tr_unweighted <- tr
+      tr_unweighted$edge.length <- rep(1, nrow(tr_unweighted$edge))
+
+      tree_stats <- tryCatch(
+        calculate_all_treestats(tr, normalize = FALSE, weighted = TRUE),
+        error = function(e) NULL
+      )
+
+      tree_stats_unweighted <- tryCatch(
+        calculate_all_treestats(tr_unweighted, normalize = FALSE, weighted = FALSE),
+        error = function(e) NULL
+      )
+
+      if (is.null(tree_stats) || is.null(tree_stats_unweighted)) {
+        skipped <- skipped + 1L
+        next
+      }
+
+      if (has_recomb) {
+        segment_length <- as.numeric(gsub("^\\[(\\d+)\\].*$", "\\1", txt))
+
+        tree_stats_scaled <- as.data.frame(as.list(
+          setNames(tree_stats, paste0(names(tree_stats), "_scaled"))
+        ))
+        tree_stats_unweighted_scaled <- as.data.frame(as.list(
+          setNames(lapply(tree_stats_unweighted, function(x) x * segment_length),
+                   paste0(names(tree_stats_unweighted), "_scaled"))
+        ))
+
+        if (!is.data.frame(tree_stats)) tree_stats <- as.data.frame(as.list(tree_stats))
+        if (!is.data.frame(tree_stats_unweighted)) tree_stats_unweighted <- as.data.frame(as.list(tree_stats_unweighted))
+
+        combined <- cbind(tree_stats, tree_stats_unweighted, tree_stats_scaled, tree_stats_unweighted_scaled)
+        combined$segment_length <- segment_length / seq_length
+      } else {
+        if (!is.data.frame(tree_stats)) tree_stats <- as.data.frame(as.list(tree_stats))
+        if (!is.data.frame(tree_stats_unweighted)) tree_stats_unweighted <- as.data.frame(as.list(tree_stats_unweighted))
+        combined <- cbind(tree_stats, tree_stats_unweighted)
+      }
+
+      results_list[[length(results_list) + 1L]] <- combined
     }
 
-    if (has_recomb) {
-      segment_length <- as.numeric(gsub("^\\[(\\d+)\\].*$", "\\1", txt))
-
-      # tree_stats_scaled erstellen (außer segment_length)
-      tree_stats_scaled <- lapply(names(tree_stats), function(k) {
-          return(tree_stats[[k]])
-      })
-      names(tree_stats_scaled) <- paste0(names(tree_stats), "_scaled")
-
-      # tree_stats_unweighted_scaled erstellen (außer segment_length)
-      tree_stats_unweighted_scaled <- lapply(names(tree_stats_unweighted), function(k) {
-          return(tree_stats_unweighted[[k]] * segment_length)
-      })
-      names(tree_stats_unweighted_scaled) <- paste0(names(tree_stats_unweighted), "_scaled")
-
-      # In DataFrames umwandeln
-      tree_stats_scaled <- as.data.frame(as.list(tree_stats_scaled))
-      tree_stats_unweighted_scaled <- as.data.frame(as.list(tree_stats_unweighted_scaled))
-
-      if (!is.data.frame(tree_stats)) tree_stats <- as.data.frame(as.list(tree_stats))
-      if (!is.data.frame(tree_stats_unweighted)) tree_stats_unweighted <- as.data.frame(as.list(tree_stats_unweighted))
-
-      # Alles zusammenführen
-      combined <- cbind(tree_stats, tree_stats_unweighted, tree_stats_scaled, tree_stats_unweighted_scaled)
-
-      # segment_length normalisieren
-      combined$segment_length <- segment_length / seq_length
+    if (length(results_list) == 0L) {
+      warning("⚠️ No trees processed successfully in ", infile)
     } else {
-      # --- ensure both results are data frames ---
-      if (!is.data.frame(tree_stats)) tree_stats <- as.data.frame(as.list(tree_stats))
-      if (!is.data.frame(tree_stats_unweighted)) tree_stats_unweighted <- as.data.frame(as.list(tree_stats_unweighted))
-      
-      # --- combine both results into one row ---
-      combined <- cbind(tree_stats, tree_stats_unweighted)
+      stats_df <- dplyr::bind_rows(results_list)
+      write.csv(stats_df, file = outfile, row.names = FALSE)
+      cat(sprintf("✅ Done: %s (%d trees processed, %d skipped)\n", outfile, length(results_list), skipped))
+      tree_features_mapping[[sim_name]] <- basename(outfile)
     }
-
-    # --- save ---
-    results_list[[length(results_list) + 1L]] <- combined
   }
 
-  if (length(results_list) == 0L) {
-    warning("⚠️ No trees processed successfully in ", infile)
-  } else {
-    stats_df <- dplyr::bind_rows(results_list)  # rbind.fill aus plyr, falls Spalten mal fehlen
-    write.csv(stats_df, file = outfile, row.names = FALSE)
-    cat(sprintf("✅ Done: %s -> %s (processed %d trees, skipped %d)\n", infile, outfile, length(results_list), skipped))
-  }
-}
+  # --- Metadata erweitern und im Output-Ordner speichern ---
+  metadata_out <- metadata
+  metadata_out$tree_features <- tree_features_mapping
 
-
-# --- Process all files ---
-for (f in txt_files) {
-  process_file(f, input_path, output_dir)
+  yaml_outfile <- file.path(output_dir, basename(yaml_dir), "metadata.yaml")
+  yaml::write_yaml(metadata_out, yaml_outfile)
+  cat("💾 Wrote extended metadata to", yaml_outfile, "\n")
 }
