@@ -598,7 +598,7 @@ def get_rate_multiplier(config):
 def get_size_scaler(config):
     return 1/ get_effective_population_size(config)
 
-def build_command(config):
+def build_ms_command(config):
     total_sample_size = sum(p.get("sample_size", 0) for p in config.get("populations", [])) \
                         if "populations" in config else int(config["sample_size"])
     num_replicates = int(config.get("num_replicates", 1))
@@ -610,7 +610,7 @@ def build_command(config):
 
     # Mutation
     theta = get_rate_multiplier(config) * mut_rate * seq_length
-    cmd = f" {total_sample_size} {num_replicates} -t {theta:.8g}"
+    cmd = f"ms {total_sample_size} {num_replicates} -t {theta:.8g}"
 
     # Tree output
     if config.get("save_trees", True):
@@ -618,7 +618,7 @@ def build_command(config):
 
     # Set decimal places for site positions based on sequence length
     # n_digits = int(np.ceil(np.log10(seq_length)))
-    # cmd += f" -p {n_digits}"
+    cmd += f" -p {5}"
 
     # Recombination
     cmd += set_recombination(config)

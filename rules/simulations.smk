@@ -9,19 +9,19 @@ rule run_one_config_all_simulations_demes:
         "../envs/simulations-env.yaml"
     shell:
         """
-        python src/simulations/demes_run_all.py --configs {wildcards.config}.yaml --reps {REPS} --rec_reps {REC_REPS} --cmddir {CMD_DIR} --cmd_variables variables.txt
+        python src/simulations/demes_run_all.py --config-dir {CONFIG_DIR}/ --configs {wildcards.config}.yaml --reps {REPS} --rec_reps {REC_REPS} --cmddir {CMD_DIR} --cmd_variables variables.txt
         touch {output.dummy}
         """
 
-rule run_commands_variables:
+rule run_one_config_all_simulations_own:
     input:
-        variables = f"{CMD_DIR}/variables.txt"
+       lambda wildcards: f"{OWN_CONFIG_DIR}/{wildcards.config}.yaml"
     output:
-        dummy = f"{RAW_DATA_DIR}/{CMD_SUBDIR}/.done"
+        dummy=f"{RAW_DATA_DIR}/{{config}}/.done"
     conda:
         "../envs/simulations-env.yaml"
     shell:
         """
-        python src/simulations/run_all.py --cmddir {CMD_DIR} --cmd_variables variables.txt --outdir {RAW_DATA_DIR}/{CMD_SUBDIR}
+        python src/simulations/run_all.py --config-dir {OWN_CONFIG_DIR}/ --configs {wildcards.config}.yaml --reps {REPS} --rec_reps {REC_REPS}
         touch {output.dummy}
         """

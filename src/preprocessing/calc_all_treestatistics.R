@@ -456,7 +456,6 @@ if (length(yaml_files) == 0) stop("No metadata.yaml files found in input directo
 # --- Hauptschleife über alle metadata.yaml-Dateien ---
 # --- Hauptschleife über alle metadata.yaml-Dateien ---
 for (yaml_path in yaml_files) {
-  cat("📄 Processing metadata:", yaml_path, "\n")
   metadata <- yaml::read_yaml(yaml_path)
 
   # Überprüfen, ob erforderliche Felder vorhanden sind
@@ -510,8 +509,6 @@ for (yaml_path in yaml_files) {
     dir.create(rel_out_dir, recursive = TRUE, showWarnings = FALSE)
 
     outfile <- file.path(rel_out_dir, paste0(sim_name, "_tree_features.csv"))
-
-    cat("🌲 Calculating tree statistics for", sim_name, "→", outfile, "\n")
 
     lines <- readLines(infile, warn = FALSE)
 

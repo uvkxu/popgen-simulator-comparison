@@ -76,7 +76,7 @@ demography_events:
     time: 12
     derived: ADMIX
     ancestral: [AFR, EUR, EAS]
-    proportions: [0.166666667, 0.333333333333, 0.5]
+    proportions: [0.167, 0.333, 0.5]
   
   - type: population_split
     time: 920

@@ -127,7 +127,8 @@ def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, simu
 
     base_run_dir = Path(output_dir)
     base_run_dir.mkdir(parents=True, exist_ok=True)
-    reps = rec_reps if rec_reps and config.get("recombination_rate", 0) != 0 else reps
+    if config.get("recombination_rate", 0) != 0 and rec_reps:
+        reps = rec_reps
 
     # Variable combinations
     if variable_file:
