@@ -15,3 +15,5 @@ dependencies:
   - r-igraph
   - r-dplyr
   - r-yaml
+  - r-nloptr
+  - gfortran

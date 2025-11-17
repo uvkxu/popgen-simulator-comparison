@@ -1,76 +1,3 @@
-#' Apply all available tree statistics to a single tree
-#' @param phylo phylo object
-#' @param normalize if set to TRUE, results are normalized (if possible) under
-#' either the  Yule expectation (if available), or the number of tips
-#' @return List with statistics
-#' @export
-#' @description this function applies all tree statistics available in
-#' this package to a
-#' single tree, being:
-#' \itemize{
-#'   \item Sackin
-#'   \item Colless
-#'   \item corrected Colless
-#'   \item quadratic Colless
-#'   \item Aldous' beta statistic
-#'   \item Blum
-#'   \item crown age
-#'   \item tree height
-#'   \item Pigot's rho
-#'   \item number of lineages
-#'   \item phylogenetic diversity
-#'   \item avgLadder index
-#'   \item cherries
-#'   \item double cherries
-#'   \item ILnumber
-#'   \item stairs
-#'   \item stairs2
-#'   \item laplacian spectrum
-#'   \item B1
-#'   \item B2
-#'   \item area per pair (aPP)
-#'   \item average leaf depth (aLD)
-#'   \item I statistic
-#'   \item ewColless
-#'   \item max Delta Width (maxDelW)
-#'   \item maximum of Depth
-#'   \item maximum Width
-#'   \item Rogers
-#'   \item total Cophenetic distance
-#'   \item symmetry Nodes
-#'   \item mean of pairwise distance (mpd)
-#'   \item variance of pairwise distance (vpd)
-#'   \item Phylogenetic Species Variability (psv)
-#'   \item mean nearest taxon distance (mntd)
-#'   \item J statistic of entropy
-#'   \item rquartet index
-#'   \item Wiener index
-#'   \item max betweenness
-#'   \item max closeness
-#'   \item diameter, without branch lenghts
-#'   \item maximum eigen vector value
-#'   \item mean branch length
-#'   \item variance of branch length
-#'   \item mean external branch length
-#'   \item variance of external branch length
-#'   \item mean internal branch length
-#'   \item variance of internal branch length
-#'   \item number of imbalancing steps
-#'   \item j_one statistic
-#'   \item treeness statistic
-#' }
-#'
-#' For the Laplacian spectrum properties, four properties of the eigenvalue
-#' distribution are returned: 1) asymmetry, 2) peakedness, 3) log(principal
-#' eigenvalue) and 4) eigengap.
-#' Please notice that for some very small or very large trees, some of the
-#' statistics can not be calculated. The function will report an NA for this
-#' statistic, but will not break, to facilitate batch analysis of large numbers
-#' of trees.
-#' @rawNamespace import(Rcpp)
-#' @rawNamespace import(nloptr)
-#' @rawNamespace useDynLib(treestats)
-
 source("src/preprocessing/extra_features.R")
 
 library(ape)
@@ -459,7 +386,7 @@ for (yaml_path in yaml_files) {
   metadata <- yaml::read_yaml(yaml_path)
 
   # Überprüfen, ob erforderliche Felder vorhanden sind
-  required <- c("sequence_length", "cleaned_outputs")
+  required <- c("sequence_length")
   missing <- setdiff(required, names(metadata))
   if (length(missing) > 0) {
     warning("⚠️ Missing fields in ", yaml_path, ": ", paste(missing, collapse = ", "))
@@ -467,7 +394,17 @@ for (yaml_path in yaml_files) {
   }
 
   seq_length <- metadata$sequence_length
-  cleaned_outputs <- metadata$cleaned_outputs
+
+  # cleaned_outputs aus entweder "cleaned_outputs" oder "simulator_outputs"
+  if ("cleaned_outputs" %in% names(metadata)) {
+    cleaned_outputs <- metadata$cleaned_outputs
+  } else if ("simulator_outputs" %in% names(metadata)) {
+    cleaned_outputs <- metadata$simulator_outputs
+  } else {
+    warning("⚠️ Neither 'cleaned_outputs' nor 'simulator_outputs' found in ", yaml_path)
+    next
+  }
+
   has_recomb <- "recombination_rate" %in% names(metadata) &&
                !is.null(metadata$recombination_rate) &&
                metadata$recombination_rate != 0
@@ -500,12 +437,9 @@ for (yaml_path in yaml_files) {
     
     sim_name <- sim_name[1]
     
-    rel_path <- dirname(infile)
-    rel_path <- gsub(paste0("^", yaml_dir), "", rel_path)   # entferne yaml_dir prefix
-    rel_path <- gsub("^/|^\\\\", "", rel_path)              # entferne führenden slash/backslash
-
-    # output Ordner für diese txt-Datei
-    rel_out_dir <- file.path(output_dir, basename(yaml_dir), rel_path)
+    # rel_path relativ zum YAML-Ordner
+    rel_path <- sub(paste0("^", normalizePath(input_dir), "/?"), "", normalizePath(dirname(infile)))
+    rel_out_dir <- file.path(output_dir, rel_path)  # kein basename(yaml_dir) extra
     dir.create(rel_out_dir, recursive = TRUE, showWarnings = FALSE)
 
     outfile <- file.path(rel_out_dir, paste0(sim_name, "_tree_features.csv"))
@@ -587,7 +521,19 @@ for (yaml_path in yaml_files) {
   metadata_out <- metadata
   metadata_out$tree_features <- tree_features_mapping
 
-  yaml_outfile <- file.path(output_dir, basename(yaml_dir), "metadata.yaml")
+  # relativer Pfad der YAML-Datei zum input_dir
+  rel_path <- sub(paste0("^", normalizePath(input_dir), "/?"), "", normalizePath(yaml_path))
+  # rel_path z.B.: "MallardBlackDuck-3/metadata.yaml"
+
+  # Zielverzeichnis im output_dir erstellen
+  yaml_out_dir <- file.path(output_dir, dirname(rel_path))
+  dir.create(yaml_out_dir, recursive = TRUE, showWarnings = FALSE)
+
+  # Ausgabepfad für die YAML-Datei
+  yaml_outfile <- file.path(yaml_out_dir, basename(yaml_path))
+
+  # Schreiben
   yaml::write_yaml(metadata_out, yaml_outfile)
   cat("💾 Wrote extended metadata to", yaml_outfile, "\n")
+
 }

@@ -46,6 +46,7 @@ def run_all_simulations(config_path, output_dir, simulators=SIMULATORS, reps=1, 
         for sim in simulators
     }
     metadata = {
+                "simulators": simulators,
                 "sequence_length": config.get("sequence_length"),
                 "population_size": get_effective_population_size(config),
                 "num_replicates": config.get("num_replicates"),

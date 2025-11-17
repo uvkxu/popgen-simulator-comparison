@@ -4,6 +4,12 @@ import os
 from pathlib import Path
 import argparse
 import math
+import numpy as np
+import sys
+
+UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(UTILS_ROOT)
+from utils.io_helpers import detect_simulator_from_yaml
 
 def clean_sim_output(
     sim_output,
@@ -59,20 +65,21 @@ def clean_sim_output(
 
             haplotypes = list(map(list, haplotypes))  # make mutable
 
-            # --- normalize positions ---
-            norm_positions = []
-            for p in positions:
-                # Prüfen, ob p bereits effektiv ganzzahlig ist
-                if abs(p - round(p)) < 1e-9:  # also p ~ integer
-                    norm_positions.append(int(round(p)))
-                    continue
+            all_integer_like = np.all(np.abs(positions - np.round(positions)) < 1e-9)
 
-                if position_decimals is not None:
-                    p = round(p, position_decimals)
-                p = int(round(p * sequence_length))
-                if p == sequence_length:
-                    p = sequence_length - 1
-                norm_positions.append(p)
+            norm_positions = []
+            if all_integer_like:
+                # alle Positionen schon ganzzahlig → direkt int casten
+                norm_positions = [int(round(p)) for p in positions]
+            else:
+                # normale Skalierung
+                for p in positions:
+                    if position_decimals is not None:
+                        p = round(p, position_decimals)
+                    p = int(round(p * sequence_length))
+                    if p == sequence_length:
+                        p = sequence_length - 1
+                    norm_positions.append(p)
 
             # --- merge duplicates ---
             merged_positions = [norm_positions[0]]

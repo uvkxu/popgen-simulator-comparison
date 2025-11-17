@@ -17,12 +17,12 @@ rule compute_top_features_treestats_single_config_no_zero_branches:
     input:
         lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/.done"
     output:
-        dummy=f"results/top_features/treestats_zero/{{config}}/.done"
+        dummy=f"{TREE_ZEROB_TOPFEATURES_DIR}/{{config}}/.done"
     conda:
         "../envs/models-env.yaml"
     shell:
         """
-        python src/models/get_top_features.py {TREE_FEATURES_DIR}/{wildcards.config} results/top_features/treestats_zero/{wildcards.config} --filter_zero_branches --resample=under
+        python src/models/get_top_features.py {TREE_FEATURES_DIR}/{wildcards.config} {TREE_ZEROB_TOPFEATURES_DIR}/{wildcards.config} --filter_zero_branches --resample=under
         touch {output.dummy}
         """
 

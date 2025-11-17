@@ -170,6 +170,7 @@ def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, simu
 
             # metadata.yaml nur einmal pro combo
             metadata = {
+                "simulators": simulators,
                 "sequence_length": graph.sequence_length,
                 "population_size": graph.population_size,
                 "num_replicates": nreps,
@@ -207,6 +208,7 @@ def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, simu
 
         # metadata.yaml im base_run_dir
         metadata = {
+            "simulators": simulators,
             "sequence_length": graph.sequence_length,
             "population_size": graph.population_size,
             "num_replicates": nreps,

@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import sys
 import os
+import yaml
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
@@ -13,7 +14,7 @@ UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(UTILS_ROOT)
 
 from snakemake_vars import SIMULATORS, FILE_FORMATS
-from utils.io_helpers import collect_csv_files
+from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
 CSV_TYPES = [FILE_FORMATS["stats"].format(SIM=sim) for sim in SIMULATORS]
 
@@ -123,53 +124,135 @@ def main():
 
     input_folder = Path(sys.argv[1])
     output_folder = Path(sys.argv[2])
-    filter_zero_branches = "--filter_zero_branches" in sys.argv
+    filter_zero_branches = False
+    selected_simulators = None
 
     if not input_folder.exists():
         print(f"Input folder does not exist: {input_folder}")
         sys.exit(1)
 
+    for arg in sys.argv[3:]:
+        if arg.startswith("--simulators"):
+            selected_simulators = arg.split("=")[1].split(",")
+        elif arg == "--filter_zero_branches":
+            filter_zero_branches = True
+
     output_folder.mkdir(parents=True, exist_ok=True)
     log_file = output_folder / "removed_statistics.log"
 
-    # Collect all CSV files (list of Paths)
-    csv_files = collect_csv_files(input_folder, CSV_TYPES)
+    for root, _, files in os.walk(input_folder):
+        root_path = Path(root)
 
-    if not csv_files:
-        print("No CSV files found in input folder.")
-        return
+        metadata_files = [f for f in files if f.endswith(".yaml") or f.endswith(".yml")]
+        if not metadata_files:
+            continue
+        
+        metadata_path = root_path / metadata_files[0]
+        with open(metadata_path, "r") as f:
+            metadata = yaml.safe_load(f)
+        
+        if not selected_simulators and "simulators" in metadata:
+            selected_simulators = metadata.get("simulators")
+        
 
-    # Organize files by simulator type
-    data_dict = {sim: [] for sim in SIMULATORS}
-    for f in csv_files:
-        fname = f.name.lower()
-        if "msprime" in fname:
-            data_dict["msprime"].append(f)
-        elif "msms" in fname:
-            data_dict["msms"].append(f)
-        elif "ms_" in fname or fname == "ms.csv":
-            data_dict["ms"].append(f)
-        else:
-            print(f"Skipping unknown file: {f}")
+        # Collect all CSV files (list of Paths)
+        csv_files = collect_csv_files(root_path)
 
-    # Load and merge CSVs per simulator
-    data_dict = {k: load_and_merge(v) for k, v in data_dict.items() if v}
+        if not csv_files:
+            print("No CSV files found in input folder.")
+            return
 
-    # Optional filtering by zero_branch_count
-    if filter_zero_branches:
-        print("Applying zero_branch_count == 0 filter...")
-        data_dict = filter_zero_branch_rows(data_dict)
+        # Organize files by simulator type
+        data_dict = {sim: [] for sim in selected_simulators}
 
-    # Filter invalid statistics
-    data_dict, kept_stats = filter_invalid_statistics(data_dict, log_file)
+        for f in csv_files:
+            sim = detect_simulator_from_yaml(metadata, f, selected_simulators)
+            if sim is None:
+                print(f"Skipping unknown file: {f}")
+                continue
+            data_dict[sim].append(f)
 
-    if not kept_stats:
-        print("No valid statistics to plot after filtering NaN/Inf. See log for details.")
-        return
+        # Load and merge CSVs per simulator
+        data_dict = {k: load_and_merge(v) for k, v in data_dict.items() if v}
 
-    combined_df = melt_data_for_plotting(data_dict)
-    plot_boxplots(combined_df, output_folder)
-    print(f"All boxplots saved to {output_folder}, removed/kept statistics logged in {log_file}")
+        # Optional filtering by zero_branch_count
+        if filter_zero_branches:
+            print("Applying zero_branch_count == 0 filter...")
+            data_dict = filter_zero_branch_rows(data_dict)
+
+        # Filter invalid statistics
+        data_dict, kept_stats = filter_invalid_statistics(data_dict, log_file)
+
+        if not kept_stats:
+            print("No valid statistics to plot after filtering NaN/Inf. See log for details.")
+            return
+
+        combined_df = melt_data_for_plotting(data_dict)
+        relative = root_path.relative_to(input_folder)
+        target_folder = output_folder / relative
+        target_folder.mkdir(parents=True, exist_ok=True)
+        plot_boxplots(combined_df, target_folder)
+        print(f"All boxplots saved to {target_folder}, removed/kept statistics logged in {log_file}")
+
+    
+    yaml_files = [f for f in input_folder.iterdir() if f.is_file() and f.suffix in {'.yaml', '.yml'}]
+
+    if not yaml_files:
+        yaml_paths = list(Path(input_folder).rglob("*.yaml")) \
+                + list(Path(input_folder).rglob("*.yml"))
+
+        yaml_files = []
+        for path in yaml_paths:
+            with open(path, "r") as f:
+                yaml_files.append(yaml.safe_load(f))
+
+        if not selected_simulators:
+            # Alle simulatoren einsammeln und vereinigen
+            all_sims = set()
+            for f in yaml_files:
+                sims = f.get("simulators", [])
+                all_sims.update(sims)
+
+            selected_simulators = list(all_sims)
+
+        
+        # Collect all CSV files (list of Paths)
+        csv_files = collect_csv_files(input_folder)
+
+        if not csv_files:
+            print("No CSV files found in input folder.")
+            return
+
+        # Organize files by simulator type
+        data_dict = {sim: [] for sim in selected_simulators}
+
+        for f in csv_files:
+            sim = detect_simulator_from_yaml(metadata, f, selected_simulators)
+            if sim is None:
+                print(f"Skipping unknown file: {f}")
+                continue
+            data_dict[sim].append(f)
+
+        # Load and merge CSVs per simulator
+        data_dict = {k: load_and_merge(v) for k, v in data_dict.items() if v}
+
+        # Optional filtering by zero_branch_count
+        if filter_zero_branches:
+            print("Applying zero_branch_count == 0 filter...")
+            data_dict = filter_zero_branch_rows(data_dict)
+
+        # Filter invalid statistics
+        data_dict, kept_stats = filter_invalid_statistics(data_dict, log_file)
+
+        if not kept_stats:
+            print("No valid statistics to plot after filtering NaN/Inf. See log for details.")
+            return
+
+        combined_df = melt_data_for_plotting(data_dict)
+        all_folder = output_folder / "all"
+        all_folder.mkdir(parents=True, exist_ok=True)
+        plot_boxplots(combined_df, all_folder)
+        print(f"All boxplots saved to {output_folder}, removed/kept statistics logged in {log_file}")
 
 
 if __name__ == "__main__":

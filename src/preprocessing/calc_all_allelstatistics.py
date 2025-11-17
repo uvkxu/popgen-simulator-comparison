@@ -15,6 +15,7 @@ import tempfile
 from pypythia.prediction import predict_difficulty
 from pypythia.msa import *
 from pathlib import Path
+import shutil
     
 def generate_msa(positions, genotypes, seq_length, overall_samples):
     """Generate an MSA from ms-like genotypes and random ancestral sequence."""
@@ -319,6 +320,16 @@ def compute_stats(haps: allel.HaplotypeArray, positions, pops={}):
 # --- Helper to compute per-block stats and flatten ---
 # ============================================================
 def calculate_block_stats(positions, genotypes, sample_sizes):
+    if positions.size > 1:
+        dup = positions[np.where(np.diff(positions) == 0)]
+        if len(dup) > 0:
+            print("⚠️ WARNING: Duplicate positions found:", dup)
+            print("  All positions:", positions)
+        
+        if not np.all(np.diff(positions) > 0):
+            print("⚠️ WARNING: positions are NOT strictly increasing!")
+            print("  All positions:", positions)
+
     n_haplotypes = sum(sample_sizes)
     haps = allel.HaplotypeArray(genotypes.T)
     n_haps = haps.shape[1]
@@ -389,8 +400,13 @@ def main(input_dir, output_dir):
             raise ValueError(f"sequence_length missing in metadata file {metadata_path}")
         if "sample_structure" not in metadata:
             raise ValueError(f"sample_structure missing in metadata file {metadata_path}")
-        if "cleaned_outputs" not in metadata:
-            raise ValueError(f"cleaned_outputs missing in metadata file {metadata_path}")
+        if "cleaned_outputs" not in metadata and "simulator_outputs" not in metadata:
+            raise ValueError(f"simulator_outputs and cleaned_outputs missing in metadata file {metadata_path}")
+        
+        if "cleaned_outputs" in metadata:
+            cleaned_outputs = metadata.get("cleaned_outputs")
+        else:
+            cleaned_outputs = metadata.get("simulator_outputs")
 
         seq_length = metadata.get("sequence_length")
         overall_samples = metadata.get("overall_samples")
@@ -448,16 +464,28 @@ def main(input_dir, output_dir):
                         # Write the MSA object to a file (make sure your MSA class supports this)
                         msa.write(tmp_msa_file.name)  # or msa.write_phylip(tmp_msa_file.name)
                         tmp_msa_path = pathlib.Path(tmp_msa_file.name)
+                    
+                    raxml_path = Path(shutil.which("raxml-ng"))
+                    if raxml_path is None:
+                        raise FileNotFoundError("RAxML-NG not found in PATH")
+
 
                     try:
-                        # Call predict_difficulty using the file path instead of the MSA object
-                        difficulty = predict_difficulty(
-                            msa_file=tmp_msa_path,
-                            raxmlng=pathlib.Path("/home/kuchvict/miniforge3/envs/allelstats/bin/raxml-ng"),       # set this if RAxML-NG is not in your PATH
-                            deduplicate=False,
-                            store_results=False # avoid saving extra result files
-                        )
-                        allel_features["difficulty"] = difficulty
+                        if len(seqs) < 4:
+                            print(f"⚠️ Skipping difficulty: only {len(seqs)} sequences (need ≥4).")
+                            allel_features["difficulty"] = -1
+                        else:
+                            try:
+                                difficulty = predict_difficulty(
+                                    msa_file=tmp_msa_path,
+                                    raxmlng=raxml_path,
+                                    deduplicate=False,
+                                    store_results=False
+                                )
+                                allel_features["difficulty"] = difficulty
+                            except Exception as e:
+                                print(f"⚠️ PyPythia failed for block {block_idx}: {e}")
+                                allel_features["difficulty"] = -1
                     finally:
                         # Clean up the temporary file after prediction
                         os.remove(tmp_msa_path)
@@ -478,7 +506,11 @@ def main(input_dir, output_dir):
 
                     # --- Pfad in metadata ergänzen ---
                     metadata.setdefault("allel_features", {})[sim] = str(out_name)
-
+                    
+        out_metadata_path = output_dir / root_path.relative_to(input_dir) / metadata_files[0]
+        out_metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_metadata_path, "w") as f_out:
+            yaml.dump(metadata, f_out, sort_keys=False)
 
 # ============================================================
 # --- CLI entry point ---

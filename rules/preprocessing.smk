@@ -33,7 +33,7 @@ rule clean_raw_data:
     output:
         dummy=f"{CLEAN_DIR}/{{config}}/.done"
     conda:
-        "../envs/simulations-env.yaml"
+        "../envs/allelstats-env.yaml"
     shell:
         """
         python src/preprocessing/clean_all.py --input {RAW_DATA_DIR}/{wildcards.config} --output {CLEAN_DIR}/{wildcards.config}
