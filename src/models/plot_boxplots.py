@@ -16,8 +16,6 @@ sys.path.append(UTILS_ROOT)
 from snakemake_vars import SIMULATORS, FILE_FORMATS
 from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
-CSV_TYPES = [FILE_FORMATS["stats"].format(SIM=sim) for sim in SIMULATORS]
-
 
 def load_and_merge(files):
     """Load multiple CSV files and merge them row-wise."""
