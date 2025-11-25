@@ -9,9 +9,9 @@ CMD_DIR = ROOT_DIR / "commands"
 DATA_DIR = ROOT_DIR / "data"
 RESULTS_DIR = ROOT_DIR / "results"
 
-DEFAULT_MS_PATH = BIN_DIR / "ms.exe"
-DEFAULT_MSMS_PATH = BIN_DIR / "msms.exe"
-DEFAULT_MS_MOD_PATH = BIN_DIR / "ms-mod.exe"
+DEFAULT_MS_PATH = BIN_DIR / "ms"
+DEFAULT_MSMS_PATH = BIN_DIR / "msms"
+DEFAULT_MS_MOD_PATH = BIN_DIR / "ms-mod"
 
 RAW_DATA_DIR = DATA_DIR / "raw"
 FEATURES_DIR = DATA_DIR / "features"
