@@ -2,6 +2,8 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import xgboost as xgb
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
@@ -122,33 +124,37 @@ def balanced_train_undersample(X_train, y_train, random_state=None):
 
 def plot_feature_performance(csv_path):
     """
-    Reads the evaluation CSV and produces a plot stored in the same folder.
+    Reads the evaluation CSV and produces a bar plot stored in the same folder.
     """
 
     # Read CSV
     df = pd.read_csv(csv_path)
 
-    # Remove completely empty rows (your file includes empty blocks)
+    # Remove completely empty rows
     df = df.dropna(how="all")
 
-    # Remove empty columns (due to trailing commas)
+    # Remove empty columns
     df = df.dropna(axis=1, how="all")
 
     # Convert numeric columns to float
     for col in df.columns[1:]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Only keep rows that contain actual feature names (exclude headers like ALL_FEATURES)
+    # Only keep rows that contain actual feature names
     df_features = df[~df["feature"].isin(["ALL_FEATURES", "PASSED_FEATURES", "OVERALL_MEAN"])]
 
-    # Plot
-    plt.figure(figsize=(12, 8))
-    plt.plot(df_features["feature"], df_features["max_accuracy"], label="max_accuracy")
-    plt.plot(df_features["feature"], df_features["xgboost"], label="xgboost")
-    plt.plot(df_features["feature"], df_features["random_forest"], label="random_forest")
-    plt.plot(df_features["feature"], df_features["logistic_regression"], label="logistic_regression")
+    # Plot as grouped bar chart
+    features = df_features["feature"]
+    metrics = ["max_accuracy", "xgboost", "random_forest", "logistic_regression"]
+    x = np.arange(len(features))  # the label locations
+    width = 0.2  # width of the bars
 
-    plt.xticks(rotation=90, fontsize=6)
+    plt.figure(figsize=(12, 8))
+
+    for i, metric in enumerate(metrics):
+        plt.bar(x + i*width, df_features[metric], width=width, label=metric)
+
+    plt.xticks(x + width*1.5, features, rotation=90, fontsize=6)
     plt.ylabel("Accuracy")
     plt.xlabel("Feature")
     plt.title("Model Performance per Feature")
@@ -157,9 +163,7 @@ def plot_feature_performance(csv_path):
 
     # Save file next to the CSV
     base = os.path.splitext(os.path.basename(csv_path))[0]
-    out_path = os.path.join(os.path.dirname(csv_path), f"{base}.png")
-
-    # save plot
+    out_path = os.path.join(os.path.dirname(csv_path), f"{base}_barplot.png")
     plt.savefig(out_path, dpi=300)
     plt.close()
 
