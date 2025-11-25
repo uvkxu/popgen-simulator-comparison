@@ -13,7 +13,7 @@ from ms_runner import run_ms_simulation, get_effective_population_size
 from msms_runner import run_msms_simulation, run_msms_ms_simulation
 from msprime_runner import run_msprime_simulation, run_mspms_simulation
 
-SIMULATORS = {"ms", "mspms", "msms"}
+SIMULATORS = ["ms", "mspms", "msms"]
 SIM_FUNCTIONS = {
     "ms": run_ms_simulation,
     "mspms": run_mspms_simulation,

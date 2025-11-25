@@ -191,7 +191,7 @@ def analyze_precision(sim_output_path):
     }
 
 
-def process_folder(input_folder, output_folder, use_precision=True):
+def process_folder(input_folder, output_folder, usePrecision=True):
     """
     Process all simulation output files in input_folder, preserving folder structure.
     Uses metadata.yaml to determine simulator types and sequence length.
@@ -225,6 +225,7 @@ def process_folder(input_folder, output_folder, use_precision=True):
         population_size = metadata["population_size"]
         simulator_outputs = metadata["simulator_outputs"]
         factor = 4 * population_size
+        usePrecision = metadata.get("usePrecision", usePrecision)
 
         # --- Unterordner (z.B. Replikate) durchgehen ---
         for rep_root, rep_dirs, rep_files in os.walk(root_path):
@@ -234,7 +235,7 @@ def process_folder(input_folder, output_folder, use_precision=True):
 
             # --- Precision optional berechnen ---
             pos_prec, branch_prec = None, None
-            if use_precision:
+            if usePrecision:
                 pos_precisions, branch_precisions = [], []
                 for f in rep_files:
                     if not f.endswith(".txt"):
@@ -302,7 +303,7 @@ def main():
     process_folder(
         input_folder=args.input,
         output_folder=args.output,
-        use_precision=not args.skip_precision
+        usePrecision=not args.skip_precision
     )
 
 if __name__ == "__main__":

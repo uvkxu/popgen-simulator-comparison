@@ -9,7 +9,7 @@ rule run_one_config_all_simulations_demes:
         "../envs/simulations-env.yaml"
     shell:
         """
-        python src/simulations/demes_run_all.py --config-dir {CONFIG_DIR}/ --configs {wildcards.config}.yaml --reps {REPS} --rec_reps {REC_REPS} --cmddir {CMD_DIR} --cmd_variables variables.txt
+        python src/simulations/demes_run_all.py --config-dir {CONFIG_DIR}/ --configs {wildcards.config}.yaml --reps {REPS} --rec_reps {REC_REPS} --cmddir {CMD_DIR} --cmd_variables variables.txt --ms_mod_path {DEFAULT_MS_MOD_PATH}
         touch {output.dummy}
         """
 

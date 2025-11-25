@@ -11,6 +11,7 @@ RESULTS_DIR = ROOT_DIR / "results"
 
 DEFAULT_MS_PATH = BIN_DIR / "ms.exe"
 DEFAULT_MSMS_PATH = BIN_DIR / "msms.exe"
+DEFAULT_MS_MOD_PATH = BIN_DIR / "ms-mod.exe"
 
 RAW_DATA_DIR = DATA_DIR / "raw"
 FEATURES_DIR = DATA_DIR / "features"
@@ -18,8 +19,6 @@ TREE_FEATURES_DIR = FEATURES_DIR / "tree"
 ALLEL_FEATURES_DIR = FEATURES_DIR / "allele"
 
 CLEAN_DIR = DATA_DIR / "cleaned"
-# CLEAN_PRECISE_DIR = CLEAN_DIR / "precise"
-# CLEAN_COARSE_DIR = CLEAN_DIR / "coarse"
 
 BOXPLOTS_RESULTS_DIR = RESULTS_DIR / "boxplots"
 TOPFEATURES_RESULTS_DIR = RESULTS_DIR/ "top_features"
@@ -36,8 +35,8 @@ SANITY_RESULTS_DIR = RESULTS_DIR / "sanity_checks"
 CMD_SUBDIR = "commands"
 
 SIMULATORS = ["ms", "msprime", "msms", "mspms"] #msms_ms behaves the same as just msms
-REPS = 10
-REC_REPS = 50
+REPS = 20
+REC_REPS = 100
 NUM_SANITY_CLASSES = 5
 SANITY_REPS = 5
 

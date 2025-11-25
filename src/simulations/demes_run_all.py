@@ -6,6 +6,7 @@ import yaml
 import os
 import itertools
 import subprocess
+import math
 from pathlib import Path
 from msprime import BinaryMutationModel
 
@@ -46,7 +47,7 @@ def get_sample_sizes(config, sample_size=None):
             samples.append(0)
     return samples
 
-def run_command_demes(graph, sim, output_file, samples, nreps, sim_path=None):
+def run_command_demes(graph, sim, output_file, samples, nreps, sim_path=None, precision=None):
     """Run a single simulator and write its raw output to a .txt file."""
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -64,8 +65,13 @@ def run_command_demes(graph, sim, output_file, samples, nreps, sim_path=None):
 
         cmd = f"{prefix} {sum(samples)} {nreps} {cmd} -T"
 
-        if sim in ("ms", "mspms"):
-            cmd += f" -p {5}"
+        if precision:
+            if sim in ("ms", "mspms"):
+                cmd += f" -p {precision}"
+            elif sim == "msms":
+                format_str = "0" + (("." + "0"*precision))
+                cmd += f' -oFP {format_str}'
+
         result = subprocess.run(cmd.split(), capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(f"{sim} failed:\n{result.stderr}")
@@ -118,12 +124,13 @@ def run_command_demes(graph, sim, output_file, samples, nreps, sim_path=None):
         raise ValueError(f"Unsupported simulator: {sim}")
 
 
-def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, simulators=SIMULATORS, reps=1, rec_reps=None, variable_file=None):
+def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, usePrecision, simulators=SIMULATORS, reps=1, rec_reps=None, variable_file=None, ms_mod_path = None):
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
     def has_only_one_pop():
-        return len(config.get("demes", [])) == 1
+        demes = config.get("demes", [])
+        return demes is None or len(config.get("demes", [])) == 1
 
     base_run_dir = Path(output_dir)
     base_run_dir.mkdir(parents=True, exist_ok=True)
@@ -143,11 +150,20 @@ def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, simu
             combo_dir = base_run_dir / "_".join(f"{k}-{v}" for k, v in combo.items())
             combo_dir.mkdir(parents=True, exist_ok=True)
 
+            
+
             # Kopie des Graphen ggf. überschreiben
             graph = demes.load(config_path)
             graph.sequence_length = combo["sequence_lengths"]
             if "population_sizes" in combo:
                 graph.population_size = combo["population_sizes"]
+
+            usePrecision = bool(combo.get("usePrecision", usePrecision))
+            precision = None
+
+            if usePrecision:
+                precision = math.ceil(math.log10(graph.sequence_length))
+                precision = precision if precision > 0 else 1
 
             samples = get_sample_sizes(config, combo["sample_sizes"])
 
@@ -158,13 +174,20 @@ def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, simu
 
                 for sim in simulators:
                     output_file = rep_dir / f"{sim}_output.txt"
+                    sim_path = None
+                    if sim == "ms":
+                        sim_path = ms_mod_path if ms_mod_path and usePrecision else ms_path
+                    elif sim == "msms":
+                        sim_path = msms_path
+
                     rel_path = run_command_demes(
                         graph=graph,
                         sim=sim,
                         output_file=output_file,
                         nreps=nreps,
                         samples=samples,
-                        sim_path=ms_path if sim=="ms" else msms_path if sim=="msms" else None
+                        sim_path=sim_path,
+                        precision=precision
                     )
                     simulator_outputs[sim] = str(output_file.name)
 
@@ -180,6 +203,7 @@ def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, simu
                 "recombination_rate": graph.recombination_rate,
                 "config": str(config_path.name),
                 "reps": reps,
+                "usePrecision": usePrecision,
                 "simulator_outputs": simulator_outputs
             }
             with open(combo_dir / "metadata.yaml", "w") as f:
@@ -202,7 +226,8 @@ def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, simu
                     output_file=output_file,
                     nreps=nreps,
                     samples=samples,
-                    sim_path=ms_path if sim=="ms" else msms_path if sim=="msms" else None
+                    sim_path=ms_path if sim=="ms" else msms_path if sim=="msms" else None,
+                    usePrecision= usePrecision
                 )
                 simulator_outputs[sim] = str(output_file.name)
 
@@ -218,6 +243,7 @@ def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, simu
             "recombination_rate": graph.recombination_rate,
             "config": str(config_path.name),
             "reps": reps,
+            "usePrecision": usePrecision,
             "simulator_outputs": simulator_outputs
         }
         with open(base_run_dir / "metadata.yaml", "w") as f:
@@ -235,6 +261,13 @@ parser.add_argument(
     type=Path,
     default=DEFAULT_MS_PATH,
     help=f"Path to ms executable (default: {DEFAULT_MS_PATH})",
+)
+
+parser.add_argument(
+    "--ms_mod_path",
+    type=Path,
+    default=None,
+    help=f"Path to ms-mod executable (default: {None})",
 )
 
 parser.add_argument(
@@ -296,6 +329,12 @@ parser.add_argument(
     type=int,
     help="Number of repetitions to perform specifically for configurations that include recombination"
 )
+parser.add_argument(
+    "--usePrecision",
+    type=bool,
+    default=True,
+    help="Whether to automatically adjust the number of decimal places in the output based on the sequence length"
+)
 
 args = parser.parse_args()
 simulators = SIMULATORS if args.simulator=="all" else [args.simulator]
@@ -323,11 +362,13 @@ if args.configs:
             output_dir=config_outdir,
             ms_path=args.ms_path,
             msms_path=args.msms_path,
+            ms_mod_path=args.ms_mod_path,
             simulators=simulators,
             reps=args.reps,
             rec_reps=args.rec_reps,
             nreps=args.nreps,
             variable_file=variable_file,
+            usePrecision=args.usePrecision
         )
 else:
     sys.exit("❌ Please provide --configs")

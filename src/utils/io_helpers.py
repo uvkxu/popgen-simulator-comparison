@@ -27,8 +27,9 @@ def detect_simulator_from_yaml(metadata, input_file, simulators=None):
     if not simulators:
         simulators = metadata.get('simulators', [])
 
-    for sim in simulators:
-        if sim.lower() in input_file_name.lower():
+    # Be cautious - it is not as stable as the mapping
+    for sim in sorted(simulators, key=len, reverse=True):
+        if sim.lower() in filename:
             return sim
     
     # 3. No match found
@@ -73,10 +74,6 @@ def assign_simulator_labels(metadata, csv_files, selected_simulators):
         df = pd.read_csv(file)
         fname = file.name.lower()
         df['simulator'] = detect_simulator_from_yaml(metadata, file, selected_simulators)
-
-        for sim in selected_simulators:
-            if sim in fname:
-                df['simulator'] = sim
 
         all_dfs.append(df)
 

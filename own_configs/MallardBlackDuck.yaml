@@ -7,7 +7,6 @@ default_migration_rate: 1.72e-6
 populations:
   - name: Mallard
     initial_size: 1570000
-    growth_rate: 0.002
     sample_size: 50
 
   - name: Black_duck

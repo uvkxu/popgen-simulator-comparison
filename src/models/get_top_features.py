@@ -218,6 +218,7 @@ def main():
             print(f"\n=== Evaluating simulator group: {group} ===")
 
             csv_files_dict = collect_csv_files(input_folder)
+
             all_dfs = assign_simulator_labels(metadata, csv_files_dict, group)
             data = pd.concat(all_dfs, ignore_index=True)
             meta_rows = []

@@ -56,13 +56,13 @@ demography_events:
     derived: [eastern_lowland, mountain]
 
   - type: population_pulse_migration
-    time: 1789.5
+    time: 1789.4736842105262
     source: eastern_mountain_ancestral
     dest: western_lowland
     proportion: 0.002768
 
   - type: population_pulse_migration
-    time: 1789.5
+    time: 1789.578947368421
     source: western_lowland
     dest: eastern_mountain_ancestral 
     proportion: 0.00827
