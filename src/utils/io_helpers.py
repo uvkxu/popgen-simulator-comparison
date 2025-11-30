@@ -29,14 +29,14 @@ def detect_simulator_from_yaml(metadata, input_file, simulators=None):
 
     # Be cautious - it is not as stable as the mapping
     for sim in sorted(simulators, key=len, reverse=True):
-        if sim.lower() in filename:
+        if sim.lower() in input_file_name:
             return sim
     
     # 3. No match found
     return None
 
 
-def collect_csv_files(input_dir, csv_types=None):
+def collect_csv_files(input_dir):
     """
     Recursively collect CSV files from input_dir.
     
@@ -46,19 +46,14 @@ def collect_csv_files(input_dir, csv_types=None):
     if not input_dir.exists():
         raise FileNotFoundError(f"Input directory {input_dir} does not exist.")
 
-    if csv_types is None:
-        # collect all CSVs recursively
-        csv_files = list(input_dir.rglob("*.csv"))
-    else:
-        # collect only specified CSV types
-        csv_files = []
-        for csv_name in csv_types:
-            csv_files.extend(input_dir.rglob(csv_name))
+    # collect all CSVs recursively
+    csv_files = list(input_dir.rglob("*.csv"))
 
     if not csv_files:
         return None
 
     return csv_files
+
 
 def assign_simulator_labels(metadata, csv_files, selected_simulators):
     """
@@ -72,12 +67,14 @@ def assign_simulator_labels(metadata, csv_files, selected_simulators):
 
     for file in csv_files:
         df = pd.read_csv(file)
-        fname = file.name.lower()
-        df['simulator'] = detect_simulator_from_yaml(metadata, file, selected_simulators)
+        sim = detect_simulator_from_yaml(metadata, file, selected_simulators)
 
-        all_dfs.append(df)
+        if selected_simulators is None or sim in selected_simulators:
+            df['simulator'] = sim
+            all_dfs.append(df)
 
     return all_dfs
+
 
 def assign_rep_labels(csv_files, num_reps=2):
     """

@@ -64,6 +64,6 @@ demes:
         end_time: 0
 
 pulses:
-- {sources: [eastern_mountain_ancestral], dest: western_lowland, time: 34000, proportions: [0.002768]}
-- {sources: [western_lowland], dest: eastern_mountain_ancestral, time: 34002, proportions: [0.00827]}
-- {sources: [eastern_mountain_ancestral], dest: ghost, time: 38285, proportions: [0.02477]}
+- {sources: [western_lowland], dest: eastern_mountain_ancestral,  time: 34000, proportions: [0.00827]}
+- {sources: [eastern_mountain_ancestral], dest: western_lowland, time: 34002, proportions: [0.002768]}
+- {sources: [ghost], dest: eastern_mountain_ancestral, time: 38285, proportions: [0.02477]}

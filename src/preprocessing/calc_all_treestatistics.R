@@ -482,7 +482,8 @@ for (yaml_path in yaml_files) {
         next
       }
 
-      if (has_recomb) {
+      # TODO: be catigous, actually it should be has_recomb
+      if (FALSE) {
         segment_length <- as.numeric(gsub("^\\[(\\d+)\\].*$", "\\1", txt))
 
         tree_stats_scaled <- as.data.frame(as.list(
@@ -497,6 +498,13 @@ for (yaml_path in yaml_files) {
         if (!is.data.frame(tree_stats_unweighted)) tree_stats_unweighted <- as.data.frame(as.list(tree_stats_unweighted))
 
         combined <- cbind(tree_stats, tree_stats_unweighted, tree_stats_scaled, tree_stats_unweighted_scaled)
+        combined$segment_length <- segment_length / seq_length
+      } else if (has_recomb) {
+        if (!is.data.frame(tree_stats)) tree_stats <- as.data.frame(as.list(tree_stats))
+        if (!is.data.frame(tree_stats_unweighted)) tree_stats_unweighted <- as.data.frame(as.list(tree_stats_unweighted))
+        combined <- cbind(tree_stats, tree_stats_unweighted)
+
+        segment_length <- as.numeric(gsub("^\\[(\\d+)\\].*$", "\\1", txt))
         combined$segment_length <- segment_length / seq_length
       } else {
         if (!is.data.frame(tree_stats)) tree_stats <- as.data.frame(as.list(tree_stats))

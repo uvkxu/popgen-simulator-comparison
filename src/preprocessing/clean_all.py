@@ -225,7 +225,7 @@ def process_folder(input_folder, output_folder, usePrecision=True):
         population_size = metadata["population_size"]
         simulator_outputs = metadata["simulator_outputs"]
         factor = 4 * population_size
-        usePrecision = metadata.get("usePrecision", usePrecision)
+        usePrecision = bool(metadata.get("usePrecision", usePrecision))
 
         # --- Unterordner (z.B. Replikate) durchgehen ---
         for rep_root, rep_dirs, rep_files in os.walk(root_path):

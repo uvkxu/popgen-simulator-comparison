@@ -13,11 +13,10 @@ demes:
         end_time: 0
   - name: EUR
     description: European D. melanogaster population
+    ancestors: [AFR]
+    start_time: 158000
     epochs:
       - start_size: 2200
         end_time: 154600
       - start_size: 1075000
         end_time: 0
-
-pulses:
-- {sources: [EUR], dest: AFR, time: 158000, proportions: [1]}

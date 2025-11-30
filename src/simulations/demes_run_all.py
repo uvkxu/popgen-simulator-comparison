@@ -162,8 +162,12 @@ def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, useP
             precision = None
 
             if usePrecision:
-                precision = math.ceil(math.log10(graph.sequence_length))
-                precision = precision if precision > 0 else 1
+                precision = 17 # math.ceil(math.log10(graph.sequence_length)) + 1
+                # precision = precision if precision > 0 else 1
+
+            recombination_rate = float(combo.get("recombination_rates", 0))
+            if recombination_rate > 0:
+                graph.recombination_rate = recombination_rate
 
             samples = get_sample_sizes(config, combo["sample_sizes"])
 

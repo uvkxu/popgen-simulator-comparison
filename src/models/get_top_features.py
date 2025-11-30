@@ -168,7 +168,277 @@ def plot_feature_performance(csv_path):
     plt.close()
 
     print(f"Plot gespeichert unter: {out_path}")
+
+
+def run_feature_evaluation(
+        selected_simulators,
+        csv_files,
+        output_folder,
+        metadata,
+        filter_zero_branches=False,
+        acc_factor=1.0,
+        resample_mode=None
+    ):
+    """
+    Runs feature evaluation for combinations of simulators.
     
+    Parameters
+    ----------
+    selected_simulators : list[str]
+        Simulators to evaluate.
+    csv_files : list[Path]
+        Path of every csv file.
+    output_folder : Path
+        Base output folder for results.
+    metadata : dict or DataFrame
+        Metadata used in assign_simulator_labels().
+    usePrecision : bool, default=False
+        If True, updates csv_with_precision; otherwise csv_without_precision.
+    filter_zero_branches : bool, default=False
+        Whether to filter based on zero_branch_count etc.
+    acc_factor : float, default=1.0
+        Multiplier for minimum accuracy threshold.
+    resample_mode : str or None, default=None
+        Whether training should be balanced.
+    return_precision_sets : bool, default=False
+        If True, return dictionaries for precision/non-precision CSVs.
+
+    Returns
+    -------
+    dict or None
+        If return_precision_sets=True:
+            {
+                "csv_with_precision": {...},
+                "csv_without_precision": {...}
+            }
+        Otherwise None.
+    """
+
+    # --- 1. Build simulator groups ---
+    simulator_groups = list(set(combinations(selected_simulators, 2)))
+    simulator_groups.append(tuple(selected_simulators))
+    simulator_groups = list(dict.fromkeys(simulator_groups))
+
+    for group in simulator_groups:
+        print(f"\n=== Evaluating simulator group: {group} ===")
+
+        # --- 2. Load and label data ---
+        all_dfs = assign_simulator_labels(metadata, csv_files, group)
+        data = pd.concat(all_dfs, ignore_index=True)
+
+        meta_rows = []
+
+        sim_part = "_".join(group)
+        output_file = output_folder / f"feature_ranking_{sim_part}_with_summary.csv"
+
+        if output_file.exists():
+            continue
+
+        # --- Optional filtering ---
+        if filter_zero_branches:
+            before = len(data)
+            class_counts_before = data["simulator"].value_counts().to_dict()
+            cond = (data["zero_branch_count"] == 0) & (data["tree_type"] != 0) & (data["cut_edge_weight"] != -1)
+            data = data[cond]
+            after = len(data)
+
+            print(f"Filtered out {before - after} entries "
+                  f"({after}/{before} remaining).")
+
+            class_counts_after = data["simulator"].value_counts().to_dict()
+
+            meta_rows = [
+                f"Trees before filtering: {before}",
+                f"Trees after filtering: {after}",
+                f"Class distribution after filtering: {class_counts_after}"
+            ]
+
+            # Not enough samples left?
+            if any(sim not in class_counts_after or 
+                   class_counts_after[sim] / class_counts_before[sim] < 0.25 
+                   for sim in group):
+
+                print("⚠️ Too many trees removed — not enough data left.")
+
+                df_empty = pd.DataFrame({
+                    "message": [
+                        "Too many trees removed due to zero_branch_count > 0.",
+                        "Not enough data left to train classifiers.",
+                        f"Remaining samples: {after} (originally {before}).",
+                        "No analysis performed."
+                    ]
+                })
+                df_empty.to_csv(output_file, index=False)
+                continue
+
+        # --- Handle inf / NaN ---
+        data.replace([np.inf, -np.inf], np.nan, inplace=True)
+        data.dropna(axis=1, inplace=True)
+
+        # --- Prepare features ---
+        dep_var = 'simulator'
+        features = [c for c in data.columns if c != dep_var]
+        data = data[data[dep_var].isin(group)]
+        y = LabelEncoder().fit_transform(data[dep_var])
+        X = data[features]
+
+        # --- Classifiers ---
+        classifiers = {
+            "xgboost": xgb.XGBClassifier(
+                n_estimators=100,
+                max_depth=3,
+                learning_rate=0.1,
+                objective='multi:softmax',
+                num_class=len(group),
+                eval_metric='mlogloss'
+            ),
+            "random_forest": RandomForestClassifier(n_estimators=100, max_depth=5),
+            "logistic_regression": LogisticRegression(max_iter=500)
+        }
+
+        # --- Feature evaluation ---
+        min_accuracy = 1 / len(group) * acc_factor
+        feature_records = []
+        passed_features = []
+
+        for feature in features:
+            try:
+                acc_per_clf = evaluate_feature(X, y, feature, classifiers, balance_train=resample_mode)
+                max_acc = np.nanmax(list(acc_per_clf.values()))
+            except ValueError as e:
+                if "only one class" in str(e):
+                    print(f"⚠️ Skipping feature '{feature}' – only one class.")
+                    acc_per_clf = {clf: np.nan for clf in classifiers}
+                    max_acc = np.nan
+                else:
+                    raise
+
+            if not np.isnan(max_acc) and max_acc >= min_accuracy:
+                passed_features.append(feature)
+
+            record = {"feature": feature, "max_accuracy": max_acc}
+            record.update(acc_per_clf)
+            feature_records.append(record)
+
+        feature_records_sorted = sorted(
+            feature_records,
+            key=lambda x: x["max_accuracy"],
+            reverse=True
+        )
+
+        # --- Evaluate classifiers with all features ---
+        all_features_acc = evaluate_classifiers(X, y, classifiers)
+
+        # --- Evaluate with passed features ---
+        if passed_features:
+            X_passed = X[passed_features]
+            passed_acc = evaluate_classifiers(X_passed, y, classifiers)
+        else:
+            passed_acc = {clf_name: None for clf_name in classifiers}
+
+        # --- Compute mean accuracy ---
+        overall_mean_acc = np.mean(list(all_features_acc.values()))
+
+        # --- Summary output ---
+        summary_records = []
+
+        # All feature row
+        summary_records.append({
+            "feature": "ALL_FEATURES",
+            "max_accuracy": np.max(list(all_features_acc.values())),
+            **all_features_acc
+        })
+
+        # Passed features
+        valid_values = [v for v in passed_acc.values() if v is not None]
+        max_acc_passed = np.max(valid_values) if valid_values else None
+
+        summary_records.append({
+            "feature": "PASSED_FEATURES",
+            "max_accuracy": max_acc_passed,
+            **passed_acc
+        })
+
+        # Blank row
+        summary_records.append({col: np.nan for col in feature_records_sorted[0].keys()})
+
+        passed_records = [r for r in feature_records_sorted if r["feature"] in passed_features]
+        failed_records = [r for r in feature_records_sorted if r["feature"] not in passed_features]
+
+        summary_records.extend(passed_records)
+        summary_records.append({col: np.nan for col in feature_records_sorted[0].keys()})
+        summary_records.append({col: np.nan for col in feature_records_sorted[0].keys()})
+        summary_records.extend(failed_records)
+
+        summary_records.append({
+            "feature": "OVERALL_MEAN",
+            "mean_accuracy": overall_mean_acc,
+            **all_features_acc
+        })
+
+        df_summary = pd.DataFrame(summary_records)
+
+        cols = ["feature", "max_accuracy"] + [c for c in classifiers.keys()]
+        df_summary = df_summary[cols]
+
+        df_summary.to_csv(output_file, index=False)
+
+        if meta_rows:
+            with open(output_file, "a") as f:
+                f.write("\n".join(meta_rows) + "\n")
+
+        plot_feature_performance(output_file)
+
+
+#TODO: mapping wird nur einmal akzeptiert... aber naja
+def merge_csv_mappings(yaml_paths):
+    """
+    Merge multiple YAML files, collecting only mappings that point to CSV files.
+
+    Parameters
+    ----------
+    yaml_paths : list[Path]
+        List of paths to YAML files to merge.
+
+    Returns
+    -------
+    dict
+        Merged dictionary containing only key-value pairs where the value ends with '.csv'.
+        Duplicate keys are avoided. In case of a conflict (same key, different value), 
+        the first occurrence is kept and a warning is printed.
+    """
+    
+    merged = {}
+
+    for path in yaml_paths:
+        with open(path, "r") as f:
+            data = yaml.safe_load(f)
+        if not data:
+            continue
+
+        # Recursively traverse all key-value pairs
+        def extract_csv_mappings(d):
+            result = {}
+            if isinstance(d, dict):
+                for k, v in d.items():
+                    if isinstance(v, dict):
+                        result.update(extract_csv_mappings(v))
+                    elif isinstance(v, str) and v.endswith(".csv"):
+                        result[k] = v
+            return result
+
+        csv_mappings = extract_csv_mappings(data)
+
+        for k, v in csv_mappings.items():
+            # Only add if key doesn't already exist
+            if k not in merged:
+                merged[k] = v
+            else:
+                if merged[k] != v:
+                    print(f"⚠️ Conflict for key '{k}': keeping '{merged[k]}', discarding '{v}'")
+
+    return merged
+
 
 def main():
     if len(sys.argv) < 3:
@@ -199,6 +469,12 @@ def main():
 
     os.makedirs(output_folder, exist_ok=True)
 
+    csv_with_precision = []
+    csv_without_precision = []
+
+    csv_with_recombination = []
+    csv_without_recombination = []
+
     for root, _, files in os.walk(input_folder):
         root_path = Path(root)
 
@@ -209,182 +485,39 @@ def main():
         metadata_path = root_path / metadata_files[0]
         with open(metadata_path, "r") as f:
             metadata = yaml.safe_load(f)
+
+        relative = root_path.relative_to(input_folder)
+        target_folder = output_folder / relative
+        target_folder.mkdir(parents=True, exist_ok=True)
+
+        usePrecision = bool(metadata.get("usePrecision", True))
+        recombination_rate = float(metadata.get("recombination_rate") or 0)
         
         if not selected_simulators and "simulators" in metadata:
             selected_simulators = metadata.get("simulators")
 
-        # --- 1. Generate simulator groups ---
-        simulator_groups = list(set(combinations(selected_simulators, 2)))
-        simulator_groups.append(tuple(selected_simulators))
-        simulator_groups = list(dict.fromkeys(simulator_groups))
+        csv_files = collect_csv_files(root_path)
 
-        for group in simulator_groups:
-            print(f"\n=== Evaluating simulator group: {group} ===")
-
-            csv_files_dict = collect_csv_files(input_folder)
-
-            all_dfs = assign_simulator_labels(metadata, csv_files_dict, group)
-            data = pd.concat(all_dfs, ignore_index=True)
-            meta_rows = []
-
-            relative = root_path.relative_to(input_folder)
-            target_folder = output_folder / relative
-            target_folder.mkdir(parents=True, exist_ok=True)
-    
-            sim_part = "_".join(group)
-            output_file = target_folder/ f"feature_ranking_{sim_part}_with_summary.csv"
-
-            # --- 🧹 Optional Filtering ---
-            if filter_zero_branches:
-                before = len(data)
-                class_counts_before = data["simulator"].value_counts().to_dict()
-                cond = (data["zero_branch_count"] == 0) & (data["tree_type"] != 0) & (data["cut_edge_weight"] != -1)
-                data = data[cond]
-                after = len(data)
-                print(f"Filtered out {before - after} entries (zero_branch_count != 0 or tree_type == 0 or cut_edge_weight == -1) "
-                    f"({after}/{before} remaining).")
-
-                class_counts_after = data["simulator"].value_counts().to_dict()
-
-                meta_rows = [
-                    f"Trees before filtering: {before}",
-                    f"Trees after filtering: {after}",
-                    f"Class distribution after filtering: {class_counts_after}"
-                ]
-                
-                # 🛑 Check if enough data left
-                if any(sim not in class_counts_after or class_counts_after[sim]/class_counts_before[sim] < 0.25 for sim in group):
-                    print("⚠️ Too many trees removed due to zero branches — not enough data left for training.")
-                    
-                    df_empty = pd.DataFrame({
-                        "message": [
-                            "Too many trees removed due to zero_branch_count > 0.",
-                            "Not enough data left to train classifiers.",
-                            f"Remaining samples: {after} (originally {before}).",
-                            "No analysis performed."
-                        ]
-                    })
-                    df_empty.to_csv(output_file, index=False)
-                    print(f"⚠️ Created summary file with warning message: {output_file}")
-                    continue  # skip to next group
-
-            # --- 2. Handle Inf and missing values ---
-            data.replace([np.inf, -np.inf], np.nan, inplace=True)
-            data.dropna(axis=1, inplace=True)
-
-            # --- 3. Prepare features and target ---
-            dep_var = 'simulator'
-            features = [c for c in data.columns if c != dep_var]
-            data = data[data[dep_var].isin(group)]
-            y = LabelEncoder().fit_transform(data[dep_var])
-            X = data[features]
-
-            # --- 4. Define classifiers ---
-            classifiers = {
-                "xgboost": xgb.XGBClassifier(
-                    n_estimators=100,
-                    max_depth=3,
-                    learning_rate=0.1,
-                    objective='multi:softmax',
-                    num_class=len(group),
-                    eval_metric='mlogloss'
-                ),
-                "random_forest": RandomForestClassifier(n_estimators=100, max_depth=5),
-                "logistic_regression": LogisticRegression(max_iter=500)
-            }
-
-            # --- 5. Evaluate each feature ---
-            min_accuracy = 1 / len(group) * acc_factor
-            feature_records = []
-            passed_features = []
-
-            for feature in features:
-                try:
-                    acc_per_clf = evaluate_feature(X, y, feature, classifiers, balance_train=resample_mode)
-                    max_acc = np.nanmax(list(acc_per_clf.values()))
-                except ValueError as e:
-                    if "only one class" in str(e):
-                        print(f"⚠️ Skipping feature '{feature}' – only one class present in training data.")
-                        acc_per_clf = {clf: np.nan for clf in classifiers}
-                        max_acc = np.nan
-                    else:
-                        raise
-
-                if not np.isnan(max_acc) and max_acc >= min_accuracy:
-                    passed_features.append(feature)
-
-                record = {"feature": feature, "max_accuracy": max_acc}
-                record.update(acc_per_clf)
-                feature_records.append(record)
-
-
-            feature_records_sorted = sorted(feature_records, key=lambda x: x["max_accuracy"], reverse=True)
-
-            # --- 6. Evaluate classifiers with all features ---
-            all_features_acc = evaluate_classifiers(X, y, classifiers)
-            print(f"All features accuracy per classifier: {all_features_acc}")
-
-            # --- 7. Evaluate classifiers with only passed features ---
-            if passed_features:
-                X_passed = X[passed_features]
-                passed_acc = evaluate_classifiers(X_passed, y, classifiers)
+        if usePrecision:
+            csv_with_precision += csv_files
+            if recombination_rate:
+                csv_with_recombination += csv_files
             else:
-                passed_acc = {clf_name: None for clf_name in classifiers}
-            print(f"Passed features accuracy per classifier: {passed_acc}")
+                csv_without_recombination += csv_files
+        else:
+            csv_without_precision += csv_files
 
-            # --- 8. Overall mean accuracy ---
-            overall_mean_acc = np.mean(list(all_features_acc.values()))
-            print(f"Overall mean accuracy (all features, all classifiers): {overall_mean_acc:.4f}")
 
-            # --- 9. Save results (passed features first, spacing) ---
-            output_folder.mkdir(exist_ok=True)
-            sim_part = "_".join(group)
-            summary_records = []
+        run_feature_evaluation(
+            selected_simulators=selected_simulators,
+            csv_files=csv_files,
+            output_folder=target_folder,
+            metadata=metadata,
+            filter_zero_branches=filter_zero_branches,
+            acc_factor=acc_factor,
+            resample_mode=resample_mode
+        )
 
-            # ALL_FEATURES row
-            summary_records.append({"feature": "ALL_FEATURES", "max_accuracy": np.max(list(all_features_acc.values())), **all_features_acc})
-
-            # PASSED_FEATURES row
-            valid_values = [v for v in passed_acc.values() if v is not None]
-            if valid_values:
-                max_acc = np.max(valid_values)
-            else:
-                max_acc = None  # or float('nan'), depending on your downstream usage
-
-            summary_records.append({"feature": "PASSED_FEATURES", "max_accuracy": max_acc, **passed_acc})
-
-            # Blank row
-            summary_records.append({col: np.nan for col in feature_records_sorted[0].keys()})
-
-            # Separate passed and failed features
-            passed_feature_records = [r for r in feature_records_sorted if r["feature"] in passed_features]
-            failed_feature_records = [r for r in feature_records_sorted if r["feature"] not in passed_features]
-
-            # Add passed features
-            summary_records.extend(passed_feature_records)
-
-            # Two blank rows for spacing
-            summary_records.append({col: np.nan for col in feature_records_sorted[0].keys()})
-            summary_records.append({col: np.nan for col in feature_records_sorted[0].keys()})
-
-            # Add failed features
-            summary_records.extend(failed_feature_records)
-
-            # OVERALL_MEAN row
-            summary_records.append({"feature": "OVERALL_MEAN", "mean_accuracy": overall_mean_acc, **all_features_acc})
-
-            df_summary = pd.DataFrame(summary_records)
-
-            # Column order
-            cols = ["feature", "max_accuracy"] + [c for c in classifiers.keys()]
-            df_summary = df_summary[cols]
-
-            df_summary.to_csv(output_file, index=False)
-            if meta_rows:
-                with open(output_file, "a") as f:
-                    f.write("\n".join(meta_rows) + "\n")
-            plot_feature_performance(output_file)
-            print(f"Feature ranking and classifier accuracies saved to {output_file}")
     
     yaml_files = [f for f in input_folder.iterdir() if f.is_file() and f.suffix in {'.yaml', '.yml'}]
 
@@ -392,6 +525,13 @@ def main():
         yaml_paths = list(Path(input_folder).rglob("*.yaml")) \
                 + list(Path(input_folder).rglob("*.yml"))
 
+        with open(yaml_paths[0], "r") as f:
+            metadata = yaml.safe_load(f)
+
+        if not selected_simulators and "simulators" in metadata:
+            selected_simulators = metadata.get("simulators")
+
+        '''
         yaml_files = []
         for path in yaml_paths:
             with open(path, "r") as f:
@@ -405,181 +545,78 @@ def main():
                 all_sims.update(sims)
 
             selected_simulators = list(all_sims)
-        
-        # --- 1. Generate simulator groups ---
-        simulator_groups = list(set(combinations(selected_simulators, 2)))
-        simulator_groups.append(tuple(selected_simulators))
-        simulator_groups = list(dict.fromkeys(simulator_groups))
-        print(f"---------- All simulator groups: {simulator_groups} ---------- ")
+        '''
 
-        for group in simulator_groups:
-            print(f"\n=== Evaluating simulator group: {group} ===")
+        all_folder = output_folder / "all"
+        all_folder.mkdir(parents=True, exist_ok=True)
 
-            csv_files_dict = collect_csv_files(input_folder)
-            all_dfs = assign_simulator_labels(metadata, csv_files_dict, list(group))
-            data = pd.concat(all_dfs, ignore_index=True)
-            meta_rows = []
+        # metadata = merge_csv_mappings(yaml_paths)
+
+        csv_files = collect_csv_files(input_folder)
+
+        run_feature_evaluation(
+            selected_simulators=selected_simulators,
+            csv_files=csv_files,
+            output_folder=all_folder,
+            metadata=metadata,
+            filter_zero_branches=filter_zero_branches,
+            acc_factor=acc_factor,
+            resample_mode=resample_mode
+        )
+
+        if csv_with_precision and csv_without_precision:
+            precision_applied_folder = output_folder / "precision_applied"
+            precision_applied_folder.mkdir(parents=True, exist_ok=True)
+
+            run_feature_evaluation(
+                selected_simulators=selected_simulators,
+                csv_files=csv_with_precision,
+                output_folder=precision_applied_folder,
+                metadata=metadata,
+                filter_zero_branches=filter_zero_branches,
+                acc_factor=acc_factor,
+                resample_mode=resample_mode
+            )
             
-            sim_part = "_".join(group)
-            all_folder = output_folder / "all"
-            all_folder.mkdir(parents=True, exist_ok=True)
+            precision_skipped_folder = output_folder / "precision_skipped"
+            precision_skipped_folder.mkdir(parents=True, exist_ok=True)
 
-            output_file = all_folder/ f"feature_ranking_{sim_part}_with_summary.csv"
+            run_feature_evaluation(
+                selected_simulators=selected_simulators,
+                csv_files=csv_without_precision,
+                output_folder=precision_skipped_folder,
+                metadata=metadata,
+                filter_zero_branches=filter_zero_branches,
+                acc_factor=acc_factor,
+                resample_mode=resample_mode
+            )
+        
+        if csv_with_recombination and csv_without_recombination:
+            recombination_applied_folder = output_folder / "recombination_applied"
+            recombination_applied_folder.mkdir(parents=True, exist_ok=True)
 
-            # --- 🧹 Optional Filtering ---
-            if filter_zero_branches:
-                before = len(data)
-                class_counts_before = data["simulator"].value_counts().to_dict()
-                cond = (data["zero_branch_count"] == 0) & (data["tree_type"] != 0) & (data["cut_edge_weight"] != -1)
-                data = data[cond]
-                after = len(data)
-                print(f"Filtered out {before - after} entries (zero_branch_count != 0 or tree_type == 0 or cut_edge_weight == -1) "
-                    f"({after}/{before} remaining).")
+            run_feature_evaluation(
+                selected_simulators=selected_simulators,
+                csv_files=csv_with_recombination,
+                output_folder=recombination_applied_folder,
+                metadata=metadata,
+                filter_zero_branches=filter_zero_branches,
+                acc_factor=acc_factor,
+                resample_mode=resample_mode
+            )
 
-                class_counts_after = data["simulator"].value_counts().to_dict()
+            recombination_skipped_folder = output_folder / "recombination_skipped"
+            recombination_skipped_folder.mkdir(parents=True, exist_ok=True)
 
-                meta_rows = [
-                    f"Trees before filtering: {before}",
-                    f"Trees after filtering: {after}",
-                    f"Class distribution after filtering: {class_counts_after}"
-                ]
-
-                # 🛑 Check if enough data left
-                if any(sim not in class_counts_after or class_counts_after[sim]/class_counts_before[sim] < 0.25 for sim in group):
-                    print("⚠️ Too many trees removed due to zero branches — not enough data left for training.")
-                    
-                    # Save informative CSV
-                   
-                    
-                    df_empty = pd.DataFrame({
-                        "message": [
-                            "Too many trees removed due to zero_branch_count > 0.",
-                            "Not enough data left to train classifiers.",
-                            f"Remaining samples: {after} (originally {before}).",
-                            "No analysis performed."
-                        ]
-                    })
-                    df_empty.to_csv(output_file, index=False)
-                    print(f"⚠️ Created summary file with warning message: {output_file}")
-                    continue  # skip to next group
-
-            # --- 2. Handle Inf and missing values ---
-            data.replace([np.inf, -np.inf], np.nan, inplace=True)
-            data.dropna(axis=1, inplace=True)
-
-            # --- 3. Prepare features and target ---
-            dep_var = 'simulator'
-            features = [c for c in data.columns if c != dep_var]
-            data = data[data[dep_var].isin(group)]
-            y = LabelEncoder().fit_transform(data[dep_var])
-            X = data[features]
-
-            # --- 4. Define classifiers ---
-            classifiers = {
-                "xgboost": xgb.XGBClassifier(
-                    n_estimators=100,
-                    max_depth=3,
-                    learning_rate=0.1,
-                    objective='multi:softmax',
-                    num_class=len(group),
-                    eval_metric='mlogloss'
-                ),
-                "random_forest": RandomForestClassifier(n_estimators=100, max_depth=5),
-                "logistic_regression": LogisticRegression(max_iter=500)
-            }
-
-            # --- 5. Evaluate each feature ---
-            min_accuracy = 1 / len(group) * acc_factor
-            feature_records = []
-            passed_features = []
-
-            for feature in features:
-                try:
-                    acc_per_clf = evaluate_feature(X, y, feature, classifiers, balance_train=resample_mode)
-                    max_acc = np.nanmax(list(acc_per_clf.values()))
-                except ValueError as e:
-                    if "only one class" in str(e):
-                        print(f"⚠️ Skipping feature '{feature}' – only one class present in training data.")
-                        acc_per_clf = {clf: np.nan for clf in classifiers}
-                        max_acc = np.nan
-                    else:
-                        raise
-
-                if not np.isnan(max_acc) and max_acc >= min_accuracy:
-                    passed_features.append(feature)
-
-                record = {"feature": feature, "max_accuracy": max_acc}
-                record.update(acc_per_clf)
-                feature_records.append(record)
-
-
-            feature_records_sorted = sorted(feature_records, key=lambda x: x["max_accuracy"], reverse=True)
-
-            # --- 6. Evaluate classifiers with all features ---
-            all_features_acc = evaluate_classifiers(X, y, classifiers)
-            print(f"All features accuracy per classifier: {all_features_acc}")
-
-            # --- 7. Evaluate classifiers with only passed features ---
-            if passed_features:
-                X_passed = X[passed_features]
-                passed_acc = evaluate_classifiers(X_passed, y, classifiers)
-            else:
-                passed_acc = {clf_name: None for clf_name in classifiers}
-            print(f"Passed features accuracy per classifier: {passed_acc}")
-
-            # --- 8. Overall mean accuracy ---
-            overall_mean_acc = np.mean(list(all_features_acc.values()))
-            print(f"Overall mean accuracy (all features, all classifiers): {overall_mean_acc:.4f}")
-
-            # --- 9. Save results (passed features first, spacing) ---
-            output_folder.mkdir(exist_ok=True)
-            sim_part = "_".join(group)
-            summary_records = []
-
-            # ALL_FEATURES row
-            summary_records.append({"feature": "ALL_FEATURES", "max_accuracy": np.max(list(all_features_acc.values())), **all_features_acc})
-
-            # PASSED_FEATURES row
-            valid_values = [v for v in passed_acc.values() if v is not None]
-            if valid_values:
-                max_acc = np.max(valid_values)
-            else:
-                max_acc = None  # or float('nan'), depending on your downstream usage
-
-            summary_records.append({"feature": "PASSED_FEATURES", "max_accuracy": max_acc, **passed_acc})
-
-            # Blank row
-            summary_records.append({col: np.nan for col in feature_records_sorted[0].keys()})
-
-            # Separate passed and failed features
-            passed_feature_records = [r for r in feature_records_sorted if r["feature"] in passed_features]
-            failed_feature_records = [r for r in feature_records_sorted if r["feature"] not in passed_features]
-
-            # Add passed features
-            summary_records.extend(passed_feature_records)
-
-            # Two blank rows for spacing
-            summary_records.append({col: np.nan for col in feature_records_sorted[0].keys()})
-            summary_records.append({col: np.nan for col in feature_records_sorted[0].keys()})
-
-            # Add failed features
-            summary_records.extend(failed_feature_records)
-
-            # OVERALL_MEAN row
-            summary_records.append({"feature": "OVERALL_MEAN", "mean_accuracy": overall_mean_acc, **all_features_acc})
-
-            df_summary = pd.DataFrame(summary_records)
-
-            # Column order
-            cols = ["feature", "max_accuracy"] + [c for c in classifiers.keys()]
-            df_summary = df_summary[cols]
-
-            df_summary.to_csv(output_file, index=False)
-            if meta_rows:
-                with open(output_file, "a") as f:
-                    f.write("\n".join(meta_rows) + "\n")
-            plot_feature_performance(output_file)
-            print(f"Feature ranking and classifier accuracies saved to {output_file}")
+            run_feature_evaluation(
+                selected_simulators=selected_simulators,
+                csv_files=csv_with_recombination,
+                output_folder=recombination_skipped_folder,
+                metadata=metadata,
+                filter_zero_branches=filter_zero_branches,
+                acc_factor=acc_factor,
+                resample_mode=resample_mode
+            )
 
 
 if __name__ == "__main__":

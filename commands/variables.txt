@@ -1,5 +1,5 @@
-# rates: 0.01, 0.1, 1, 10, 100, 1000, 10000
 sample_sizes: 2, 4, 16, 64, 256
 sequence_lengths: 10, 100, 1000, 10000, 100000, 1000000
 population_sizes: 1000, 10000, 100000, 1000000, 10000000
 usePrecision: 1, 0
+recombination_rates: 0, 1e-8

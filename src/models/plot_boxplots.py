@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import pandas as pd
 import seaborn as sns
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
 import numpy as np
@@ -99,6 +101,15 @@ def plot_boxplots(combined_df, output_dir):
     for stat in stats:
         df_stat = combined_df[combined_df["Statistic"] == stat]
 
+        # ---- NEW: Print unique values for zero_branch_count ----
+        if stat == "zero_branch_count":
+            print("\n=== Unique zero_branch_count values per simulator ===")
+            for sim in df_stat["Simulation"].unique():
+                vals = sorted(df_stat[df_stat["Simulation"] == sim]["Value"].unique().tolist())
+                print(f"  Simulator {sim}: unique values = {vals}")
+            print("=" * 60 + "\n")
+        # ----------------------------------------------------------
+        
         # Skip if there is not enough data for a proper boxplot
         valid_sims = df_stat["Simulation"].nunique()
         if len(df_stat) < 5 or valid_sims < 2:
@@ -112,7 +123,45 @@ def plot_boxplots(combined_df, output_dir):
         out_file = output_dir / f"{stat}_boxplot.png"
         plt.savefig(out_file)
         plt.close()
-        print(f"Saved boxplot: {out_file}")
+        # print(f"Saved boxplot: {out_file}")
+
+def plot_histograms(combined_df, output_dir):
+    if combined_df is None or combined_df.empty:
+        print("No data available for histogram plotting.")
+        return
+
+    stats = combined_df["Statistic"].unique()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for stat in stats:
+        df_stat = combined_df[combined_df["Statistic"] == stat]
+
+        # Skip if too little data
+        if len(df_stat) < 5:
+            print(f"Skipping histogram for {stat}: not enough data.")
+            continue
+
+        # One histogram per simulator
+        simulators = df_stat["Simulation"].unique()
+
+        for sim in simulators:
+            df_sim = df_stat[df_stat["Simulation"] == sim]
+
+            if len(df_sim) < 5:
+                print(f"Skipping histogram for {stat}/{sim}: not enough data.")
+                continue
+
+            plt.figure(figsize=(6, 4))
+            plt.hist(df_sim["Value"].dropna(), bins=40)
+            plt.title(f"{stat} — {sim}")
+            plt.xlabel("Value")
+            plt.ylabel("Frequency")
+            plt.tight_layout()
+
+            out_file = output_dir / f"{stat}_{sim}_hist.png"
+            plt.savefig(out_file)
+            plt.close()
+            print(f"Saved histogram: {out_file}")
 
 
 def main():
@@ -190,6 +239,7 @@ def main():
         target_folder = output_folder / relative
         target_folder.mkdir(parents=True, exist_ok=True)
         plot_boxplots(combined_df, target_folder)
+        plot_histograms(combined_df, target_folder)
         print(f"All boxplots saved to {target_folder}, removed/kept statistics logged in {log_file}")
 
     
