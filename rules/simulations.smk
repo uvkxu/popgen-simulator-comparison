@@ -2,14 +2,30 @@ include: "../snakemake_vars.py"
 
 rule run_one_config_all_simulations_demes:
     input:
-       lambda wildcards: f"{CONFIG_DIR}/{wildcards.config}.yaml"
+        lambda wildcards: f"{CONFIG_DIR}/{wildcards.config}.yaml"
     output:
         dummy=f"{RAW_DATA_DIR}/{{config}}/.done"
+    log:
+        out=f"{RAW_DATA_DIR}/{{config}}/run.out"
     conda:
         "../envs/simulations-env.yaml"
     shell:
-        """
-        python src/simulations/demes_run_all.py --config-dir {CONFIG_DIR}/ --configs {wildcards.config}.yaml --reps {REPS} --rec_reps {REC_REPS} --cmddir {CMD_DIR} --cmd_variables variables.txt --ms_mod_path {DEFAULT_MS_MOD_PATH}
+        r"""
+        mkdir -p $(dirname {log.out})
+        tmp_err=$(mktemp)
+        python src/simulations/demes_run_all.py \
+            --config-dir {CONFIG_DIR}/ \
+            --configs {wildcards.config}.yaml \
+            --reps {REPS} \
+            --rec_reps {REC_REPS} \
+            --cmddir {CMD_DIR} \
+            --cmd_variables variables.txt \
+            --ms_mod_path {DEFAULT_MS_MOD_PATH} \
+            > {log.out} 2> $tmp_err || {{ 
+                mv $tmp_err {RAW_DATA_DIR}/{wildcards.config}/run.err; 
+                exit 1; 
+            }}
+        rm -f $tmp_err
         touch {output.dummy}
         """
 

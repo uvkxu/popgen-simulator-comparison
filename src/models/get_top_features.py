@@ -44,9 +44,13 @@ def evaluate_feature(X, y, feature, classifiers, repeats=2, test_size=0.2, balan
 
     return {clf_name: np.max(acc_list) for clf_name, acc_list in acc_dict.items()}
 
+
 def evaluate_classifiers(X, y, classifiers, repeats=2, test_size=0.2):
     """Evaluate classifiers on all features together."""
     acc_dict = {clf_name: [] for clf_name in classifiers}
+    importance_dict = {}
+
+    feature_names = X.columns.tolist()
 
     for clf_name, clf in classifiers.items():
         for _ in range(repeats):
@@ -54,8 +58,12 @@ def evaluate_classifiers(X, y, classifiers, repeats=2, test_size=0.2):
             clf.fit(X_train, y_train)
             preds = clf.predict(X_valid)
             acc_dict[clf_name].append(accuracy_score(y_valid, preds))
+        
+        importance_dict[clf_name] = get_feature_importance(clf, feature_names)
+    
+    acc_dict_mean = {clf_name: np.mean(acc_list) for clf_name, acc_list in acc_dict.items()}
 
-    return {clf_name: np.mean(acc_list) for clf_name, acc_list in acc_dict.items()}
+    return acc_dict_mean, importance_dict
 
 
 def balance_train_oversample(X_train, y_train, random_state=None):
@@ -122,32 +130,45 @@ def balanced_train_undersample(X_train, y_train, random_state=None):
     return X_bal, y_bal
 
 
-def plot_feature_performance(csv_path, chance_baseline=None):
+def get_feature_importance(model, feature_names):
+    if hasattr(model, "feature_importances_"):  # RF, XGB
+        importance = model.feature_importances_
+    elif isinstance(model, LogisticRegression):
+        if model.coef_.ndim == 1 or model.coef_.shape[0] == 1:
+            importance = np.abs(model.coef_).flatten()
+        else:
+            importance = np.mean(np.abs(model.coef_), axis=0)
+    else:
+        raise ValueError(f"Unsupported model type {type(model)}")
+
+    return dict(zip(feature_names, importance))
+
+
+def plot_feature_performance(feature_importance_dict, csv_path, chance_baseline=None):
     """
-    Reads the evaluation CSV and produces a bar plot stored in the same folder.
+    Reads the evaluation CSV and produces:
+    - one accuracy bar plot
+    - one combined feature importance plot
+    - one feature importance plot per classifier (new!)
     """
 
-    # Read CSV
+    # --- Accuracy plot ---
     df = pd.read_csv(csv_path)
 
-    # Remove completely empty rows
-    df = df.dropna(how="all")
-
-    # Remove empty columns
-    df = df.dropna(axis=1, how="all")
+    # Remove empty rows and columns
+    df = df.dropna(how="all").dropna(axis=1, how="all")
 
     # Convert numeric columns to float
     for col in df.columns[1:]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Only keep rows that contain actual feature names
+    # Keep only actual feature rows
     df_features = df[~df["feature"].isin(["ALL_FEATURES", "PASSED_FEATURES", "OVERALL_MEAN"])]
 
-    # Plot as grouped bar chart
-    features = df_features["feature"]
+    features_acc = df_features["feature"]
     metrics = ["max_accuracy", "xgboost", "random_forest", "logistic_regression"]
-    x = np.arange(len(features))  # the label locations
-    width = 0.2  # width of the bars
+    x = np.arange(len(features_acc))
+    width = 0.2
 
     plt.figure(figsize=(12, 8))
 
@@ -158,25 +179,44 @@ def plot_feature_performance(csv_path, chance_baseline=None):
             linewidth=1.2,
             label=f"Chance baseline: {chance_baseline:.2f}"
         )
-        plt.legend()
 
     for i, metric in enumerate(metrics):
         plt.bar(x + i*width, df_features[metric], width=width, label=metric)
 
-    plt.xticks(x + width*1.5, features, rotation=90, fontsize=6)
+    plt.xticks(x + width*1.5, features_acc, rotation=90, fontsize=6)
     plt.ylabel("Accuracy")
     plt.xlabel("Feature")
     plt.title("Model Performance per Feature")
     plt.legend()
     plt.tight_layout()
 
-    # Save file next to the CSV
     base = os.path.splitext(os.path.basename(csv_path))[0]
     out_path = os.path.join(os.path.dirname(csv_path), f"{base}_barplot.png")
     plt.savefig(out_path, dpi=300)
     plt.close()
+    print(f"Accuracy plot saved at: {out_path}")
 
-    print(f"Plot gespeichert unter: {out_path}")
+    # --- One plot per classifier (NEW) ---
+    for clf_name, importance_dict_single in feature_importance_dict.items():
+        features = list(importance_dict_single.keys())
+        values = [importance_dict_single[f] for f in features]
+
+        plt.figure(figsize=(10, 6))
+        plt.bar(features, values)
+        plt.xticks(rotation=90, fontsize=7)
+        plt.ylabel("Feature Importance")
+        plt.xlabel("Feature")
+        plt.title(f"Feature Importance – {clf_name}")
+        plt.tight_layout()
+
+        out_path_single = os.path.join(
+            os.path.dirname(csv_path),
+            f"{base}_feature_importance_{clf_name}.png"
+        )
+        plt.savefig(out_path_single, dpi=300)
+        plt.close()
+
+        print(f"Feature importance plot for {clf_name} saved at: {out_path_single}")
 
 
 def run_feature_evaluation(
@@ -339,12 +379,12 @@ def run_feature_evaluation(
         )
 
         # --- Evaluate classifiers with all features ---
-        all_features_acc = evaluate_classifiers(X, y, classifiers)
+        all_features_acc, importance_dict = evaluate_classifiers(X, y, classifiers)
 
         # --- Evaluate with passed features ---
         if passed_features:
             X_passed = X[passed_features]
-            passed_acc = evaluate_classifiers(X_passed, y, classifiers)
+            passed_acc, _ = evaluate_classifiers(X_passed, y, classifiers)
         else:
             passed_acc = {clf_name: None for clf_name in classifiers}
 
@@ -399,7 +439,7 @@ def run_feature_evaluation(
             with open(output_file, "a") as f:
                 f.write("\n".join(meta_rows) + "\n")
 
-        plot_feature_performance(output_file, chance_baseline=majority_prop)
+        plot_feature_performance(importance_dict, output_file, chance_baseline=majority_prop)
 
 
 #TODO: mapping wird nur einmal akzeptiert... aber naja

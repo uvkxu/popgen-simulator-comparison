@@ -5,11 +5,20 @@ rule compute_boxplots_single_config_tree:
         lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/.done"
     output:
         dummy=f"{TREEFEATURES_BOXPLOTS_DIR}/{{config}}/.done"
+    log:
+        out=f"{TREEFEATURES_BOXPLOTS_DIR}/{{config}}/run.out"
     conda:
         "../envs/plot-env.yaml"
     shell:
         """
-        python src/models/plot_boxplots.py {TREE_FEATURES_DIR}/{wildcards.config} {TREEFEATURES_BOXPLOTS_DIR}/{wildcards.config}
+        mkdir -p $(dirname {log.out})
+        tmp_err=$(mktemp)
+        python src/models/plot_boxplots.py {TREE_FEATURES_DIR}/{wildcards.config} {TREEFEATURES_BOXPLOTS_DIR}/{wildcards.config} \
+            > {log.out} 2> $tmp_err || {{ 
+                mv $tmp_err {TREEFEATURES_BOXPLOTS_DIR}/{wildcards.config}/run.err; 
+                exit 1; 
+            }}
+        rm -f $tmp_err
         touch {output.dummy}
         """
 
@@ -19,11 +28,20 @@ rule compute_boxplots_single_config_allel:
         lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/.done"
     output:
         dummy=f"{ALLELFEATURES_BOXPLOTS_DIR}/{{config}}/.done"
+    log:
+        out=f"{ALLELFEATURES_BOXPLOTS_DIR}/{{config}}/run.out"
     conda:
         "../envs/plot-env.yaml"
     shell:
         """
-        python src/models/plot_boxplots.py {TREE_FEATURES_DIR}/{wildcards.config} {ALLELFEATURES_BOXPLOTS_DIR}/{wildcards.config}
+        mkdir -p $(dirname {log.out})
+        tmp_err=$(mktemp)
+        python src/models/plot_boxplots.py {TREE_FEATURES_DIR}/{wildcards.config} {ALLELFEATURES_BOXPLOTS_DIR}/{wildcards.config}  \
+            > {log.out} 2> $tmp_err || {{ 
+                mv $tmp_err {ALLELFEATURES_BOXPLOTS_DIR}/{wildcards.config}/run.err; 
+                exit 1; 
+            }}
+        rm -f $tmp_err
         touch {output.dummy}
         """
 

@@ -5,11 +5,20 @@ rule compute_top_features_treestats_single_config:
         lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/.done"
     output:
         dummy=f"{TREE_TOPFEATURES_DIR}/{{config}}/.done"
+    log:
+        out=f"{TREE_TOPFEATURES_DIR}/{{config}}/run.out"
     conda:
         "../envs/models-env.yaml"
     shell:
         """
-        python src/models/get_top_features.py {TREE_FEATURES_DIR}/{wildcards.config} {TREE_TOPFEATURES_DIR}/{wildcards.config}
+        mkdir -p $(dirname {log.out})
+        tmp_err=$(mktemp)
+        python src/models/get_top_features.py {TREE_FEATURES_DIR}/{wildcards.config} {TREE_TOPFEATURES_DIR}/{wildcards.config} \
+            > {log.out} 2> $tmp_err || {{ 
+                mv $tmp_err {TREE_TOPFEATURES_DIR}/{wildcards.config}/run.err; 
+                exit 1; 
+            }}
+        rm -f $tmp_err
         touch {output.dummy}
         """
 
@@ -44,10 +53,19 @@ rule compute_top_features_allelstats_single_config:
         lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/.done"
     output:
         dummy=f"{ALLEL_TOPFEATURES_DIR}/{{config}}/.done"
+    log:
+        out=f"{ALLEL_TOPFEATURES_DIR}/{{config}}/run.out"
     conda:
         "../envs/models-env.yaml"
     shell:
         """
-        python src/models/get_top_features.py {ALLEL_FEATURES_DIR}/{wildcards.config} {ALLEL_TOPFEATURES_DIR}/{wildcards.config}
+        mkdir -p $(dirname {log.out})
+        tmp_err=$(mktemp)
+        python src/models/get_top_features.py {ALLEL_FEATURES_DIR}/{wildcards.config} {ALLEL_TOPFEATURES_DIR}/{wildcards.config} \
+            > {log.out} 2> $tmp_err || {{ 
+                mv $tmp_err {ALLEL_TOPFEATURES_DIR}/{wildcards.config}/run.err; 
+                exit 1; 
+            }}
+        rm -f $tmp_err
         touch {output.dummy}
         """
