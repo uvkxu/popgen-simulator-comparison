@@ -456,13 +456,47 @@ for (yaml_path in yaml_files) {
     results_list <- list()
     skipped <- 0L
 
+    # Cache for avoiding duplicate computation
+    # Cache only for tree topology → stats do NOT depend on segment length
+    unique_tree_cache <- list()
+
     for (i in seq_along(tree_lines)) {
       txt <- tree_lines[i]
-      tr <- tryCatch(ape::read.tree(text = txt), error = function(e) e)
-      if (inherits(tr, "error")) { 
+      tr <- tryCatch(ape::read.tree(text = txt), error = function(e) NULL)
+
+      if (is.null(tr)) {
         skipped <- skipped + 1L
-        next 
+        next
       }
+
+      # Extract relative segment length (not part of caching key!)
+      if (has_recomb) {
+        segment_length <- as.numeric(gsub("^\\[(\\d+)\\].*$", "\\1", txt))
+        relative_seg_len <- segment_length / seq_length
+      } else {
+        relative_seg_len <- NA_real_
+      }
+
+      # Canonical *topology only*
+      canon <- ape::write.tree(tr)
+
+      # ======================
+      #   CACHE LOOKUP
+      # ======================
+      if (canon %in% names(unique_tree_cache)) {
+
+        # Reuse cached stats and only append the per-tree segment_length column
+        cached <- unique_tree_cache[[canon]]
+        combined <- cached
+        if (has_recomb) combined$segment_length <- relative_seg_len
+
+        results_list[[length(results_list) + 1L]] <- combined
+        next
+      }
+
+      # ======================
+      #   COMPUTE NEW STATS
+      # ======================
 
       tr_unweighted <- tr
       tr_unweighted$edge.length <- rep(1, nrow(tr_unweighted$edge))
@@ -471,7 +505,6 @@ for (yaml_path in yaml_files) {
         calculate_all_treestats(tr, normalize = FALSE, weighted = TRUE),
         error = function(e) NULL
       )
-
       tree_stats_unweighted <- tryCatch(
         calculate_all_treestats(tr_unweighted, normalize = FALSE, weighted = FALSE),
         error = function(e) NULL
@@ -482,38 +515,15 @@ for (yaml_path in yaml_files) {
         next
       }
 
-      # TODO: be catigous, actually it should be has_recomb
-      if (FALSE) {
-        segment_length <- as.numeric(gsub("^\\[(\\d+)\\].*$", "\\1", txt))
+      combined <- as.data.frame(as.list(c(tree_stats, tree_stats_unweighted)))
+      unique_tree_cache[[canon]] <- combined
 
-        tree_stats_scaled <- as.data.frame(as.list(
-          setNames(tree_stats, paste0(names(tree_stats), "_scaled"))
-        ))
-        tree_stats_unweighted_scaled <- as.data.frame(as.list(
-          setNames(lapply(tree_stats_unweighted, function(x) x * segment_length),
-                   paste0(names(tree_stats_unweighted), "_scaled"))
-        ))
-
-        if (!is.data.frame(tree_stats)) tree_stats <- as.data.frame(as.list(tree_stats))
-        if (!is.data.frame(tree_stats_unweighted)) tree_stats_unweighted <- as.data.frame(as.list(tree_stats_unweighted))
-
-        combined <- cbind(tree_stats, tree_stats_unweighted, tree_stats_scaled, tree_stats_unweighted_scaled)
-        combined$segment_length <- segment_length / seq_length
-      } else if (has_recomb) {
-        if (!is.data.frame(tree_stats)) tree_stats <- as.data.frame(as.list(tree_stats))
-        if (!is.data.frame(tree_stats_unweighted)) tree_stats_unweighted <- as.data.frame(as.list(tree_stats_unweighted))
-        combined <- cbind(tree_stats, tree_stats_unweighted)
-
-        segment_length <- as.numeric(gsub("^\\[(\\d+)\\].*$", "\\1", txt))
-        combined$segment_length <- segment_length / seq_length
-      } else {
-        if (!is.data.frame(tree_stats)) tree_stats <- as.data.frame(as.list(tree_stats))
-        if (!is.data.frame(tree_stats_unweighted)) tree_stats_unweighted <- as.data.frame(as.list(tree_stats_unweighted))
-        combined <- cbind(tree_stats, tree_stats_unweighted)
-      }
-
+      
+      if (has_recomb) combined$segment_length <- NULL
       results_list[[length(results_list) + 1L]] <- combined
     }
+
+
 
     if (length(results_list) == 0L) {
       warning("⚠️ No trees processed successfully in ", infile)

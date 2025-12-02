@@ -122,7 +122,7 @@ def balanced_train_undersample(X_train, y_train, random_state=None):
     return X_bal, y_bal
 
 
-def plot_feature_performance(csv_path):
+def plot_feature_performance(csv_path, chance_baseline=None):
     """
     Reads the evaluation CSV and produces a bar plot stored in the same folder.
     """
@@ -150,6 +150,15 @@ def plot_feature_performance(csv_path):
     width = 0.2  # width of the bars
 
     plt.figure(figsize=(12, 8))
+
+    if chance_baseline is not None:
+        plt.axhline(
+            y=chance_baseline,
+            linestyle="--",
+            linewidth=1.2,
+            label=f"Chance baseline: {chance_baseline:.2f}"
+        )
+        plt.legend()
 
     for i, metric in enumerate(metrics):
         plt.bar(x + i*width, df_features[metric], width=width, label=metric)
@@ -297,7 +306,10 @@ def run_feature_evaluation(
         }
 
         # --- Feature evaluation ---
-        min_accuracy = 1 / len(group) * acc_factor
+        class_counts = np.bincount(y)
+        majority_prop = class_counts.max() / class_counts.sum()
+
+        min_accuracy = majority_prop * acc_factor
         feature_records = []
         passed_features = []
 
@@ -387,7 +399,7 @@ def run_feature_evaluation(
             with open(output_file, "a") as f:
                 f.write("\n".join(meta_rows) + "\n")
 
-        plot_feature_performance(output_file)
+        plot_feature_performance(output_file, chance_baseline=majority_prop)
 
 
 #TODO: mapping wird nur einmal akzeptiert... aber naja
@@ -444,7 +456,8 @@ def main():
     if len(sys.argv) < 3:
         print("Usage: python get_top_features.py <input_folder> <output_folder> "
               "[--acc_factor=FLOAT] [--simulators=sim1,sim2,...] "
-              "[--filter_zero_branches] [--resample=none|under|over]")
+              "[--filter_zero_branches] [--resample=none|under|over]"
+              "[--grouped_by=precision,recombination,overall,single]")
         sys.exit(1)
 
     input_folder = Path(sys.argv[1])
@@ -453,6 +466,7 @@ def main():
     selected_simulators = None
     filter_zero_branches = False
     resample_mode = "none"
+    grouped_by = ["precision", "recombination", "overall"]
 
     for arg in sys.argv[3:]:
         if arg.startswith("--acc_factor"):
@@ -465,6 +479,13 @@ def main():
             resample_mode = arg.split("=")[1].strip().lower()
             if resample_mode not in ["none", "under", "over"]:
                 print("Invalid --resample value. Use one of: none, under, over.")
+                sys.exit(1)
+        elif arg.startswith("--grouped_by="):
+            grouped_by = arg.split("=", 1)[1].split(",")
+            valid_modes = ["precision", "recombination", "single", "overall"]
+            if not all(mode in valid_modes for mode in grouped_by):
+                invalid = [mode for mode in grouped_by if mode not in valid_modes]
+                print(f"Invalid --grouped_by value(s): {', '.join(invalid)}. Use: {', '.join(valid_modes)}")
                 sys.exit(1)
 
     os.makedirs(output_folder, exist_ok=True)
@@ -486,10 +507,6 @@ def main():
         with open(metadata_path, "r") as f:
             metadata = yaml.safe_load(f)
 
-        relative = root_path.relative_to(input_folder)
-        target_folder = output_folder / relative
-        target_folder.mkdir(parents=True, exist_ok=True)
-
         usePrecision = bool(metadata.get("usePrecision", True))
         recombination_rate = float(metadata.get("recombination_rate") or 0)
         
@@ -507,16 +524,20 @@ def main():
         else:
             csv_without_precision += csv_files
 
+        if "single" in grouped_by:
+            relative = root_path.relative_to(input_folder)
+            target_folder = output_folder / relative
+            target_folder.mkdir(parents=True, exist_ok=True)
 
-        run_feature_evaluation(
-            selected_simulators=selected_simulators,
-            csv_files=csv_files,
-            output_folder=target_folder,
-            metadata=metadata,
-            filter_zero_branches=filter_zero_branches,
-            acc_factor=acc_factor,
-            resample_mode=resample_mode
-        )
+            run_feature_evaluation(
+                selected_simulators=selected_simulators,
+                csv_files=csv_files,
+                output_folder=target_folder,
+                metadata=metadata,
+                filter_zero_branches=filter_zero_branches,
+                acc_factor=acc_factor,
+                resample_mode=resample_mode
+            )
 
     
     yaml_files = [f for f in input_folder.iterdir() if f.is_file() and f.suffix in {'.yaml', '.yml'}]
@@ -547,76 +568,78 @@ def main():
             selected_simulators = list(all_sims)
         '''
 
-        all_folder = output_folder / "all"
-        all_folder.mkdir(parents=True, exist_ok=True)
+        if "overall" in grouped_by:
+            all_folder = output_folder / "all"
+            all_folder.mkdir(parents=True, exist_ok=True)
 
-        # metadata = merge_csv_mappings(yaml_paths)
+            # metadata = merge_csv_mappings(yaml_paths)
 
-        csv_files = collect_csv_files(input_folder)
-
-        run_feature_evaluation(
-            selected_simulators=selected_simulators,
-            csv_files=csv_files,
-            output_folder=all_folder,
-            metadata=metadata,
-            filter_zero_branches=filter_zero_branches,
-            acc_factor=acc_factor,
-            resample_mode=resample_mode
-        )
-
-        if csv_with_precision and csv_without_precision:
-            precision_applied_folder = output_folder / "precision_applied"
-            precision_applied_folder.mkdir(parents=True, exist_ok=True)
-
+            csv_files = collect_csv_files(input_folder)
             run_feature_evaluation(
                 selected_simulators=selected_simulators,
-                csv_files=csv_with_precision,
-                output_folder=precision_applied_folder,
+                csv_files=csv_files,
+                output_folder=all_folder,
                 metadata=metadata,
                 filter_zero_branches=filter_zero_branches,
                 acc_factor=acc_factor,
                 resample_mode=resample_mode
             )
-            
-            precision_skipped_folder = output_folder / "precision_skipped"
-            precision_skipped_folder.mkdir(parents=True, exist_ok=True)
 
-            run_feature_evaluation(
-                selected_simulators=selected_simulators,
-                csv_files=csv_without_precision,
-                output_folder=precision_skipped_folder,
-                metadata=metadata,
-                filter_zero_branches=filter_zero_branches,
-                acc_factor=acc_factor,
-                resample_mode=resample_mode
-            )
+        if "precision" in grouped_by:
+            if csv_with_precision and csv_without_precision:
+                precision_applied_folder = output_folder / "precision_applied"
+                precision_applied_folder.mkdir(parents=True, exist_ok=True)
+
+                run_feature_evaluation(
+                    selected_simulators=selected_simulators,
+                    csv_files=csv_with_precision,
+                    output_folder=precision_applied_folder,
+                    metadata=metadata,
+                    filter_zero_branches=filter_zero_branches,
+                    acc_factor=acc_factor,
+                    resample_mode=resample_mode
+                )
+                
+                precision_skipped_folder = output_folder / "precision_skipped"
+                precision_skipped_folder.mkdir(parents=True, exist_ok=True)
+
+                run_feature_evaluation(
+                    selected_simulators=selected_simulators,
+                    csv_files=csv_without_precision,
+                    output_folder=precision_skipped_folder,
+                    metadata=metadata,
+                    filter_zero_branches=filter_zero_branches,
+                    acc_factor=acc_factor,
+                    resample_mode=resample_mode
+                )
         
-        if csv_with_recombination and csv_without_recombination:
-            recombination_applied_folder = output_folder / "recombination_applied"
-            recombination_applied_folder.mkdir(parents=True, exist_ok=True)
+        if "recombination" in grouped_by:
+            if csv_with_recombination and csv_without_recombination:
+                recombination_applied_folder = output_folder / "recombination_applied"
+                recombination_applied_folder.mkdir(parents=True, exist_ok=True)
 
-            run_feature_evaluation(
-                selected_simulators=selected_simulators,
-                csv_files=csv_with_recombination,
-                output_folder=recombination_applied_folder,
-                metadata=metadata,
-                filter_zero_branches=filter_zero_branches,
-                acc_factor=acc_factor,
-                resample_mode=resample_mode
-            )
+                run_feature_evaluation(
+                    selected_simulators=selected_simulators,
+                    csv_files=csv_with_recombination,
+                    output_folder=recombination_applied_folder,
+                    metadata=metadata,
+                    filter_zero_branches=filter_zero_branches,
+                    acc_factor=acc_factor,
+                    resample_mode=resample_mode
+                )
 
-            recombination_skipped_folder = output_folder / "recombination_skipped"
-            recombination_skipped_folder.mkdir(parents=True, exist_ok=True)
+                recombination_skipped_folder = output_folder / "recombination_skipped"
+                recombination_skipped_folder.mkdir(parents=True, exist_ok=True)
 
-            run_feature_evaluation(
-                selected_simulators=selected_simulators,
-                csv_files=csv_with_recombination,
-                output_folder=recombination_skipped_folder,
-                metadata=metadata,
-                filter_zero_branches=filter_zero_branches,
-                acc_factor=acc_factor,
-                resample_mode=resample_mode
-            )
+                run_feature_evaluation(
+                    selected_simulators=selected_simulators,
+                    csv_files=csv_with_recombination,
+                    output_folder=recombination_skipped_folder,
+                    metadata=metadata,
+                    filter_zero_branches=filter_zero_branches,
+                    acc_factor=acc_factor,
+                    resample_mode=resample_mode
+                )
 
 
 if __name__ == "__main__":

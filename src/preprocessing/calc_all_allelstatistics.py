@@ -16,41 +16,11 @@ from pypythia.prediction import predict_difficulty
 from pypythia.msa import *
 from pathlib import Path
 import shutil
-    
-def generate_msa(positions, genotypes, seq_length, overall_samples):
-    """Generate an MSA from ms-like genotypes and random ancestral sequence."""
-    bases = ['A', 'C', 'G', 'T']
-    n_haps = genotypes.shape[0] if genotypes.size > 0 else 0
+import warnings
 
-    assert((overall_samples == n_haps) or n_haps == 0)
 
-    # 1. Generate random ancestral sequence
-    ancestral_seq = [random.choice(bases) for _ in range(seq_length)]
-
-    # 2. Copy ancestral sequence for all haplotypes
-    haplotypes = [ancestral_seq.copy() for _ in range(overall_samples)]
-
-    # 3. For each segregating site: introduce derived alleles
-    if n_haps != 0:
-        for j, idx in enumerate(positions):
-            for i in range(n_haps):
-                if genotypes[i, j] == 1:
-                    # Derived allele: different base from ancestral
-                    try:
-                        anc = haplotypes[i][idx]
-                    except IndexError:
-                        print("⚠️ IndexError encountered while accessing haplotypes.")
-                        print(f"  Sequence length: {seq_length}")
-                        print(f"  Index attempted: {idx}")
-                        print(f"  Positions: {positions}")
-                        print(f"  Haplotype index: {i}")
-                        # Optionally, re-raise the error after printing debug info
-                        raise
-
-                    possible = [b for b in bases if b != anc]
-                    haplotypes[i][idx] = random.choice(possible)
-
-    return ["".join(seq) for seq in haplotypes]
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+np.seterr(all="ignore")
 
 # ============================================================
 # --- Parsing ms-like output ---
@@ -442,43 +412,56 @@ def main(input_dir, output_dir):
                     allel_features = calculate_block_stats(positions, genotypes, sample_structure)
                     rows.append(allel_features)
 
-                    # --- Create an MSA object ---
-                    seqs = generate_msa(positions, genotypes, seq_length, overall_samples)
+                    # === NEW: Direct MSA from binary genotypes ===
 
-                    # Create names for the samples (taxa)
-                    taxa = np.array([f"sample_{i+1}" for i in range(overall_samples)])
+                    # We assume genotypes is (n_haplotypes × n_segsites)
+                    # If segsites = 0, skip difficulty
+                    if genotypes.size == 0:
+                        allel_features["difficulty"] = -1
+                        allel_features["bollback_multinomial"] = 0.0
+                        allel_features["pattern_entropy"] = 0.0
+                        allel_features["entropy"] = 0.0
+                        rows.append(allel_features)
+                        continue
 
-                    # Convert list of strings into a 2D NumPy array with dtype='S1'
-                    seq_matrix = np.array([list(s) for s in seqs], dtype='S1')
+                    # Convert genotype matrix (0/1 ints) into sequences of "0"/"1"
+                    seqs = ["".join(str(x) for x in row) for row in genotypes]
 
-                    # Initialize the MSA object
+                    # Create taxa names
+                    taxa = np.array([f"sample_{i+1}" for i in range(genotypes.shape[0])])
+
+                    # Convert list → matrix of bytes
+                    seq_matrix = np.array([list(s) for s in seqs], dtype="S1")
+
+                    # Initialize MSA with MORPH type
                     msa = MSA(
                         taxa=taxa,
                         sequences=seq_matrix,
-                        data_type=DataType.DNA,   # or DataType("DNA"), depending on the implementation
+                        data_type=DataType.MORPH,
                         name=f"{sim}_block{block_idx}"
                     )
 
-                    # Create a temporary file to store the MSA in PHYLIP format
+                    # Write temporary PHYLIP file
                     with tempfile.NamedTemporaryFile(mode="w", suffix=".phy", delete=False) as tmp_msa_file:
-                        # Write the MSA object to a file (make sure your MSA class supports this)
-                        msa.write(tmp_msa_file.name)  # or msa.write_phylip(tmp_msa_file.name)
-                        tmp_msa_path = pathlib.Path(tmp_msa_file.name)
-                    
+                        msa.write(tmp_msa_file.name)
+                        tmp_msa_path = Path(tmp_msa_file.name)
+
                     raxml_path = Path(shutil.which("raxml-ng"))
                     if raxml_path is None:
                         raise FileNotFoundError("RAxML-NG not found in PATH")
 
-
                     try:
-                        if len(seqs) < 4:
-                            print(f"⚠️ Skipping difficulty: only {len(seqs)} sequences (need ≥4).")
+                        unique_seqs = np.unique(seqs, axis=0)
+                        if len(unique_seqs) < 4:
+                            print(f"⚠️ Skipping difficulty: only {len(unique_seqs)} sequences (need ≥4).")
                             allel_features["difficulty"] = -1
                         else:
                             try:
                                 difficulty = predict_difficulty(
                                     msa_file=tmp_msa_path,
                                     raxmlng=raxml_path,
+                                    file_format=FileFormat.PHYLIP,
+                                    data_type=DataType.MORPH,
                                     deduplicate=False,
                                     store_results=False
                                 )
@@ -486,13 +469,15 @@ def main(input_dir, output_dir):
                             except Exception as e:
                                 print(f"⚠️ PyPythia failed for block {block_idx}: {e}")
                                 allel_features["difficulty"] = -1
+
                     finally:
-                        # Clean up the temporary file after prediction
                         os.remove(tmp_msa_path)
 
+                    # MSA internal statistics
                     allel_features["bollback_multinomial"] = msa.bollback_multinomial()
                     allel_features["pattern_entropy"] = msa.pattern_entropy()
                     allel_features["entropy"] = msa.entropy()
+
 
                 # Save per-block statistics as CSV if any data was generated
                 if rows:

@@ -9,9 +9,7 @@ rule all:
         expand(f"{ALLEL_TOPFEATURES_DIR}/{{config}}/.done", config=all_configs),
         expand(f"{ALLELFEATURES_BOXPLOTS_DIR}/{{config}}/.done", config=all_configs),
         expand(f"{TREE_TOPFEATURES_DIR}/{{config}}/.done", config=all_configs),
-        expand(f"{TREEFEATURES_BOXPLOTS_DIR}/{{config}}/.done", config=all_configs),
-        expand(f"{TREE_ZEROB_TOPFEATURES_DIR}/{{config}}/.done", config=all_configs),
-        expand(f"{TREEFEATURES_ZEROB_BOXPLOTS_DIR}/{{config}}/.done", config=all_configs)
+        expand(f"{TREEFEATURES_BOXPLOTS_DIR}/{{config}}/.done", config=all_configs)
         
 ''' 
     expand(f"{ALLELFEATURES_BOXPLOTS_DIR}/{{config}}/.done", config=all_configs),
