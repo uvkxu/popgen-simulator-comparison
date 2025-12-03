@@ -34,6 +34,32 @@ def parse_variable_file(filepath):
             variables[key] = [convert(v) for v in vals]
     return variables
 
+
+def estimate_msms_heap_gb(sample_size, seq_length, nreps):
+    """
+    Estimate how much Java heap space (GB) msms needs.
+    Returns an integer number of GB for -Xmx.
+    """
+
+    # Base memory from sample size (msms stores genealogy states)
+    mem_samples = sample_size * 0.01   # each 100 samples -> ~1 GB
+
+    # Memory from sequence length (more segregating sites, buffers increase)
+    mem_seq = seq_length / 5_000_000   # 5 Mb -> ~1 GB
+
+    # Memory from number of replicates (stdout buffering + temporary objects)
+    mem_reps = nreps * 0.02            # 50 reps -> ~1 GB
+
+    # Sum and add a safety margin
+    mem = mem_samples + mem_seq + mem_reps
+
+    # Add fixed safety buffer (empirically good)
+    mem += 2
+
+    # Minimum 4 GB, round up
+    return max(4, int(mem + 1))
+
+
 def get_sample_sizes(config, sample_size=None):
     samples = []
     for pop in config.get("demes"):
@@ -49,6 +75,8 @@ def get_sample_sizes(config, sample_size=None):
 
 def run_command_demes(graph, sim, output_file, samples, nreps, sim_path=None, precision=None):
     """Run a single simulator and write its raw output to a .txt file."""
+    if output_file.exists():
+        return str(output_file.relative_to(output_file.parents[1]))
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     # ms/msms/mspms
@@ -56,10 +84,17 @@ def run_command_demes(graph, sim, output_file, samples, nreps, sim_path=None, pr
         cmd = demes.to_ms(graph, sequence_length=graph.sequence_length,
                           samples=samples, N0=graph.population_size)
 
-        if sim in ("ms", "msms"):
+        if sim == "ms":
             if not sim_path or not os.path.exists(sim_path):
                 raise FileNotFoundError(f"{sim} executable not found at {sim_path}.")
             prefix = sim_path
+
+        elif sim == "msms":
+            if not sim_path or not os.path.exists(sim_path):
+                raise FileNotFoundError(f"{sim} executable not found at {sim_path}.")
+            heap_gb = estimate_msms_heap_gb(sum(samples), graph.sequence_length, nreps)
+            prefix = f"java -Xmx{heap_gb}G -jar {sim_path}"
+    
         else:
             prefix = "mspms"
 
