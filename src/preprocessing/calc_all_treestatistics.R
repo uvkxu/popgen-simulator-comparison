@@ -366,6 +366,19 @@ try_stat <- function(phylo,
 }
 
 
+file_formats <- yaml.load_file("../../file_formats.yaml")
+
+format_string <- function(template, ...) {
+  args <- list(...)
+  out <- template
+  for (key in names(args)) {
+    placeholder <- paste0("{", key, "}")
+    out <- gsub(placeholder, args[[key]], out, fixed = TRUE)
+  }
+  out
+}
+
+
 # --- Argument parsing ---
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 2) stop("Usage: Rscript run_treestats_clean.R <input_dir> <output_dir>")
@@ -442,7 +455,7 @@ for (yaml_path in yaml_files) {
     rel_out_dir <- file.path(output_dir, rel_path)  # kein basename(yaml_dir) extra
     dir.create(rel_out_dir, recursive = TRUE, showWarnings = FALSE)
 
-    outfile <- file.path(rel_out_dir, paste0(sim_name, "_tree_features.csv"))
+    outfile <- file.path(rel_out_dir, format_string(file_formats$tree_features, SIM = sim_name))
 
     lines <- readLines(infile, warn = FALSE)
 

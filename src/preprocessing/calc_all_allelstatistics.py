@@ -22,6 +22,11 @@ import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 np.seterr(all="ignore")
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.append(PROJECT_ROOT)
+
+from snakemake_vars import FILE_FORMATS
+
 # ============================================================
 # --- Parsing ms-like output ---
 # ============================================================
@@ -482,7 +487,7 @@ def main(input_dir, output_dir):
                 # Save per-block statistics as CSV if any data was generated
                 if rows:
                     df = pd.DataFrame(rows)
-                    out_name = os.path.splitext(sim)[0] + '_allel_features.csv'
+                    out_name = FILE_FORMATS["allel_features"].format(SIM=sim)
                     output_path = os.path.join(target_dir, out_name)
 
                     # Save with fixed float precision for reproducibility

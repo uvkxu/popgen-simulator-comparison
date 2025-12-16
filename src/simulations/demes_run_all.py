@@ -9,11 +9,31 @@ import subprocess
 import math
 from pathlib import Path
 from msprime import BinaryMutationModel
+import stdpopsim
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
 
-from snakemake_vars import CONFIG_DIR, CMD_DIR, RAW_DATA_DIR, SIMULATORS, FILE_FORMATS, DEFAULT_MS_PATH, DEFAULT_MSMS_PATH
+from snakemake_vars import CONFIG_DIR, CMD_DIR, RAW_DATA_DIR, SIMULATORS, FILE_FORMATS, \
+ DEFAULT_MS_PATH, DEFAULT_MSMS_PATH, DEFAULT_MS_MOD_PATH, DEFAULT_SLIM_PATH
+
+
+def get_combinations(config_path, variable_file):
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
+    
+    def has_only_one_pop():
+        demes = config.get("demes", [])
+        return demes is None or len(config.get("demes", [])) == 1
+
+    vars_dict = parse_variable_file(variable_file)
+    if has_only_one_pop():
+        vars_dict.pop("population_sizes", None)
+    keys = list(vars_dict.keys())
+    combinations = itertools.product(*vars_dict.values())
+
+    return keys, combinations
+
 
 def parse_variable_file(filepath):
     """Reads the variable file and returns a dict of parameter lists."""
@@ -33,6 +53,10 @@ def parse_variable_file(filepath):
                     return v
             variables[key] = [convert(v) for v in vals]
     return variables
+
+
+def format_combination_as_folder_name(combo):
+    return "_".join(f"{k}-{v}" for k, v in combo.items())
 
 
 def estimate_msms_heap_gb(sample_size, seq_length, nreps):
@@ -67,11 +91,72 @@ def get_sample_sizes(config, sample_size=None):
         if any(t == 0 for t in epochs_time):
             s = sample_size if sample_size else pop.get("sample_size")
             if s is None:
-                raise ValueError(f"Population '{pop.get('name')}' has no sample_size defined.")
+                raise ValueError(f"Population '{pop.get('name')}' no sample_size defined.")
             samples.append(s)
         else:
             samples.append(0)
     return samples
+
+
+def to_ms_format(ts, rep_index):
+    lines = []
+    lines.append(f"// Replicate {rep_index}")
+    for tree in ts.trees():
+        lines.append(tree.as_newick() + ";")
+    lines.append("")
+    lines.append(f"segsites: {ts.num_sites}")
+    if ts.num_sites > 0:
+        positions = " ".join(f"{int(site.position)}" for site in ts.sites())
+        lines.append(f"positions: {positions}")
+        for row in ts.genotype_matrix().T:
+            lines.append("".join(map(str, row)))
+    lines.append("")
+
+    return lines
+    
+# TODO: compute good scaling_factor to make computation more efficient
+def run_slim_stdpopsim(graph, model_id, species_name, samples, nreps, output_file, slim_path):
+    species = stdpopsim.get_species(species_name) 
+    model = species.get_demographic_model(model_id)
+
+    if graph.recombination_rate:
+        contig = stdpopsim.Contig.basic_contig(
+                length=graph.sequence_length,
+                mutation_rate=graph.mutation_rate,
+                recombination_rate=graph.recombination_rate,
+                ploidy=1
+            )
+    else:
+        contig = stdpopsim.Contig.basic_contig(
+                length=graph.sequence_length,
+                mutation_rate=graph.mutation_rate,
+                ploidy=1
+            )
+
+    msprime_samples = []
+
+    for i, deme in enumerate(graph.demes):
+        if samples[i] > 0:
+            msprime_samples.append(
+                msprime.SampleSet(num_samples=samples[i], population=deme.name, time=0, ploidy=1)
+            )
+
+    engine = stdpopsim.get_engine("slim")
+    lines = []
+    for rep_index in range(1, nreps + 1):
+        ts = engine.simulate(
+            demographic_model=model,
+            contig=contig,
+            samples=msprime_samples,
+            slim_path=slim_path,
+            slim_scaling_factor=100
+        ) 
+
+        lines.extend(to_ms_format(ts, rep_index))
+    
+    with open(output_file, "w") as f:
+            f.write("\n".join(lines))
+
 
 def run_command_demes(graph, sim, output_file, samples, nreps, sim_path=None, precision=None):
     """Run a single simulator and write its raw output to a .txt file."""
@@ -99,6 +184,7 @@ def run_command_demes(graph, sim, output_file, samples, nreps, sim_path=None, pr
             prefix = "mspms"
 
         cmd = f"{prefix} {sum(samples)} {nreps} {cmd} -T"
+        print(cmd)
 
         if precision:
             if sim in ("ms", "mspms"):
@@ -114,9 +200,6 @@ def run_command_demes(graph, sim, output_file, samples, nreps, sim_path=None, pr
         with open(output_file, "w") as f:
             f.write(result.stdout)
 
-        # Return relative path from combo folder
-        return str(output_file.relative_to(output_file.parents[1]))
-
     # msprime
     elif sim == "msprime":
         msprime_samples = []
@@ -127,7 +210,10 @@ def run_command_demes(graph, sim, output_file, samples, nreps, sim_path=None, pr
                 )
 
         demography = msprime.Demography.from_demes(graph)
-        params = {"samples": msprime_samples, "demography": demography, "num_replicates": nreps}
+        params = {
+            "samples": msprime_samples, 
+            "demography": demography, 
+            "num_replicates": nreps}
         if graph.recombination_rate:
             params["recombination_rate"] = graph.recombination_rate
         if graph.sequence_length:
@@ -138,28 +224,17 @@ def run_command_demes(graph, sim, output_file, samples, nreps, sim_path=None, pr
 
         for rep_index, ts in enumerate(replicates, start=1):
             mts = msprime.sim_mutations(ts, rate=graph.mutation_rate, model=BinaryMutationModel())
-            lines.append(f"// Replicate {rep_index}")
-            for tree in ts.trees():
-                lines.append(tree.as_newick() + ";")
-            lines.append("")
-            lines.append(f"segsites: {mts.num_sites}")
-            if mts.num_sites > 0:
-                positions = " ".join(f"{int(site.position)}" for site in mts.sites())
-                lines.append(f"positions: {positions}")
-                for row in mts.genotype_matrix().T:
-                    lines.append("".join(map(str, row)))
-            lines.append("")
+            lines.extend(to_ms_format(mts, rep_index))
 
         with open(output_file, "w") as f:
             f.write("\n".join(lines))
-
-        return str(output_file.relative_to(output_file.parents[1]))
 
     else:
         raise ValueError(f"Unsupported simulator: {sim}")
 
 
-def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, usePrecision, simulators=SIMULATORS, reps=1, rec_reps=None, variable_file=None, ms_mod_path = None):
+def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, usePrecision, simulators=SIMULATORS, 
+                        reps=1, rec_reps=None, variable_file=None, ms_mod_path = None, slim_path = None):
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
@@ -174,18 +249,12 @@ def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, useP
 
     # Variable combinations
     if variable_file:
-        vars_dict = parse_variable_file(variable_file)
-        if has_only_one_pop():
-            vars_dict.pop("population_sizes", None)
-        keys = list(vars_dict.keys())
-        combinations = itertools.product(*vars_dict.values())
+        keys, combinations = get_combinations(config_path, variable_file)
 
         for values in combinations:
             combo = dict(zip(keys, values))
-            combo_dir = base_run_dir / "_".join(f"{k}-{v}" for k, v in combo.items())
+            combo_dir = base_run_dir / format_combination_as_folder_name(combo)
             combo_dir.mkdir(parents=True, exist_ok=True)
-
-            
 
             # Kopie des Graphen ggf. überschreiben
             graph = demes.load(config_path)
@@ -212,22 +281,45 @@ def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, useP
                 rep_dir.mkdir(parents=True, exist_ok=True)
 
                 for sim in simulators:
-                    output_file = rep_dir / f"{sim}_output.txt"
-                    sim_path = None
-                    if sim == "ms":
-                        sim_path = ms_mod_path if ms_mod_path and usePrecision else ms_path
-                    elif sim == "msms":
-                        sim_path = msms_path
+                    output_file = rep_dir / FILE_FORMATS["raw"].format(SIM=sim)
+                    rel_path = str(output_file.relative_to(output_file.parents[1]))
 
-                    rel_path = run_command_demes(
-                        graph=graph,
-                        sim=sim,
-                        output_file=output_file,
-                        nreps=nreps,
-                        samples=samples,
-                        sim_path=sim_path,
-                        precision=precision
-                    )
+                    if sim == "slim":
+                        if sim_path is None:
+                            raise ValueError("To path to the slim simulator must be given")
+                        if "metadata" not in config or config["metadata"] is None:
+                            raise ValueError("Metadata including model_id and species must be given")
+
+                        stdpopsim_data = config["metadata"]
+                        if "model_id" not in stdpopsim_data or "species" not in stdpopsim_data:
+                            raise ValueError("Metadata including model_id and species must be given")
+                            
+                        run_slim_stdpopsim(
+                            graph=graph, 
+                            model_id=stdpopsim_data["model_id"], 
+                            species_name=stdpopsim_data["species"], 
+                            output_file=output_file, 
+                            slim_path=slim_path,
+                            nreps=nreps,
+                            samples=samples
+                        )
+                    else:
+                        sim_path = None
+                        if sim == "ms":
+                            sim_path = ms_mod_path if ms_mod_path and usePrecision else ms_path
+                        elif sim == "msms":
+                            sim_path = msms_path
+
+                        run_command_demes(
+                            graph=graph,
+                            sim=sim,
+                            output_file=output_file,
+                            nreps=nreps,
+                            samples=samples,
+                            sim_path=sim_path,
+                            precision=precision
+                        )
+                        
                     simulator_outputs[sim] = str(output_file.name)
 
             # metadata.yaml nur einmal pro combo
@@ -258,16 +350,37 @@ def run_all_simulations(config_path, output_dir, ms_path, msms_path, nreps, useP
             rep_dir.mkdir(parents=True, exist_ok=True)
 
             for sim in simulators:
-                output_file = rep_dir / f"{sim}_output.txt"
-                rel_path = run_command_demes(
-                    graph=graph,
-                    sim=sim,
-                    output_file=output_file,
-                    nreps=nreps,
-                    samples=samples,
-                    sim_path=ms_path if sim=="ms" else msms_path if sim=="msms" else None,
-                    usePrecision= usePrecision
-                )
+                output_file = rep_dir / FILE_FORMATS["raw"].format(SIM=sim)
+                rel_path = str(output_file.relative_to(output_file.parents[1]))
+                if sim == "slim":
+                    if sim_path is None:
+                        raise ValueError("To path to the slim simulator must be given")
+                    if "metadata" not in config or config["metadata"] is None:
+                        raise ValueError("Metadata including model_id and species must be given")
+
+                    stdpopsim_data = config["metadata"]
+                    if "model_id" not in stdpopsim_data or "species" not in stdpopsim_data:
+                        raise ValueError("Metadata including model_id and species must be given")
+                        
+                    run_slim_stdpopsim(
+                        graph=graph, 
+                        model_id=stdpopsim_data["model_id"], 
+                        species_name=stdpopsim_data["species"], 
+                        output_file=output_file, 
+                        slim_path=slim_path,
+                        nreps=nreps,
+                        samples=samples
+                    )
+                else:
+                    run_command_demes(
+                        graph=graph,
+                        sim=sim,
+                        output_file=output_file,
+                        nreps=nreps,
+                        samples=samples,
+                        sim_path=ms_path if sim=="ms" else msms_path if sim=="msms" else None,
+                        usePrecision= usePrecision
+                    )
                 simulator_outputs[sim] = str(output_file.name)
 
         # metadata.yaml im base_run_dir
@@ -305,7 +418,7 @@ parser.add_argument(
 parser.add_argument(
     "--ms_mod_path",
     type=Path,
-    default=None,
+    default=DEFAULT_MS_MOD_PATH,
     help=f"Path to ms-mod executable (default: {None})",
 )
 
@@ -317,27 +430,19 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--slim_path",
+    type=Path,
+    default=DEFAULT_SLIM_PATH,
+    help=f"Path to slim executable (default: {DEFAULT_SLIM_PATH})"
+)
+
+parser.add_argument(
     "--config-dir",
     type=Path,
     default=CONFIG_DIR,
     help="Path to directory containing config files (default: configs/)",
 )
-parser.add_argument(
-    "--cmddir",
-    type=Path,
-    default=CMD_DIR
-)
-parser.add_argument(
-    "--configs",
-    nargs="*",
-    type=str,
-    help="None, one or more config filenames to run (default: all *.yaml in config-dir)",
-)
-parser.add_argument(
-    "--cmd_variables",
-    type=str,
-    help="Path to a file containing command variables"
-)
+
 parser.add_argument(
     "--outdir",
     type=Path,
@@ -360,7 +465,7 @@ parser.add_argument(
 parser.add_argument(
     "--nreps",
     type=int,
-    default=100,
+    default=2,
     help="Number of replicates per simulation in the ms/msms command (internal nreps)"
 )
 parser.add_argument(
@@ -373,6 +478,22 @@ parser.add_argument(
     type=bool,
     default=True,
     help="Whether to automatically adjust the number of decimal places in the output based on the sequence length"
+)
+parser.add_argument(
+    "--cmddir",
+    type=Path,
+    default=CMD_DIR
+)
+parser.add_argument(
+    "--configs",
+    nargs="*",
+    type=str,
+    help="None, one or more config filenames to run (default: all *.yaml in config-dir)",
+)
+parser.add_argument(
+    "--cmd_variables",
+    type=str,
+    help="Path to a file containing command variables"
 )
 
 args = parser.parse_args()
@@ -402,6 +523,7 @@ if args.configs:
             ms_path=args.ms_path,
             msms_path=args.msms_path,
             ms_mod_path=args.ms_mod_path,
+            slim_path=args.slim_path,
             simulators=simulators,
             reps=args.reps,
             rec_reps=args.rec_reps,

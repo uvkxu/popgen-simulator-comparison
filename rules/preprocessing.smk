@@ -1,5 +1,43 @@
 include: "../snakemake_vars.py"
 
+
+rule clean_single_file:
+    input:
+        raw = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_output.txt",
+        combo_yaml = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+    output:
+        cleaned = f"{CLEAN_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_cleaned_output.txt"
+    conda:
+        "../envs/allelstats-env.yaml"
+    shell:
+        """
+        python src/preprocessing/clean.py \
+            --input {input.raw} \
+            --output {output.cleaned} \
+            --combo_yaml {input.combo_yaml} \
+            --sim {wildcards.simulator}
+        """
+    
+rule compute_allel_features_single_file:
+    input:
+        cleaned = f"{CLEAN_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_cleaned_output.txt",
+        combo_yaml = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+    output:
+        allelstats = f"{ALLEL_FEATURES_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_allel_features.csv"
+    conda:
+        "../envs/allelstats-env.yaml"
+    shell:
+        """
+        python src/preprocessing/calc_allelstatistics.py \
+            --input {input.cleaned} \
+            --output {output.allelstats} \
+            --combo_yaml {input.combo_yaml}
+        """
+
+
+
+
+
 rule compute_treestats_config:
     input:
         lambda wildcards: f"{CLEAN_DIR}/{wildcards.config}/.done"

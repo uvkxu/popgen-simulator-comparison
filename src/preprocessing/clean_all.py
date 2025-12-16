@@ -11,6 +11,13 @@ UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(UTILS_ROOT)
 from utils.io_helpers import detect_simulator_from_yaml
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.append(PROJECT_ROOT)
+
+from utils.io_helpers import get_combinations, format_combination_as_folder_name
+from snakemake_vars import FILE_FORMATS
+
+
 def clean_sim_output(
     sim_output,
     sequence_length,
@@ -63,16 +70,16 @@ def clean_sim_output(
                 haplotypes.append(list(map(int, hapline)))
                 j += 1
 
-            haplotypes = list(map(list, haplotypes))  # make mutable
+            haplotypes = np.array(list(map(list, haplotypes)), dtype=int)  # make mutable
 
             all_integer_like = np.all(np.abs(positions - np.round(positions)) < 1e-9)
 
-            norm_positions = []
             if all_integer_like:
                 # alle Positionen schon ganzzahlig → direkt int casten
                 norm_positions = [int(round(p)) for p in positions]
             else:
                 # normale Skalierung
+                norm_positions = []
                 for p in positions:
                     if position_decimals is not None:
                         p = round(p, position_decimals)
@@ -89,7 +96,7 @@ def clean_sim_output(
                 p = norm_positions[idx]
                 if p == merged_positions[-1]:
                     for k in range(len(haplotypes)):
-                        merged_haplotypes[k][-1] |= haplotypes[k][idx]
+                        merged_haplotypes[k][-1] += haplotypes[k][idx]
                 else:
                     merged_positions.append(p)
                     for k in range(len(haplotypes)):
@@ -260,7 +267,7 @@ def process_folder(input_folder, output_folder, usePrecision=True):
                     continue
 
                 # --- Ausgabe-Datei ---
-                output_file = output_folder / rep_root_path.relative_to(input_folder) / f"{sim}_cleaned_output.txt"
+                output_file = output_folder / rep_root_path.relative_to(input_folder) / FILE_FORMATS["cleaned"].format(SIM=sim)
                 output_file.parent.mkdir(parents=True, exist_ok=True)
 
                 # --- Dateiinhalt lesen ---
@@ -273,7 +280,7 @@ def process_folder(input_folder, output_folder, usePrecision=True):
                     position_decimals=pos_prec,
                     branch_decimals=branch_prec,
                     factor=factor,
-                    branches_already_scaled=(sim == "msprime"),
+                    branches_already_scaled=(sim == "msprime" or sim == "slim"),
                 )
                 # print(f"✅ Cleaned {sim} output: {input_file}")
 

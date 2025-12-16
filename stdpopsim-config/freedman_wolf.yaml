@@ -1,0 +1,111 @@
+description: Demographic model of dog domestication with the Boxer reference genome,
+  two basal dog breeds, three wolves, and a golden jackal (outgroup) from Freedman
+  et al. (2014)
+doi:
+- https://doi.org/10.1371/journal.pgen.1004016
+time_units: generations
+mutation_rate: 1e-8
+metadata:
+  model_id: EarlyWolfAdmixture_6F14
+  species: CanFam
+
+demes:
+- name: root
+  description: Ancestral ((dog, wolf), golden jackal) root
+  epochs:
+  - end_time: 398262
+    start_size: 18169
+- name: GLJ
+  description: Golden jackal
+  ancestors:
+  - root
+  epochs:
+  - end_time: 0
+    start_size: 19446
+- name: ancDW
+  description: Ancestral (dog, wolf)
+  ancestors:
+  - root
+  epochs:
+  - end_time: 14874
+    start_size: 44993
+- name: ancDOG
+  description: Ancestral ((Boxer, Basenji), Dingo)
+  ancestors:
+  - ancDW
+  epochs:
+  - end_time: 12795
+    start_size: 1999
+- name: ancWLF
+  description: Ancestral ((Israeli, Croatian), Chinese) wolf
+  ancestors:
+  - ancDW
+  epochs:
+  - end_time: 13455
+    start_size: 12627
+- name: CHW
+  description: Chinese wolf
+  ancestors:
+  - ancWLF
+  epochs:
+  - end_time: 0
+    start_size: 5426
+- name: ancWLF1
+  description: Ancestral (Israeli, Croatian) wolf
+  ancestors:
+  - ancWLF
+  epochs:
+  - end_time: 13389
+    start_size: 1393
+- name: ISW
+  description: Israeli wolf
+  ancestors:
+  - ancWLF1
+  epochs:
+  - end_time: 0
+    start_size: 26092
+- name: CRW
+  description: Croatian wolf
+  ancestors:
+  - ancWLF1
+  epochs:
+  - end_time: 0
+    start_size: 11427
+- name: BSJ
+  description: Basenji
+  ancestors:
+  - ancDOG
+  epochs:
+  - end_time: 12102
+    start_size: 793
+  - end_time: 0
+    start_size: 2639.0
+- name: DNG
+  description: Dingo
+  ancestors:
+  - ancDOG
+  epochs:
+  - end_time: 0
+    start_size: 1914
+migrations:
+- source: GLJ
+  dest: ancDW
+  rate: 0.02
+- source: ancDW
+  dest: GLJ
+  rate: 0.99
+- source: ISW
+  dest: GLJ
+  rate: 0.05
+- source: BSJ
+  dest: ISW
+  rate: 0.07
+- source: DNG
+  dest: CHW
+  rate: 0.04
+- source: CHW
+  dest: DNG
+  rate: 0.03
+- source: ISW
+  dest: BSJ
+  rate: 0.18
