@@ -48,7 +48,7 @@ COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
 SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
 REPS = 10
-NUM_REPLICATES = 20
+NUM_REPLICATES = 10
 PRECISION = 17
 
 NUM_SANITY_CLASSES = 5
