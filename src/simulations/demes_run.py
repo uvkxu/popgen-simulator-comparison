@@ -13,9 +13,12 @@ import json
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
+UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(UTILS_ROOT)
 
 from snakemake_vars import CONFIG_DIR, CMD_DIR, RAW_DATA_DIR, SIMULATORS, FILE_FORMATS, \
  DEFAULT_MS_PATH, DEFAULT_MSMS_PATH, DEFAULT_MS_MOD_PATH, DEFAULT_SLIM_PATH, PRECISION
+from utils.io_helpers import log_step
 
 
 def estimate_msms_heap_gb(sample_size, seq_length, nreps):
@@ -117,8 +120,9 @@ def run_slim_stdpopsim(graph, model_id, species_name, samples, nreps, output_fil
             f.write("\n".join(lines))
 
 
-def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None):
+def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None, log_file=None):
     """Run a single simulator and write its raw output to a .txt file."""
+
     if output_file.exists():
         return
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -161,7 +165,7 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
             prefix = "mspms"
 
         cmd = f"{prefix} {sum(samples)} {nreps} {cmd} -T"
-        print(cmd)
+        # print(cmd)
 
         if precision:
             if sim in ("ms", "mspms"):
@@ -171,11 +175,18 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
                 cmd += f' -oFP {format_str}'
 
         result = subprocess.run(cmd.split(), capture_output=True, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(f"{sim} failed:\n{result.stderr}")
 
         with open(output_file, "w") as f:
             f.write(result.stdout)
+
+        if result.returncode != 0 or result.stderr:
+            if log_file:
+                err_info = result.stderr.strip()
+                log_step(log_file, "simulation", json.dumps(combo), sim, 0, 1, info=err_info)
+            else:
+                raise RuntimeError(f"Simulation with {sim} failed: {result.stderr}")
+        elif log_file:
+            log_step(log_file, "simulation", json.dumps(combo), sim, 1, 0)
 
     # msprime
     elif sim == "msprime":
@@ -196,15 +207,28 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
         if graph.sequence_length:
             params["sequence_length"] = graph.sequence_length
 
-        replicates = msprime.sim_ancestry(**params)
-        lines = []
+        try:
+            replicates = msprime.sim_ancestry(**params)
+            lines = []
 
-        for rep_index, ts in enumerate(replicates, start=1):
-            mts = msprime.sim_mutations(ts, rate=graph.mutation_rate, model=BinaryMutationModel())
-            lines.extend(to_ms_format(mts, rep_index))
+            for rep_index, ts in enumerate(replicates, start=1):
+                mts = msprime.sim_mutations(ts, rate=graph.mutation_rate, model=BinaryMutationModel())
+                lines.extend(to_ms_format(mts, rep_index))
 
-        with open(output_file, "w") as f:
-            f.write("\n".join(lines))
+            with open(output_file, "w") as f:
+                f.write("\n".join(lines))
+
+            # Log success
+            if log_file:
+                log_step(log_file, "simulation", json.dumps(combo), sim, success_inc=1, failed_inc=0)
+
+        except Exception as e:
+            # Log failure
+            if log_file:
+                log_step(log_file, "simulation", json.dumps(combo), sim, success_inc=0, failed_inc=1, 
+                        info=str(e))
+            raise
+
 
     else:
         raise ValueError(f"Unsupported simulator: {sim}")
@@ -273,6 +297,13 @@ parser.add_argument(
     required=True
 )
 
+parser.add_argument(
+    "--log_file",
+    type=Path,
+    default=None,
+    help="Path to master log file to update (default: None)"
+)
+
 args = parser.parse_args()
 
 sim = args.simulator
@@ -280,6 +311,7 @@ combo = json.loads(args.combo)
 output_file = args.output_file
 config_path = args.config_path
 nreps = args.nreps
+log_file = args.log_file
 
 ms_path = args.ms_path
 ms_mod_path = args.ms_mod_path
@@ -304,6 +336,7 @@ run_command_demes(
     sim=sim, 
     output_file=output_file, 
     nreps=nreps, 
-    sim_path=sim_path
+    sim_path=sim_path,
+    log_file=log_file
 )
 

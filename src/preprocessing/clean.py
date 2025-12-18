@@ -91,7 +91,7 @@ def clean_sim_output(
                 p = norm_positions[idx]
                 if p == merged_positions[-1]:
                     for k in range(len(haplotypes)):
-                        merged_haplotypes[k][-1] += haplotypes[k][idx]
+                        merged_haplotypes[k][-1] |= haplotypes[k][idx]
                 else:
                     merged_positions.append(p)
                     for k in range(len(haplotypes)):

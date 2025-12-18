@@ -9,13 +9,14 @@ import numpy as np
 import sys
 import os
 import yaml
+import argparse
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
 UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(UTILS_ROOT)
 
-from snakemake_vars import SIMULATORS, FILE_FORMATS
+from snakemake_vars import SIMULATORS, VALID_GROUPING_MODES
 from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
 
@@ -53,32 +54,6 @@ def filter_invalid_statistics(data_dict, log_file):
     return data_dict, kept_stats
 
 
-def filter_zero_branch_rows(data_dict):
-    """Filter out rows where zero_branch_count != 0 or tree_type == 0."""
-    filtered_data = {}
-    for sim_name, df in data_dict.items():
-        if df is not None:
-            missing_cols = [c for c in ["zero_branch_count", "tree_type"] if c not in df.columns]
-            if missing_cols:
-                print(f"⚠️  Warning: Columns {missing_cols} not found in {sim_name} data, skipping those filters.")
-                filtered_df = df.copy()
-            else:
-                before = len(df)
-                filtered_df = df[(df["zero_branch_count"] == 0) & (df["tree_type"] != 0) & (df["cut_edge_weight"] != -1)].copy()
-                removed_count = before - len(filtered_df)
-                print(f"{sim_name}: removed {removed_count} rows (zero_branch_count != 0 or tree_type == 0).")
-
-            if len(filtered_df) == 0:
-                print(f"⚠️  No rows left for {sim_name} after filtering.")
-                filtered_data[sim_name] = None
-            else:
-                filtered_data[sim_name] = filtered_df
-        else:
-            filtered_data[sim_name] = None
-
-    return filtered_data
-
-
 def melt_data_for_plotting(data_dict):
     dfs = []
     for sim_name, df in data_dict.items():
@@ -90,13 +65,51 @@ def melt_data_for_plotting(data_dict):
     return combined
 
 
-def plot_boxplots(combined_df, output_dir):
+def get_features_by_simulator(csv_files, output_folder, selected_simulators):
+    output_folder.mkdir(parents=True, exist_ok=True)
+    log_file = output_folder / "removed_statistics.log"
+
+    if not csv_files:
+        print("No CSV files found in input folder.")
+        return
+
+    data_dict = {sim: [] for sim in selected_simulators}
+
+    for f in csv_files:
+        sim = detect_simulator_from_yaml(
+            input_file=f
+        )
+        if sim is None:
+            print(f"Skipping unknown file: {f}")
+            continue
+        data_dict[sim].append(f)
+
+    # Load and merge CSVs per simulator
+    data_dict = {k: load_and_merge(v) for k, v in data_dict.items() if v}
+
+    # Filter invalid statistics
+    data_dict, kept_stats = filter_invalid_statistics(data_dict, log_file)
+
+    if not kept_stats:
+        print("No valid statistics to plot after filtering NaN/Inf. See log for details.")
+        return
+    
+    return data_dict
+
+
+def plot_boxplots(csv_files, output_folder, selected_simulators):
+    data_dict = get_features_by_simulator(
+        csv_files=csv_files,
+        output_folder=output_folder,
+        selected_simulators=selected_simulators
+    )
+
+    combined_df = melt_data_for_plotting(data_dict)
     if combined_df is None or combined_df.empty:
         print("No data available for plotting.")
         return
 
     stats = combined_df["Statistic"].unique()
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     for stat in stats:
         df_stat = combined_df[combined_df["Statistic"] == stat]
@@ -120,187 +133,157 @@ def plot_boxplots(combined_df, output_dir):
         sns.boxplot(x="Simulation", y="Value", data=df_stat)
         plt.title(stat)
         plt.tight_layout()
-        out_file = output_dir / f"{stat}_boxplot.png"
+        out_file = output_folder / f"{stat}_boxplot.png"
         plt.savefig(out_file)
         plt.close()
         # print(f"Saved boxplot: {out_file}")
 
-def plot_histograms(combined_df, output_dir):
-    if combined_df is None or combined_df.empty:
-        print("No data available for histogram plotting.")
-        return
 
-    stats = combined_df["Statistic"].unique()
-    output_dir.mkdir(parents=True, exist_ok=True)
+def plot_histograms(csv_files, output_folder, selected_simulators):
+    data_dict = get_features_by_simulator(
+        csv_files=csv_files,
+        output_folder=output_folder,
+        selected_simulators=selected_simulators
+    )
 
-    for stat in stats:
-        df_stat = combined_df[combined_df["Statistic"] == stat]
+    shared_columns = set.intersection(*(set(df.columns) for df in data_dict.values() if df is not None))
+    output_folder.mkdir(parents=True, exist_ok=True)
 
-        # Skip if too little data
-        if len(df_stat) < 5:
-            print(f"Skipping histogram for {stat}: not enough data.")
-            continue
+    print(f"Plotting distributions for {len(shared_columns)} shared statistics...")
 
-        # One histogram per simulator
-        simulators = df_stat["Simulation"].unique()
+    for stat in shared_columns:
+        plt.figure(figsize=(7, 5))
 
-        for sim in simulators:
-            df_sim = df_stat[df_stat["Simulation"] == sim]
+        for sim_name, df in data_dict.items():
+            if df is not None and stat in df.columns:
+                sns.kdeplot(df[stat], label=sim_name, fill=True, alpha=0.3)
+        
+        if stat == "cut_edge_weight":
+            plt.xscale("log")
 
-            if len(df_sim) < 5:
-                print(f"Skipping histogram for {stat}/{sim}: not enough data.")
-                continue
+        plt.title(f"Distribution of {stat}")
+        plt.xlabel(stat)
+        plt.ylabel("Density")
+        plt.legend(title="Simulator")
+        plt.tight_layout()
+        out_file = output_folder / f"{stat}_histogram.png"
+        plt.savefig(out_file)
+        plt.close()
+        print(f"Saved: {out_file}")
 
-            plt.figure(figsize=(6, 4))
-            plt.hist(df_sim["Value"].dropna(), bins=40)
-            plt.title(f"{stat} — {sim}")
-            plt.xlabel("Value")
-            plt.ylabel("Frequency")
-            plt.tight_layout()
 
-            out_file = output_dir / f"{stat}_{sim}_hist.png"
-            plt.savefig(out_file)
-            plt.close()
-            print(f"Saved histogram: {out_file}")
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Extract top features from simulation results."
+    )
+
+    parser.add_argument(
+        "--input_folder",
+        type=Path,
+        required=True,
+        help="Input folder containing result files",
+    )
+
+    parser.add_argument(
+        "--output_folder",
+        type=Path,
+        required=True,
+        help="Output folder path",
+    )
+
+    parser.add_argument(
+        "--simulators",
+        type=lambda s: s.split(","),
+        default=SIMULATORS,
+        help="Comma-separated list of simulators (e.g. sim1,sim2)",
+    )
+
+    parser.add_argument(
+        "--grouped_by",
+        type=str,
+        choices=VALID_GROUPING_MODES,
+        default="single",
+        help=f"Grouping mode. Choices: {', '.join(VALID_GROUPING_MODES)} (default: single)",
+    )
+
+    return parser.parse_args()
 
 
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python plot_boxplots.py <input_folder> <output_folder> [--filter_zero_branches]")
-        sys.exit(1)
+    args = parse_args()
 
-    input_folder = Path(sys.argv[1])
-    output_folder = Path(sys.argv[2])
-    filter_zero_branches = False
-    selected_simulators = None
-
-    if not input_folder.exists():
-        print(f"Input folder does not exist: {input_folder}")
-        sys.exit(1)
-
-    for arg in sys.argv[3:]:
-        if arg.startswith("--simulators"):
-            selected_simulators = arg.split("=")[1].split(",")
-        elif arg == "--filter_zero_branches":
-            filter_zero_branches = True
+    input_folder = args.input_folder
+    output_folder = args.output_folder
+    selected_simulators = args.simulators
+    grouped_by = args.grouped_by
 
     output_folder.mkdir(parents=True, exist_ok=True)
-    log_file = output_folder / "removed_statistics.log"
 
+    csv_with_precision = []
+    csv_without_precision = []
+
+    csv_with_recombination = []
+    csv_without_recombination = []
+
+    if "single" == grouped_by or  "overall" == grouped_by:
+        csv_files = collect_csv_files(input_folder)
+        if not csv_files:
+            print(f"No CSV files found in input folder {input_folder} with mode {grouped_by}.")
+            return
+        plot_boxplots(csv_files, output_folder, selected_simulators)
+        plot_histograms(csv_files, output_folder, selected_simulators)
+        return
+        
     for root, _, files in os.walk(input_folder):
         root_path = Path(root)
 
-        metadata_files = [f for f in files if f.endswith(".yaml") or f.endswith(".yml")]
-        if not metadata_files:
+        combo_yamls = [f for f in files if f.endswith(".yaml") or f.endswith(".yml")]
+        if not combo_yamls:
             continue
         
-        metadata_path = root_path / metadata_files[0]
-        with open(metadata_path, "r") as f:
-            metadata = yaml.safe_load(f)
-        
-        if not selected_simulators and "simulators" in metadata:
-            selected_simulators = metadata.get("simulators")
-        
+        combo_yaml_path = root_path / combo_yamls[0]
+        with open(combo_yaml_path, "r") as f:
+            combo_params = yaml.safe_load(f)
 
-        # Collect all CSV files (list of Paths)
+        usePrecision = bool(combo_params.get("usePrecision"))
+        recombination_rate = float(combo_params.get("recombination_rate") or 0)
+
         csv_files = collect_csv_files(root_path)
 
-        if not csv_files:
-            print("No CSV files found in input folder.")
+        if usePrecision:
+            csv_with_precision += csv_files
+            if recombination_rate:
+                csv_with_recombination += csv_files
+            else:
+                csv_without_recombination += csv_files
+        else:
+            csv_without_precision += csv_files
+
+    if "precision_applied" == grouped_by:
+        if not csv_with_precision:
+            print(f"No CSV files found in input folder {input_folder} with mode {grouped_by}.")
             return
-
-        # Organize files by simulator type
-        data_dict = {sim: [] for sim in selected_simulators}
-
-        for f in csv_files:
-            sim = detect_simulator_from_yaml(metadata, f, selected_simulators)
-            if sim is None:
-                print(f"Skipping unknown file: {f}")
-                continue
-            data_dict[sim].append(f)
-
-        # Load and merge CSVs per simulator
-        data_dict = {k: load_and_merge(v) for k, v in data_dict.items() if v}
-
-        # Optional filtering by zero_branch_count
-        if filter_zero_branches:
-            print("Applying zero_branch_count == 0 filter...")
-            data_dict = filter_zero_branch_rows(data_dict)
-
-        # Filter invalid statistics
-        data_dict, kept_stats = filter_invalid_statistics(data_dict, log_file)
-
-        if not kept_stats:
-            print("No valid statistics to plot after filtering NaN/Inf. See log for details.")
+        plot_boxplots(csv_with_precision, output_folder, selected_simulators)
+        plot_histograms(csv_with_precision, output_folder, selected_simulators)
+    elif "precision_skipped" == grouped_by:
+        if not csv_without_precision:
+            print(f"No CSV files found in input folder {input_folder} with mode {grouped_by}.")
             return
-
-        combined_df = melt_data_for_plotting(data_dict)
-        relative = root_path.relative_to(input_folder)
-        target_folder = output_folder / relative
-        target_folder.mkdir(parents=True, exist_ok=True)
-        plot_boxplots(combined_df, target_folder)
-        plot_histograms(combined_df, target_folder)
-        print(f"All boxplots saved to {target_folder}, removed/kept statistics logged in {log_file}")
-
-    
-    yaml_files = [f for f in input_folder.iterdir() if f.is_file() and f.suffix in {'.yaml', '.yml'}]
-
-    if not yaml_files:
-        yaml_paths = list(Path(input_folder).rglob("*.yaml")) \
-                + list(Path(input_folder).rglob("*.yml"))
-
-        yaml_files = []
-        for path in yaml_paths:
-            with open(path, "r") as f:
-                yaml_files.append(yaml.safe_load(f))
-
-        if not selected_simulators:
-            # Alle simulatoren einsammeln und vereinigen
-            all_sims = set()
-            for f in yaml_files:
-                sims = f.get("simulators", [])
-                all_sims.update(sims)
-
-            selected_simulators = list(all_sims)
-
-        
-        # Collect all CSV files (list of Paths)
-        csv_files = collect_csv_files(input_folder)
-
-        if not csv_files:
-            print("No CSV files found in input folder.")
+        plot_boxplots(csv_without_precision, output_folder, selected_simulators)
+        plot_histograms(csv_without_precision, output_folder, selected_simulators)
+    elif "recombination_applied" == grouped_by:
+        if not csv_with_recombination:
+            print(f"No CSV files found in input folder {input_folder} with mode {grouped_by}.")
             return
-
-        # Organize files by simulator type
-        data_dict = {sim: [] for sim in selected_simulators}
-
-        for f in csv_files:
-            sim = detect_simulator_from_yaml(metadata, f, selected_simulators)
-            if sim is None:
-                print(f"Skipping unknown file: {f}")
-                continue
-            data_dict[sim].append(f)
-
-        # Load and merge CSVs per simulator
-        data_dict = {k: load_and_merge(v) for k, v in data_dict.items() if v}
-
-        # Optional filtering by zero_branch_count
-        if filter_zero_branches:
-            print("Applying zero_branch_count == 0 filter...")
-            data_dict = filter_zero_branch_rows(data_dict)
-
-        # Filter invalid statistics
-        data_dict, kept_stats = filter_invalid_statistics(data_dict, log_file)
-
-        if not kept_stats:
-            print("No valid statistics to plot after filtering NaN/Inf. See log for details.")
+        plot_boxplots(csv_with_recombination, output_folder, selected_simulators)
+        plot_histograms(csv_with_recombination, output_folder, selected_simulators)
+    elif "recombination_skipped" == grouped_by:
+        if not csv_without_recombination:
+            print(f"No CSV files found in input folder {input_folder} with mode {grouped_by}.")
             return
+        plot_boxplots(csv_without_recombination, output_folder, selected_simulators)
+        plot_histograms(csv_without_recombination, output_folder, selected_simulators)
 
-        combined_df = melt_data_for_plotting(data_dict)
-        all_folder = output_folder / "all"
-        all_folder.mkdir(parents=True, exist_ok=True)
-        plot_boxplots(combined_df, all_folder)
-        print(f"All boxplots saved to {output_folder}, removed/kept statistics logged in {log_file}")
 
 
 if __name__ == "__main__":

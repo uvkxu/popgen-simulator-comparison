@@ -366,205 +366,130 @@ try_stat <- function(phylo,
 }
 
 
-file_formats <- yaml.load_file("../../file_formats.yaml")
-
-format_string <- function(template, ...) {
-  args <- list(...)
-  out <- template
-  for (key in names(args)) {
-    placeholder <- paste0("{", key, "}")
-    out <- gsub(placeholder, args[[key]], out, fixed = TRUE)
-  }
-  out
-}
-
 
 # --- Argument parsing ---
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) < 2) stop("Usage: Rscript run_treestats_clean.R <input_dir> <output_dir>")
+if (length(args) < 3) {
+  stop("Usage: Rscript run_treestats_clean.R <input_file> <output_file> <combo_yaml>")
+}
 
-input_dir <- args[1]
-output_dir <- args[2]
+input_file  <- args[1]
+output_file <- args[2]
+combo_yaml  <- args[3]
 
-if (!dir.exists(input_dir)) stop("Input directory does not exist: ", input_dir)
-dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+# --- Checks ---
+if (!file.exists(input_file)) {
+  stop("Input file does not exist: ", input_file)
+}
 
-# --- Durchsuche Ordner nach YAML-Dateien ---
-yaml_files <- list.files(input_dir, pattern = "\\.ya?ml$", full.names = TRUE, recursive = TRUE)
-if (length(yaml_files) == 0) stop("No metadata.yaml files found in input directory: ", input_dir)
+if (!file.exists(combo_yaml)) {
+  stop("YAML config file does not exist: ", combo_yaml)
+}
 
-# --- Hauptschleife über alle metadata.yaml-Dateien ---
-# --- Hauptschleife über alle metadata.yaml-Dateien ---
-for (yaml_path in yaml_files) {
-  metadata <- yaml::read_yaml(yaml_path)
+# --- Ensure output directory exists ---
+output_dir <- dirname(output_file)
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+}
 
-  # Überprüfen, ob erforderliche Felder vorhanden sind
-  required <- c("sequence_length")
-  missing <- setdiff(required, names(metadata))
-  if (length(missing) > 0) {
-    warning("⚠️ Missing fields in ", yaml_path, ": ", paste(missing, collapse = ", "))
+combo_params <- yaml::read_yaml(combo_yaml)
+required <- c("sequence_length")
+missing <- setdiff(required, names(combo_params))
+if (length(missing) > 0) {
+  stop("Missing fields in ", combo_yaml, ": ", paste(missing, collapse = ", "))
+}
+
+seq_length <- combo_params$sequence_length
+has_recomb <- "recombination_rate" %in% names(combo_params) &&
+               !is.null(combo_params$recombination_rate) &&
+               combo_params$recombination_rate != 0
+
+tree_features_mapping <- list()
+lines <- readLines(input_file, warn = FALSE)
+
+# --- Filter only valid Newick lines ---
+is_tree_line <- grepl("\\(", lines) & grepl(";+", lines) &
+  !grepl("^\\s*//", lines) &
+  !grepl("^\\s*segsites", lines, ignore.case = TRUE) &
+  !grepl("^\\s*positions", lines, ignore.case = TRUE)
+
+tree_lines <- trimws(sub(";+$", ";", lines[is_tree_line]))
+results_list <- list()
+skipped <- 0L
+
+# Cache for avoiding duplicate computation
+# Cache only for tree topology → stats do NOT depend on segment length
+unique_tree_cache <- list()
+
+for (i in seq_along(tree_lines)) {
+  txt <- tree_lines[i]
+  tr <- tryCatch(ape::read.tree(text = txt), error = function(e) NULL)
+
+  if (is.null(tr)) {
+    skipped <- skipped + 1L
     next
   }
 
-  seq_length <- metadata$sequence_length
-
-  # cleaned_outputs aus entweder "cleaned_outputs" oder "simulator_outputs"
-  if ("cleaned_outputs" %in% names(metadata)) {
-    cleaned_outputs <- metadata$cleaned_outputs
-  } else if ("simulator_outputs" %in% names(metadata)) {
-    cleaned_outputs <- metadata$simulator_outputs
+  # Extract relative segment length (not part of caching key!)
+  if (has_recomb) {
+    segment_length <- as.numeric(gsub("^\\[(\\d+)\\].*$", "\\1", txt))
+    relative_seg_len <- segment_length / seq_length
   } else {
-    warning("⚠️ Neither 'cleaned_outputs' nor 'simulator_outputs' found in ", yaml_path)
+    relative_seg_len <- NA_real_
+  }
+
+  # Canonical *topology only*
+  canon <- ape::write.tree(tr)
+
+  # ======================
+  #   CACHE LOOKUP
+  # ======================
+  if (canon %in% names(unique_tree_cache)) {
+
+    # Reuse cached stats and only append the per-tree segment_length column
+    cached <- unique_tree_cache[[canon]]
+    combined <- cached
+    if (has_recomb) combined$segment_length <- relative_seg_len
+
+    results_list[[length(results_list) + 1L]] <- combined
     next
   }
 
-  has_recomb <- "recombination_rate" %in% names(metadata) &&
-               !is.null(metadata$recombination_rate) &&
-               metadata$recombination_rate != 0
+  # ======================
+  #   COMPUTE NEW STATS
+  # ======================
 
-  yaml_dir <- dirname(yaml_path)
+  tr_unweighted <- tr
+  tr_unweighted$edge.length <- rep(1, nrow(tr_unweighted$edge))
 
-  # --- Alle txt-Dateien rekursiv im Ordner der YAML-Datei finden ---
-  txt_files <- list.files(yaml_dir, pattern = "\\.txt$", 
-                          full.names = TRUE, recursive = TRUE)
+  tree_stats <- tryCatch(
+    calculate_all_treestats(tr, normalize = FALSE, weighted = TRUE),
+    error = function(e) NULL
+  )
+  tree_stats_unweighted <- tryCatch(
+    calculate_all_treestats(tr_unweighted, normalize = FALSE, weighted = FALSE),
+    error = function(e) NULL
+  )
 
-  if (length(txt_files) == 0) {
-    warning("⚠️ No _cleaned_output.txt files found in ", yaml_dir)
+  if (is.null(tree_stats) || is.null(tree_stats_unweighted)) {
+    skipped <- skipped + 1L
     next
   }
 
-  # --- Mapping für Tree Features erzeugen ---
-  tree_features_mapping <- list()
+  combined <- as.data.frame(as.list(c(tree_stats, tree_stats_unweighted)))
+  unique_tree_cache[[canon]] <- combined
 
-  # --- Für jede txt-Datei Tree-Features berechnen ---
-  for (infile in txt_files) {
-    sim_name <- names(cleaned_outputs)[basename(unlist(cleaned_outputs)) == basename(infile)]
   
-    if (length(sim_name) == 0) {
-      warning("⚠️ No matching cleaned_output key found for ", infile)
-      next
-    } else if (length(sim_name) > 1) {
-      warning("⚠️ Multiple cleaned_outputs match txt file ", infile, " → using first match")
-      sim_name <- sim_name[1]
-    }
-    
-    sim_name <- sim_name[1]
-    
-    # rel_path relativ zum YAML-Ordner
-    rel_path <- sub(paste0("^", normalizePath(input_dir), "/?"), "", normalizePath(dirname(infile)))
-    rel_out_dir <- file.path(output_dir, rel_path)  # kein basename(yaml_dir) extra
-    dir.create(rel_out_dir, recursive = TRUE, showWarnings = FALSE)
-
-    outfile <- file.path(rel_out_dir, format_string(file_formats$tree_features, SIM = sim_name))
-
-    lines <- readLines(infile, warn = FALSE)
-
-    # --- Filter only valid Newick lines ---
-    is_tree_line <- grepl("\\(", lines) & grepl(";+", lines) &
-      !grepl("^\\s*//", lines) &
-      !grepl("^\\s*segsites", lines, ignore.case = TRUE) &
-      !grepl("^\\s*positions", lines, ignore.case = TRUE)
-
-    tree_lines <- trimws(sub(";+$", ";", lines[is_tree_line]))
-    results_list <- list()
-    skipped <- 0L
-
-    # Cache for avoiding duplicate computation
-    # Cache only for tree topology → stats do NOT depend on segment length
-    unique_tree_cache <- list()
-
-    for (i in seq_along(tree_lines)) {
-      txt <- tree_lines[i]
-      tr <- tryCatch(ape::read.tree(text = txt), error = function(e) NULL)
-
-      if (is.null(tr)) {
-        skipped <- skipped + 1L
-        next
-      }
-
-      # Extract relative segment length (not part of caching key!)
-      if (has_recomb) {
-        segment_length <- as.numeric(gsub("^\\[(\\d+)\\].*$", "\\1", txt))
-        relative_seg_len <- segment_length / seq_length
-      } else {
-        relative_seg_len <- NA_real_
-      }
-
-      # Canonical *topology only*
-      canon <- ape::write.tree(tr)
-
-      # ======================
-      #   CACHE LOOKUP
-      # ======================
-      if (canon %in% names(unique_tree_cache)) {
-
-        # Reuse cached stats and only append the per-tree segment_length column
-        cached <- unique_tree_cache[[canon]]
-        combined <- cached
-        if (has_recomb) combined$segment_length <- relative_seg_len
-
-        results_list[[length(results_list) + 1L]] <- combined
-        next
-      }
-
-      # ======================
-      #   COMPUTE NEW STATS
-      # ======================
-
-      tr_unweighted <- tr
-      tr_unweighted$edge.length <- rep(1, nrow(tr_unweighted$edge))
-
-      tree_stats <- tryCatch(
-        calculate_all_treestats(tr, normalize = FALSE, weighted = TRUE),
-        error = function(e) NULL
-      )
-      tree_stats_unweighted <- tryCatch(
-        calculate_all_treestats(tr_unweighted, normalize = FALSE, weighted = FALSE),
-        error = function(e) NULL
-      )
-
-      if (is.null(tree_stats) || is.null(tree_stats_unweighted)) {
-        skipped <- skipped + 1L
-        next
-      }
-
-      combined <- as.data.frame(as.list(c(tree_stats, tree_stats_unweighted)))
-      unique_tree_cache[[canon]] <- combined
-
-      
-      if (has_recomb) combined$segment_length <- NULL
-      results_list[[length(results_list) + 1L]] <- combined
-    }
+  if (has_recomb) combined$segment_length <- NULL
+  results_list[[length(results_list) + 1L]] <- combined
+}
 
 
 
-    if (length(results_list) == 0L) {
-      warning("⚠️ No trees processed successfully in ", infile)
-    } else {
-      stats_df <- dplyr::bind_rows(results_list)
-      write.csv(stats_df, file = outfile, row.names = FALSE)
-      cat(sprintf("✅ Done: %s (%d trees processed, %d skipped)\n", outfile, length(results_list), skipped))
-      tree_features_mapping[[sim_name]] <- basename(outfile)
-    }
-  }
-
-  # --- Metadata erweitern und im Output-Ordner speichern ---
-  metadata_out <- metadata
-  metadata_out$tree_features <- tree_features_mapping
-
-  # relativer Pfad der YAML-Datei zum input_dir
-  rel_path <- sub(paste0("^", normalizePath(input_dir), "/?"), "", normalizePath(yaml_path))
-  # rel_path z.B.: "MallardBlackDuck-3/metadata.yaml"
-
-  # Zielverzeichnis im output_dir erstellen
-  yaml_out_dir <- file.path(output_dir, dirname(rel_path))
-  dir.create(yaml_out_dir, recursive = TRUE, showWarnings = FALSE)
-
-  # Ausgabepfad für die YAML-Datei
-  yaml_outfile <- file.path(yaml_out_dir, basename(yaml_path))
-
-  # Schreiben
-  yaml::write_yaml(metadata_out, yaml_outfile)
-  cat("💾 Wrote extended metadata to", yaml_outfile, "\n")
-
+if (length(results_list) == 0L) {
+  warning("⚠️ No trees processed successfully in ", input_file)
+} else {
+  stats_df <- dplyr::bind_rows(results_list)
+  write.csv(stats_df, file = output_file, row.names = FALSE)
+  cat(sprintf("✅ Done: %s (%d trees processed, %d skipped)\n", output_file, length(results_list), skipped))
 }

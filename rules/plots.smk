@@ -1,88 +1,97 @@
 include: "../snakemake_vars.py"
 
-rule compute_boxplots_single_config_tree:
+
+rule compute_plots_tree_by_mode:
     input:
-        lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/.done"
+        lambda wildcards: get_topfeatures_input(wildcards.config, SIMULATORS, wildcards.mode, "tree")
     output:
-        dummy=f"{TREEFEATURES_BOXPLOTS_DIR}/{{config}}/.done"
-    log:
-        out=f"{TREEFEATURES_BOXPLOTS_DIR}/{{config}}/run.out"
+        dummy=f"{TREEFEATURES_PLOTS_DIR}/{{config}}/{{mode}}/.done"
+    wildcard_constraints:
+        mode = "|".join(VALID_GROUPING_MODES)
     conda:
         "../envs/plot-env.yaml"
+    params:
+        input_dir = lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/",
+        output_dir = lambda wildcards: f"{TREEFEATURES_PLOTS_DIR}/{wildcards.config}/{wildcards.mode}",
+        err_file = lambda wildcards: f"{TREEFEATURES_PLOTS_DIR}/{wildcards.config}/{wildcards.mode}/errorlog.err"
     shell:
         """
-        mkdir -p $(dirname {log.out})
-        tmp_err=$(mktemp)
-        python src/models/plot_boxplots.py {TREE_FEATURES_DIR}/{wildcards.config} {TREEFEATURES_BOXPLOTS_DIR}/{wildcards.config} \
-            > {log.out} 2> $tmp_err || {{ 
-                mv $tmp_err {TREEFEATURES_BOXPLOTS_DIR}/{wildcards.config}/run.err; 
-                exit 1; 
-            }}
-        rm -f $tmp_err
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/models/plot_boxplots.py \
+        --input_folder {params.input_dir} \
+        --output_folder {params.output_dir} \
+        --grouped_by {wildcards.mode}
         touch {output.dummy}
         """
 
 
-rule compute_boxplots_single_config_allel:
+rule compute_plots_tree_single:
     input:
-        lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/.done"
+        lambda wildcards: get_topfeatures_input(wildcards.config, SIMULATORS, "single", "tree", wildcards.combo)
     output:
-        dummy=f"{ALLELFEATURES_BOXPLOTS_DIR}/{{config}}/.done"
-    log:
-        out=f"{ALLELFEATURES_BOXPLOTS_DIR}/{{config}}/run.out"
+        dummy=f"{TREEFEATURES_PLOTS_DIR}/{{config}}/{{combo}}/.done"
+    wildcard_constraints:
+        combo = lambda wc: wc in all_combo_folders
     conda:
         "../envs/plot-env.yaml"
+    params:
+        input_dir = lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/{wildcards.combo}",
+        output_dir = lambda wildcards: f"{TREEFEATURES_PLOTS_DIR}/{wildcards.config}/{wildcards.combo}",
+        err_file = lambda wildcards: f"{TREEFEATURES_PLOTS_DIR}/{wildcards.config}/{wildcards.combo}/errorlog.err"
     shell:
         """
-        mkdir -p $(dirname {log.out})
-        tmp_err=$(mktemp)
-        python src/models/plot_boxplots.py {TREE_FEATURES_DIR}/{wildcards.config} {ALLELFEATURES_BOXPLOTS_DIR}/{wildcards.config}  \
-            > {log.out} 2> $tmp_err || {{ 
-                mv $tmp_err {ALLELFEATURES_BOXPLOTS_DIR}/{wildcards.config}/run.err; 
-                exit 1; 
-            }}
-        rm -f $tmp_err
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/models/plot_boxplots.py \
+        --input_folder {params.input_dir} \
+        --output_folder {params.output_dir} \
+        --grouped_by {wildcards.mode} 
         touch {output.dummy}
         """
 
 
-rule compute_boxplots_single_config_no_zero_branches_tree:
+rule compute_plots_allel_by_mode:
     input:
-        lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/.done"
+        lambda wildcards: get_topfeatures_input(wildcards.config, SIMULATORS, wildcards.mode, "allel")
     output:
-        dummy=f"{TREEFEATURES_ZEROB_BOXPLOTS_DIR}/{{config}}/.done"
+        dummy=f"{ALLELFEATURES_PLOTS_DIR}/{{config}}/{{mode}}/.done"
+    wildcard_constraints:
+        mode = "|".join(VALID_GROUPING_MODES)
     conda:
         "../envs/plot-env.yaml"
+    params:
+        input_dir = lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/",
+        output_dir = lambda wildcards: f"{ALLELFEATURES_PLOTS_DIR}/{wildcards.config}/{wildcards.mode}",
+        err_file = lambda wildcards: f"{ALLELFEATURES_PLOTS_DIR}/{wildcards.config}/{wildcards.mode}/errorlog.err"
     shell:
         """
-        python src/models/plot_boxplots.py {TREE_FEATURES_DIR}/{wildcards.config} {TREEFEATURES_ZEROB_BOXPLOTS_DIR}/{wildcards.config} --filter_zero_branches
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/models/plot_boxplots.py \
+        --input_folder {params.input_dir} \
+        --output_folder {params.output_dir} \
+        --grouped_by {wildcards.mode}
         touch {output.dummy}
         """
 
 
-rule compute_histograms_single_config_no_zero_branches:
+rule compute_plots_allel_single:
     input:
-        lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/.done"
+        lambda wildcards: get_topfeatures_input(wildcards.config, SIMULATORS, "single", "allel", wildcards.combo)
     output:
-        dummy=f"results/histograms/treestats_zero/{{config}}/.done"
+        dummy=f"{ALLELFEATURES_PLOTS_DIR}/{{config}}/{{combo}}/.done"
+    wildcard_constraints:
+        combo = lambda wc: wc in all_combo_folders
     conda:
         "../envs/plot-env.yaml"
+    params:
+        input_dir = lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/{wildcards.combo}",
+        output_dir = lambda wildcards: f"{ALLELFEATURES_PLOTS_DIR}/{wildcards.config}/{wildcards.combo}",
+        err_file = lambda wildcards: f"{ALLELFEATURES_PLOTS_DIR}/{wildcards.config}/{wildcards.combo}/errorlog.err"
     shell:
         """
-        python src/models/plot_histograms.py {TREE_FEATURES_DIR}/{wildcards.config} results/histograms/treestats_zero/{wildcards.config} --filter_zero_branches
-        touch {output.dummy}
-        """
-
-
-rule compute_boxplots_altogether:
-    input:
-        expand(f"{TREE_FEATURES_DIR}/{{config}}/.done", config=all_configs)
-    output:
-        dummy=f"{TREEFEATURES_BOXPLOTS_DIR}/all/.done"
-    conda:
-        "../envs/plot-env.yaml"
-    shell:
-        """
-        python src/models/plot_boxplots.py {TREE_FEATURES_DIR} {TREEFEATURES_BOXPLOTS_DIR}/all
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/models/plot_boxplots.py \
+        --input_folder {params.input_dir} \
+        --output_folder {params.output_dir} \
+        --grouped_by {wildcards.mode} 
         touch {output.dummy}
         """

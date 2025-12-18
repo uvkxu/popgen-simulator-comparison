@@ -297,6 +297,7 @@ def compute_stats(haps: allel.HaplotypeArray, positions, pops={}):
 def calculate_block_stats(positions, genotypes, sample_sizes):
     if positions.size > 1:
         dup = positions[np.where(np.diff(positions) == 0)]
+        """
         if len(dup) > 0:
             print("⚠️ WARNING: Duplicate positions found:", dup)
             print("  All positions:", positions)
@@ -304,6 +305,7 @@ def calculate_block_stats(positions, genotypes, sample_sizes):
         if not np.all(np.diff(positions) > 0):
             print("⚠️ WARNING: positions are NOT strictly increasing!")
             print("  All positions:", positions)
+        """
 
     n_haplotypes = sum(sample_sizes)
     haps = allel.HaplotypeArray(genotypes.T)
@@ -312,7 +314,7 @@ def calculate_block_stats(positions, genotypes, sample_sizes):
 
     if n_haps == 0:
         assert genotypes.size == 0, "Genotypes muss leer sein"
-        assert positions.size == 0, "Positions muss leer sein, wenn es keine mutation gab"
+        assert positions.size == 0, f"Positions muss leer sein, wenn es keine mutation gab. Positions {positions}, position size {positions.size}"
 
     # Flatten dictionary for CSV
     flat = {}
@@ -426,7 +428,7 @@ def main(input_file, output_file, combo_yaml):
         try:
             unique_seqs = np.unique(seqs, axis=0)
             if len(unique_seqs) < 4:
-                print(f"⚠️ Skipping difficulty: only {len(unique_seqs)} sequences (need ≥4).")
+                # print(f"⚠️ Skipping difficulty: only {len(unique_seqs)} sequences (need ≥4).")
                 allel_features["difficulty"] = -1
             else:
                 try:
@@ -440,7 +442,7 @@ def main(input_file, output_file, combo_yaml):
                     )
                     allel_features["difficulty"] = difficulty
                 except Exception as e:
-                    print(f"⚠️ PyPythia failed for block {block_idx}: {e}")
+                    # print(f"⚠️ PyPythia failed for block {block_idx}: {e}")
                     allel_features["difficulty"] = -1
 
         finally:

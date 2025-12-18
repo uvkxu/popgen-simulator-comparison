@@ -209,9 +209,8 @@ __marimo__/
 
 # Ignore all simulation outputs in data/raw, but keep folder structure
 data/*
-!data/raw/.gitkeep
-
 results/*
+logs/*
 
 # Ignore seedms
 /seedms
