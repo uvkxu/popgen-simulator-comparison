@@ -214,8 +214,17 @@ def estimate_mem_mb(config, combo, func, simulator=None):
         # ==============================
         if sim == "msms":
             recomb_rate = float(combo_json.get("recombination_rates", 0))
-            Ne = int(combo_json.get("population_sizes"))
+            Ne = combo_json.get("population_sizes")
+            if Ne is None:
+                with open(config_file, "r") as f:
+                    config = yaml.safe_load(f)
+                Ne = config.get("population_size")
 
+            if Ne is None:
+                raise ValueError("Population size (Ne) must be specified in combo or config for msms memory estimation.")
+
+            Ne = int(Ne)
+            
             # base memory: haplotypes × sites
             base_mb = n_haps * seq_len * 0.5 / 1e6
 
