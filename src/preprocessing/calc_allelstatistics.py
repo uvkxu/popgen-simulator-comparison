@@ -415,7 +415,7 @@ def main(input_file, output_file, combo_yaml):
             allel_features["bollback_multinomial"] = 0.0
             allel_features["pattern_entropy"] = 0.0
             allel_features["entropy"] = 0.0
-            rows.append(allel_features)
+            write_block_to_csv(allel_features, output_file)
             continue
 
         # Convert genotype matrix (0/1 ints) into sequences of "0"/"1"
