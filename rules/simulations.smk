@@ -8,6 +8,13 @@ rule run_config_combo_rep_simulation_demes:
     params:
         combo_json=lambda w: combo_folder_to_json[w.combo],
         err_file=lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
+    resources:
+        mem_mb = lambda wildcards, attempt: estimate_mem_mb(
+            config=wildcards.config,
+            combo=wildcards.combo,
+            simulator=wildcards.simulator,
+            func="simulate"
+        )
     conda:
         "../envs/simulations-env.yaml"
     shell:

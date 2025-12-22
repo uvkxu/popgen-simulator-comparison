@@ -165,24 +165,22 @@ def run_feature_evaluation(
     # --- 2. Load and label data ---
     all_dfs = assign_simulator_labels(csv_files, simulator_group)
     data = pd.concat(all_dfs, ignore_index=True)
+    del all_dfs
 
     # --- Handle inf / NaN ---
     data.replace([np.inf, -np.inf], np.nan, inplace=True)
     data.dropna(axis=1, inplace=True)
 
+    num_cols = data.select_dtypes(include=["float64"]).columns
+    data[num_cols] = data[num_cols].astype(np.float32)
+
     # --- Prepare features ---
-    dep_var = 'simulator'
-    features = [c for c in data.columns if c != dep_var]
-    data = data[data[dep_var].isin(simulator_group)]
+    dep_var = "simulator"
+    features = [col for col in data.columns if col != dep_var]
+    data = data[data[dep_var].isin(simulator_group)].copy()
     y = LabelEncoder().fit_transform(data[dep_var])
-    X = data[features]
-
-    # --- Print simulator distribution ---
-    print("\nSimulator distribution:")
-    counts = data["simulator"].value_counts()
-    for sim in simulator_group:
-        print(f"  {sim}: {counts.get(sim, 0)} samples")
-
+    X = data.drop(columns=[dep_var])
+    del data
 
     # --- Classifiers ---
     classifiers = {
@@ -355,11 +353,7 @@ def main():
 
     output_folder.mkdir(parents=True, exist_ok=True)
 
-    csv_with_precision = []
-    csv_without_precision = []
-
-    csv_with_recombination = []
-    csv_without_recombination = []
+    csv_my_mode = []
 
     if "single" == grouped_by or  "overall" == grouped_by:
         csv_files = collect_csv_files(input_folder)
@@ -387,47 +381,17 @@ def main():
 
         csv_files = collect_csv_files(root_path)
 
-        if usePrecision:
-            csv_with_precision += csv_files
-            if recombination_rate:
-                csv_with_recombination += csv_files
-            else:
-                csv_without_recombination += csv_files
-        else:
-            csv_without_precision += csv_files
+        if ((usePrecision and grouped_by == "precision_applied") or
+            (not usePrecision and grouped_by == "precision_skipped") or
+            (recombination_rate > 0 and grouped_by == "recombination_applied") or
+            (recombination_rate == 0 and grouped_by == "recombination_skipped")):
+            csv_my_mode += csv_files
 
-    if "precision_applied" == grouped_by:
-        assert_non_empty(csv_files=csv_with_precision, mode=grouped_by)
-        run_feature_evaluation(
-            simulator_group=simulator_group,
-            csv_files=csv_with_precision,
-            output_dir=output_folder,
-            acc_factor=acc_factor,
-        )
-            
-    elif "precision_skipped" == grouped_by:
-        assert_non_empty(csv_files=csv_without_precision, mode=grouped_by)
-        run_feature_evaluation(
-            simulator_group=simulator_group,
-            csv_files=csv_without_precision,
-            output_dir=output_folder,
-            acc_factor=acc_factor,
-        )
     
-    elif "recombination_applied" == grouped_by:
-        assert_non_empty(csv_files=csv_with_recombination, mode=grouped_by)
-        run_feature_evaluation(
+    assert_non_empty(csv_files=csv_my_mode, mode=grouped_by)
+    run_feature_evaluation(
             simulator_group=simulator_group,
-            csv_files=csv_with_recombination,
-            output_dir=output_folder,
-            acc_factor=acc_factor,
-        )
-
-    elif "recombination_skipped" == grouped_by:
-        assert_non_empty(csv_files=csv_without_precision, mode=grouped_by)
-        run_feature_evaluation(
-            simulator_group=simulator_group,
-            csv_files=csv_without_recombination,
+            csv_files=csv_my_mode,
             output_dir=output_folder,
             acc_factor=acc_factor,
         )

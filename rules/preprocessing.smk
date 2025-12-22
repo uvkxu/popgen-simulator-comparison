@@ -29,6 +29,12 @@ rule compute_allel_features_single_file:
         allelstats = f"{ALLEL_FEATURES_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_allel_features.csv"
     params:
         err_file= lambda w: f"{ALLEL_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
+    resources:
+        mem_mb = lambda wildcards, attempt: estimate_mem_mb(
+            config=wildcards.config,
+            combo=wildcards.combo,
+            func="calc_allelstatistics"
+        )
     conda:
         "../envs/allelstats-env.yaml"
     shell:

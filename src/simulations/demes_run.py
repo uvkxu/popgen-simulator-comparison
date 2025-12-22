@@ -17,64 +17,35 @@ UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(UTILS_ROOT)
 
 from snakemake_vars import CONFIG_DIR, CMD_DIR, RAW_DATA_DIR, SIMULATORS, FILE_FORMATS, \
- DEFAULT_MS_PATH, DEFAULT_MSMS_PATH, DEFAULT_MS_MOD_PATH, DEFAULT_SLIM_PATH, PRECISION
+ DEFAULT_MS_PATH, DEFAULT_MSMS_PATH, DEFAULT_MS_MOD_PATH, DEFAULT_SLIM_PATH, PRECISION, \
+ estimate_mem_mb
 from utils.io_helpers import log_step
 
 
-def estimate_msms_heap_gb(sample_size, seq_length, nreps, recombination_rate=0, population_size=None):
-    """
-    Estimate how much Java heap space (GB) MSMS needs.
-    
-    Parameters
-    ----------
-    sample_size : int
-        Total number of samples.
-    seq_length : int
-        Sequence length (number of bases).
-    nreps : int
-        Number of replicates.
-    recombination_rate : float
-        Per-base recombination rate.
-    population_size : int, optional
-        Effective population size (for scaling recombination impact).
-    
-    Returns
-    -------
-    int
-        Estimated heap in GB (rounded up).
-    """
+def estimate_msms_heap_gb(
+    config,
+    combo,
+    safety_factor=0.9,
+    min_gb=1,
+    max_gb=200
+):
 
-    # Base memory from sample size (linearly)
-    mem_samples = sample_size * 0.01        # ~1 GB per 100 samples
+    # Ask the global estimator
+    mem_mb = estimate_mem_mb(
+        config=config,
+        combo=combo,
+        func="simulate",
+        simulator="msms"
+    )
 
-    # Memory from sequence length (more segregating sites)
-    mem_seq = seq_length / 5_000_000        # ~1 GB per 5 Mb
+    # Convert MB → GB and apply safety margin
+    heap_gb = math.floor(mem_mb / 1024 * safety_factor)
 
-    # Memory from number of replicates
-    mem_reps = nreps * 0.02                 # small additive factor
+    # Enforce bounds
+    heap_gb = max(min_gb, heap_gb)
+    heap_gb = min(max_gb, heap_gb)
 
-    # Recombination effect (non-linear, scales with seq_length * rho)
-    mem_recomb = 0
-    if recombination_rate:
-        rho = recombination_rate
-        if population_size is not None:
-            rho *= population_size
-        
-        if rho > 0:
-            # Rough heuristic: exponential scaling for moderate to high rho
-            mem_recomb = (seq_length / 1_000_000) * (rho / 100) ** 1.5
-
-    # Sum components
-    mem = mem_samples + mem_seq + mem_reps + mem_recomb
-
-    # Add safety buffer (50% extra)
-    mem *= 1.5
-
-    # Minimum heap
-    mem = max(4, mem)
-
-    # Round up to nearest GB
-    return int(mem + 1)
+    return heap_gb
 
 
 def get_sample_sizes(config, sample_size=None):
@@ -189,7 +160,7 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
         elif sim == "msms":
             if not sim_path or not os.path.exists(sim_path):
                 raise FileNotFoundError(f"{sim} executable not found at {sim_path}.")
-            heap_gb = estimate_msms_heap_gb(sum(samples), graph.sequence_length, nreps, graph.recombination_rate, graph.population_size)
+            heap_gb = estimate_msms_heap_gb(config=config_path, combo=combo)
             prefix = f"java -Xmx{heap_gb}G -jar {sim_path}"
     
         else:

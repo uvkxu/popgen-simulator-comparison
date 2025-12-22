@@ -38,6 +38,8 @@ rule compute_tree_topfeatures_grouped_by_mode:
         f"{TREE_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{LR_STR}.png",
     wildcard_constraints:
         mode = "|".join(VALID_GROUPING_MODES)
+    resources:
+        mem_mb=lambda wildcards, input: estimate_mem_mb_classification(f"{TREE_FEATURES_DIR}/{wildcards.config}/")
     params:
         args_group=lambda wildcards: ",".join(
             wildcards.group_string.split("_")
@@ -67,6 +69,8 @@ rule compute_allel_topfeatures_grouped_by_mode:
         f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{XGB_STR}.png",
         f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{RF_STR}.png",
         f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{LR_STR}.png",
+    resources:
+        mem_mb=lambda wildcards, input: estimate_mem_mb_classification(f"{ALLEL_FEATURES_DIR}/{wildcards.config}/")
     wildcard_constraints:
         mode = "|".join(VALID_GROUPING_MODES)
     params:

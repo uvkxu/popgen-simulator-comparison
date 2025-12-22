@@ -405,37 +405,34 @@ has_recomb <- "recombination_rate" %in% names(combo_params) &&
                combo_params$recombination_rate != 0
 
 tree_features_mapping <- list()
-lines <- readLines(input_file, warn = FALSE)
 
-# --- Filter only valid Newick lines ---
-is_tree_line <- grepl("\\(", lines) & grepl(";+", lines) &
-  !grepl("^\\s*//", lines) &
-  !grepl("^\\s*segsites", lines, ignore.case = TRUE) &
-  !grepl("^\\s*positions", lines, ignore.case = TRUE)
+is_tree_line <- function(line) {
+  grepl("\\(", line) & grepl(";+", line) &
+  !grepl("^\\s*//", line) &
+  !grepl("^\\s*segsites", line, ignore.case = TRUE) &
+  !grepl("^\\s*positions", line, ignore.case = TRUE)
+}
 
-tree_lines <- trimws(sub(";+$", ";", lines[is_tree_line]))
-results_list <- list()
+clean_tree_line <- function(line) {
+  trimws(sub(";+$", ";", line))
+}
+
 skipped <- 0L
+header_written <- FALSE
 
 # Cache for avoiding duplicate computation
 # Cache only for tree topology → stats do NOT depend on segment length
 unique_tree_cache <- list()
 
-for (i in seq_along(tree_lines)) {
-  txt <- tree_lines[i]
-  tr <- tryCatch(ape::read.tree(text = txt), error = function(e) NULL)
+con <- file(input_file, open = "r")
+while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
+  if (!is_tree_line(line)) next
+  line <- clean_tree_line(line)
+  tr <- ape::read.tree(text = line)
 
   if (is.null(tr)) {
     skipped <- skipped + 1L
     next
-  }
-
-  # Extract relative segment length (not part of caching key!)
-  if (has_recomb) {
-    segment_length <- as.numeric(gsub("^\\[(\\d+)\\].*$", "\\1", txt))
-    relative_seg_len <- segment_length / seq_length
-  } else {
-    relative_seg_len <- NA_real_
   }
 
   # Canonical *topology only*
@@ -445,51 +442,37 @@ for (i in seq_along(tree_lines)) {
   #   CACHE LOOKUP
   # ======================
   if (canon %in% names(unique_tree_cache)) {
+    combined <- unique_tree_cache[[canon]]
+  } else {
+    tr_unweighted <- tr
+    tr_unweighted$edge.length <- rep(1, nrow(tr_unweighted$edge))
 
-    # Reuse cached stats and only append the per-tree segment_length column
-    cached <- unique_tree_cache[[canon]]
-    combined <- cached
-    if (has_recomb) combined$segment_length <- relative_seg_len
+    tree_stats <- calculate_all_treestats(tr, normalize = FALSE, weighted = TRUE)
+    tree_stats_unweighted <- calculate_all_treestats(tr_unweighted, normalize = FALSE, weighted = FALSE)
+    if (is.null(tree_stats) || is.null(tree_stats_unweighted)) {
+      skipped <- skipped + 1L
+      next
+    }
 
-    results_list[[length(results_list) + 1L]] <- combined
-    next
+    combined <- as.data.frame(as.list(c(tree_stats, tree_stats_unweighted)))
+    unique_tree_cache[[canon]] <- combined
   }
 
-  # ======================
-  #   COMPUTE NEW STATS
-  # ======================
-
-  tr_unweighted <- tr
-  tr_unweighted$edge.length <- rep(1, nrow(tr_unweighted$edge))
-
-  tree_stats <- tryCatch(
-    calculate_all_treestats(tr, normalize = FALSE, weighted = TRUE),
-    error = function(e) NULL
-  )
-  tree_stats_unweighted <- tryCatch(
-    calculate_all_treestats(tr_unweighted, normalize = FALSE, weighted = FALSE),
-    error = function(e) NULL
-  )
-
-  if (is.null(tree_stats) || is.null(tree_stats_unweighted)) {
-    skipped <- skipped + 1L
-    next
+  # Extract relative segment length (not part of caching key!)
+  if (has_recomb) {
+    segment_length <- as.numeric(gsub("^\\[(\\d+)\\].*$", "\\1", line))
+    combined$segment_length <- segment_length / seq_length
   }
 
-  combined <- as.data.frame(as.list(c(tree_stats, tree_stats_unweighted)))
-  unique_tree_cache[[canon]] <- combined
-
-  
-  if (has_recomb) combined$segment_length <- NULL
-  results_list[[length(results_list) + 1L]] <- combined
+  df <- as.data.frame(as.list(combined), stringsAsFactors = FALSE)
+  if (!header_written) {
+    write.csv(df, file = output_file, row.names = FALSE)
+    header_written <- TRUE
+  } else {
+    write.table(df, file = output_file, append = TRUE,
+                  row.names = FALSE, col.names = FALSE, sep = ",")
+  }
 }
 
-
-
-if (length(results_list) == 0L) {
-  warning("⚠️ No trees processed successfully in ", input_file)
-} else {
-  stats_df <- dplyr::bind_rows(results_list)
-  write.csv(stats_df, file = output_file, row.names = FALSE)
-  cat(sprintf("✅ Done: %s (%d trees processed, %d skipped)\n", output_file, length(results_list), skipped))
-}
+close(con)
+cat(sprintf("✅ Done: %s (%d trees skipped)\n", output_file, skipped))

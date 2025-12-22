@@ -185,22 +185,26 @@ def compute_stats(haps: allel.HaplotypeArray, positions, pops={}):
 
         # LD
         try:
-            r = allel.rogers_huff_r(hsub)
-            r2 = r ** 2
-            if r2.size == 0 or np.all(np.isnan(r2)):
-                mean_ld = 0.0
-                var_ld = 0.0
+            # Limit LD computation to avoid O(S^2) memory blowup
+            max_snps = 500
+            if hsub.shape[0] > max_snps:
+                idx = np.random.choice(hsub.shape[0], max_snps, replace=False)
+                hsub_ld = hsub[idx]
             else:
-                mean_ld = float(np.nanmean(r2))
-                var_ld = float(np.nanvar(r2))
+                hsub_ld = hsub
+
+            r = allel.rogers_huff_r(hsub_ld)
+            r2 = r ** 2
+            mean_ld = float(np.nanmean(r2)) if r2.size > 0 else 0.0
+            var_ld = float(np.nanvar(r2)) if r2.size > 0 else 0.0
         except Exception:
             mean_ld = 0.0
             var_ld = 0.0
 
+
         # Mean pairwise distance (Hamming)
         try:
-            d = allel.pairwise_distance(hsub, metric='hamming')
-            mean_dist = float(np.mean(d)) if d.size > 0 else 0.0
+            mean_dist = float(np.mean(allel.mean_pairwise_difference(hsub)))
         except Exception:
             mean_dist = 0.0
 
@@ -351,6 +355,20 @@ def calculate_block_stats(positions, genotypes, sample_sizes):
     return flat
 
 
+def write_block_to_csv(block_features, output_file):
+    """
+    Speichert ein Block-Feature-Dict direkt in CSV.
+    Header wird nur geschrieben, wenn Datei noch nicht existiert.
+    """
+    df = pd.DataFrame([block_features])
+    df.to_csv(
+        output_file,
+        mode='a',  # append mode
+        index=False,
+        header=not output_file.exists(),
+        float_format='%.10f'
+    )
+
 # ============================================================
 # --- Main function ---
 # ============================================================
@@ -381,11 +399,12 @@ def main(input_file, output_file, combo_yaml):
     # Parse ms/msms/msprime-like simulator output
     all_positions, all_genotypes = parse_ms_like_output(input_content)
     rows = []
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
         
     # Compute statistics for each block in the file
     for block_idx, (positions, genotypes) in enumerate(zip(all_positions, all_genotypes)):
         allel_features = calculate_block_stats(positions, genotypes, sample_structure)
-        rows.append(allel_features)
 
         # === NEW: Direct MSA from binary genotypes ===
 
@@ -453,13 +472,8 @@ def main(input_file, output_file, combo_yaml):
         allel_features["pattern_entropy"] = msa.pattern_entropy()
         allel_features["entropy"] = msa.entropy()
 
-    
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    # Save per-block statistics as CSV if any data was generated
-    if rows:
-        df = pd.DataFrame(rows)
-        # Save with fixed float precision for reproducibility
-        df.to_csv(output_file, index=False, float_format='%.10f')
+        write_block_to_csv(allel_features, output_file)
+
 
 # ============================================================
 # --- CLI entry point ---

@@ -13,130 +13,97 @@ sys.path.append(PROJECT_ROOT)
 from snakemake_vars import FILE_FORMATS, PRECISION, SIMULATORS
 
 
-def clean_sim_output(
-    sim_output,
-    sequence_length,
-    branch_decimals=None,
-    position_decimals=None,
-    factor=1.0,
-    branches_already_scaled=False
-):
-    """
-    Clean and normalize ms-style simulator output.
+def clean_sim_output(input_file, output_file, sequence_length,
+                            branch_decimals=None, position_decimals=None,
+                            factor=1.0, branches_already_scaled=False):
 
-    Args:
-        sim_output (str): Raw ms output as a string.
-        sequence_length (int): Sequence length for scaling positions.
-        branch_decimals (int, optional): Number of decimal places to round branch lengths to before scaling.
-        position_decimals (int, optional): Number of decimal places to round variant positions to before scaling.
-        factor (float): Branch length scaling factor (default = 1.0).
-        branches_already_scaled (bool): Whether branch lengths are already scaled by factor.
+    with open(input_file, "r") as fin, open(output_file, "w") as fout:
+        lines_buffer = []
+        while True:
+            line = fin.readline()
+            if not line:
+                break
+            line = line.strip()
 
-    Returns:
-        str: Cleaned and normalized ms output.
-    """
-    lines = sim_output.splitlines()
-    new_lines = []
-    i = 0
+            # --- Handle segsites + positions + haplotypes ---
+            if line.startswith("segsites:"):
+                segsites = int(line.split()[1])
+                if segsites == 0:
+                    fout.write(line + "\n")
+                    continue
 
-    while i < len(lines):
-        line = lines[i].strip()
+                # Positionen
+                pos_line = fin.readline().strip()
+                assert pos_line.startswith("positions:")
+                positions = list(map(float, pos_line.split()[1:]))
 
-        # --- Handle segsites + positions + haplotypes ---
-        if line.startswith("segsites:"):
-            segsites = int(line.split()[1])
+                # Haplotypen
+                haplotypes = []
+                while True:
+                    hapline = fin.readline()
+                    if not hapline:  # EOF
+                        break
+                    hapline = hapline.strip()
+                    if not hapline or not set(hapline).issubset({"0", "1"}):
+                        break  # Ende des Blocks
+                    haplotypes.append(list(map(int, hapline)))
 
-            if segsites == 0:
-                new_lines.append(line)
-                i += 1
-                continue
+                haplotypes = np.array(haplotypes, dtype=int)
 
-            pos_line = lines[i + 1].strip()
-            assert pos_line.startswith("positions:")
-            positions = list(map(float, pos_line.split()[1:]))
-
-            # --- haplotype matrix ---
-            haplotypes = []
-            j = i + 2
-            while j < len(lines):
-                hapline = lines[j].strip()
-                if not hapline or not set(hapline).issubset({"0", "1"}):
-                    break
-                haplotypes.append(list(map(int, hapline)))
-                j += 1
-
-            haplotypes = np.array(list(map(list, haplotypes)), dtype=int)  # make mutable
-
-            all_integer_like = np.all(np.abs(positions - np.round(positions)) < 1e-9)
-
-            if all_integer_like:
-                # alle Positionen schon ganzzahlig → direkt int casten
-                norm_positions = [int(round(p)) for p in positions]
-            else:
-                # normale Skalierung
-                norm_positions = []
-                for p in positions:
-                    if position_decimals is not None:
-                        p = round(p, position_decimals)
-                    p = int(round(p * sequence_length))
-                    if p == sequence_length:
-                        p = sequence_length - 1
-                    norm_positions.append(p)
-
-            # --- merge duplicates ---
-            merged_positions = [norm_positions[0]]
-            merged_haplotypes = [[h[0]] for h in haplotypes]
-
-            for idx in range(1, len(norm_positions)):
-                p = norm_positions[idx]
-                if p == merged_positions[-1]:
-                    for k in range(len(haplotypes)):
-                        merged_haplotypes[k][-1] |= haplotypes[k][idx]
+                # Normalisierung der Positionen
+                all_integer_like = np.all(np.abs(positions - np.round(positions)) < 1e-9)
+                if all_integer_like:
+                    norm_positions = [int(round(p)) for p in positions]
                 else:
-                    merged_positions.append(p)
-                    for k in range(len(haplotypes)):
-                        merged_haplotypes[k].append(haplotypes[k][idx])
+                    norm_positions = []
+                    for p in positions:
+                        if position_decimals is not None:
+                            p = round(p, position_decimals)
+                        p = int(round(p * sequence_length))
+                        if p == sequence_length:
+                            p = sequence_length - 1
+                        norm_positions.append(p)
 
-            # --- write results ---
-            new_lines.append(f"segsites: {len(merged_positions)}")
-            pos_str = " ".join(map(str, merged_positions))
-            new_lines.append("positions: " + pos_str)
-            for row in merged_haplotypes:
-                new_lines.append("".join(map(str, row)))
+                # Merge duplicates
+                merged_positions = [norm_positions[0]]
+                merged_haplotypes = [[h[0]] for h in haplotypes]
+                for idx in range(1, len(norm_positions)):
+                    p = norm_positions[idx]
+                    if p == merged_positions[-1]:
+                        for k in range(len(haplotypes)):
+                            merged_haplotypes[k][-1] |= haplotypes[k][idx]
+                    else:
+                        merged_positions.append(p)
+                        for k in range(len(haplotypes)):
+                            merged_haplotypes[k].append(haplotypes[k][idx])
 
-            i = j
-            continue
+                # Schreiben
+                fout.write(f"segsites: {len(merged_positions)}\n")
+                fout.write("positions: " + " ".join(map(str, merged_positions)) + "\n")
+                for row in merged_haplotypes:
+                    fout.write("".join(map(str, row)) + "\n")
 
-        # --- Handle tree lines with branch lengths ---
-        elif "(" in line and ":" in line:
-
-            def scale_branch(m):
-                val = float(m.group(1))
-
-                # Wenn Branches schon skaliert, dann ggf. ent-/wiederskalieren
-                if branches_already_scaled:
-                    if branch_decimals is not None:
-                        val = (val / factor)
-                        val = round(val, branch_decimals)
+            # --- Handle tree lines with branch lengths ---
+            elif "(" in line and ":" in line:
+                def scale_branch(m):
+                    val = float(m.group(1))
+                    if branches_already_scaled:
+                        if branch_decimals is not None:
+                            val = (val / factor)
+                            val = round(val, branch_decimals)
+                            val *= factor
+                        return f":{val:.{branch_decimals if branch_decimals else 6}f}"
+                    else:
+                        if branch_decimals is not None:
+                            val = round(val, branch_decimals)
                         val *= factor
-                    return f":{val:.{branch_decimals if branch_decimals else 6}f}"
+                        return f":{val:.{branch_decimals if branch_decimals else 6}f}"
+                scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, line)
+                fout.write(scaled_line + "\n")
 
-                # Normales Verhalten (Branches müssen skaliert werden)
-                else:
-                    if branch_decimals is not None:
-                        val = round(val, branch_decimals)
-                    val *= factor
-                    return f":{val:.{branch_decimals if branch_decimals else 6}f}"
+            else:
+                fout.write(line + "\n")
 
-            scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, line)
-            new_lines.append(scaled_line)
-
-        else:
-            new_lines.append(line)
-
-        i += 1
-
-    return "\n".join(new_lines) + "\n"
 
 
 def main():
@@ -187,9 +154,6 @@ def main():
     input_file = args.input
     if not input_file.exists():
         raise FileNotFoundError(f"Input file not found: {input_file}")
-
-    with open(input_file, "r") as infile:
-        sim_output = infile.read()
     
     combo_yaml = args.combo_yaml
     if not combo_yaml.exists():
@@ -199,21 +163,19 @@ def main():
         combo_params = yaml.safe_load(f)
 
     precision = args.precision if bool(combo_params["usePrecision"]) else None
+    
+    output_file = args.output
+    output_file.parent.mkdir(parents=True, exist_ok=True)
 
-    cleaned_output = clean_sim_output(
-        sim_output=sim_output,
+    clean_sim_output(
+        input_file=input_file,
+        output_file=output_file,
         sequence_length=combo_params["sequence_length"],
         branch_decimals=precision,
         position_decimals=precision,
         factor= 4 * combo_params["population_size"],
         branches_already_scaled=(sim == "msprime" or sim == "slim")
     )
-
-    output_file = args.output
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    
-    with open(output_file, "w") as outfile:
-        outfile.write(cleaned_output)
 
 if __name__ == "__main__":
     main()
