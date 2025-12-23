@@ -15,12 +15,12 @@ CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
-DATA_DIR = ROOT_DIR / "data"
-RESULTS_DIR = ROOT_DIR / "results"
+DATA_DIR = Path("/hits/fast/cme/kuchve/run2/data")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/run2/results")
 
-DEFAULT_MS_PATH = BIN_DIR / "ms.exe"
+DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
-DEFAULT_MS_MOD_PATH = BIN_DIR / "ms-mod.exe"
+DEFAULT_MS_MOD_PATH = BIN_DIR / "ms-mod"
 DEFAULT_SLIM_PATH = BIN_DIR / "slim"
 
 VARIABLE_FILE_PATH = CMD_DIR / "variables.txt"
@@ -143,7 +143,6 @@ for config_name in all_configs:
     
     combinations_by_config[config_name] = combos
 
-
 def estimate_mem_mb(config, combo, func, simulator=None):
     """
     Estimate memory (in MB) needed for different simulation/stat steps.
@@ -214,6 +213,8 @@ def estimate_mem_mb(config, combo, func, simulator=None):
         # ==============================
         if sim == "msms":
             recomb_rate = float(combo_json.get("recombination_rates", 0))
+            mu = float(combo_json.get("mutation_rates", 1e-8))
+
             Ne = combo_json.get("population_sizes")
             if Ne is None:
                 with open(config_file, "r") as f:
@@ -221,22 +222,51 @@ def estimate_mem_mb(config, combo, func, simulator=None):
                 Ne = config.get("population_size")
 
             if Ne is None:
-                raise ValueError("Population size (Ne) must be specified in combo or config for msms memory estimation.")
+                raise ValueError("Ne required for msms")
 
             Ne = int(Ne)
-            
-            # base memory: haplotypes × sites
-            base_mb = n_haps * seq_len * 0.5 / 1e6
 
+            # -----------------------
+            # Mutation-driven sites
+            # -----------------------
+            theta = 4 * Ne * mu * seq_len
+            Hn = math.log(n_haps) + 0.577
+            S = theta * Hn
+
+            site_mb = (
+                S * (120 + 8 * n_haps)
+            ) / (1024**2)
+
+            # -----------------------
+            # Recombination-driven ARG
+            # -----------------------
             if recomb_rate > 0:
                 rho = 4 * Ne * recomb_rate * seq_len
-                # ARG complexity grows superlinearly in rho
-                base_mb += (rho ** 1.3) / 1e6
+                arg_mb = (
+                    0.006 * n_haps * rho * math.log(rho + 10)
+                )
+            else:
+                arg_mb = 0.0
 
-            reps = int(combo_json.get("nreps", 1))
-            mem_mb = base_mb * (1 + reps * 0.05) * 1.5
+            # -----------------------
+            # Combine
+            # -----------------------
+            mem_mb = site_mb + arg_mb
 
-            return max(512, min(int(mem_mb), 100_000))
+            reps = int(combo_json.get("nreps", NUM_REPLICATES))
+
+            # -----------------------
+            # Peak protection
+            # -----------------------
+            mem_mb *= 8.0          # mutation/output peak
+            mem_mb *= 2.0          # GC + fragmentation
+            mem_mb *= (1 + 0.25 * reps)
+
+            # -----------------------
+            # Absolute floor
+            # -----------------------
+            return max(4096, min(int(mem_mb), 500_000))
+
 
 
     return 100
