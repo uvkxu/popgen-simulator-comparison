@@ -218,54 +218,37 @@ def estimate_mem_mb(config, combo, func, simulator=None):
             Ne = combo_json.get("population_sizes")
             if Ne is None:
                 with open(config_file, "r") as f:
-                    config = yaml.safe_load(f)
-                Ne = config.get("population_size")
-
+                    config_yaml = yaml.safe_load(f)
+                Ne = config_yaml.get("population_size")
             if Ne is None:
                 raise ValueError("Ne required for msms")
-
             Ne = int(Ne)
 
-            # -----------------------
-            # Mutation-driven sites
-            # -----------------------
             theta = 4 * Ne * mu * seq_len
             Hn = math.log(n_haps) + 0.577
             S = theta * Hn
 
-            site_mb = (
-                S * (120 + 8 * n_haps)
-            ) / (1024**2)
+            # Mutation memory
+            site_mb = (S * (120 + 8 * n_haps)) / (1024**2)
 
-            # -----------------------
-            # Recombination-driven ARG
-            # -----------------------
+            # Recombination memory
             if recomb_rate > 0:
                 rho = 4 * Ne * recomb_rate * seq_len
-                arg_mb = (
-                    0.006 * n_haps * rho * math.log(rho + 10)
-                )
+                arg_mb = 0.006 * n_haps * rho * math.log(rho + 10)
             else:
                 arg_mb = 0.0
 
-            # -----------------------
-            # Combine
-            # -----------------------
             mem_mb = site_mb + arg_mb
 
             reps = int(combo_json.get("nreps", NUM_REPLICATES))
 
-            # -----------------------
-            # Peak protection
-            # -----------------------
-            mem_mb *= 8.0          # mutation/output peak
-            mem_mb *= 2.0          # GC + fragmentation
-            mem_mb *= (1 + 0.25 * reps)
+            # ====== Ultra-conservative peak multipliers ======
+            mem_mb *= 10.0            # Mutation/output peak
+            mem_mb *= 2.5             # Java GC + fragmentation
+            mem_mb *= (1 + 0.5*reps)  # Multiple replicates
 
-            # -----------------------
-            # Absolute floor
-            # -----------------------
-            return max(4096, min(int(mem_mb), 500_000))
+            # Absolute floor and ceiling
+            return max(8192, min(int(mem_mb), 1_000_000))
 
 
 
