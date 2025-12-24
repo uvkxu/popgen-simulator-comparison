@@ -2,7 +2,7 @@ description: The Browning et al. (2011) model of admixture in the Americas.
 doi:
 - https://doi.org/10.1371/journal.pgen.1007385
 time_units: generations
-mutation_rate: 2.36e-05
+mutation_rate: 2.36e-08
 metadata:
   model_id: AmericanAdmixture_4B18
   species: HomSap
