@@ -658,3 +658,15 @@ ALL_PLOTS_JACOBS = [
     for config in ["jacobs_papuans"]
     for mode in GROUPING_MODES
 ]
+
+import hashlib
+
+CSV_FILES = list(FEATURES_DIR.rglob("*.csv"))
+
+def csv_id(path):
+    return hashlib.sha1(str(path).encode("utf-8")).hexdigest()
+
+CSV_MAP = {
+    csv_id(p): str(p)
+    for p in CSV_FILES
+}
