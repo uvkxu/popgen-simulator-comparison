@@ -64,3 +64,43 @@ rule compute_tree_features_single_file:
             {input.cleaned} {output.treestats} {input.combo_yaml}
         """
 
+
+rule find_inconsistent_csv:
+    input:
+        csv=lambda wc: CSV_MAP[wc.id]
+    output:
+        log="logs/{id}.log"
+    params:
+        delimiter=","
+    shell:
+        """
+        python src/find_inconsistent_csv.py \
+            --input_csv {input.csv} \
+            --log {output.log} \
+            --delimiter {params.delimiter}
+        """
+
+
+rule aggregate_csv_logs:
+    input:
+        expand("logs/{id}.log", id=CSV_MAP.keys())
+    output:
+        "logs/summary.tsv"
+    run:
+        import pathlib
+
+        with open(output[0], "w") as out:
+            out.write("id\tpath\tstatus\terror\tdetails\n")
+
+            for log_file in input:
+                csv_id = pathlib.Path(log_file).stem
+                csv_path = CSV_MAP[csv_id]
+
+                lines = pathlib.Path(log_file).read_text().splitlines()
+
+                if not any(l == "OK" for l in lines):
+                    error = next(l for l in lines if l.startswith("ERROR"))
+                    details = ";".join(l for l in lines if l.startswith("DETAIL"))
+                    out.write(
+                        f"{csv_id}\t{csv_path}\tBROKEN\t{error}\t{details}\n"
+                    )
