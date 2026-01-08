@@ -101,7 +101,9 @@ stats_laplace <- function(tr, weighted=TRUE) {
     kurt_val <- e1071::kurtosis(eigen_vals)
     lap_vals <- eigen_vals[eigen_vals > 0]
     second_min <- if(length(lap_vals) > 1) sort(lap_vals)[2] else NA
-    lap_entropy <- -sum((lap_vals/sum(lap_vals)) * log(lap_vals/sum(lap_vals)))
+    p <- lap_vals / sum(lap_vals)
+    p <- p[p > 0]
+    lap_entropy <- -sum(p * log(p))
     lap_sum <- sum(lap_vals)
 
 

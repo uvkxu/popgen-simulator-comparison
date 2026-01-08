@@ -234,6 +234,11 @@ calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
             )
         )
         stats <- c(stats, as.list(adj_stats))
+        stats <- lapply(stats, function(x) {
+          if (length(x) == 0) return(NA_real_)
+          if (length(x) > 1) return(mean(x, na.rm = TRUE))  # oder NA
+          as.numeric(x)
+        })
 
         stats <- unlist(stats)
         stats <- stats[order(names(stats))]
@@ -469,8 +474,16 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
     write.csv(df, file = output_file, row.names = FALSE)
     header_written <- TRUE
   } else {
-    write.table(df, file = output_file, append = TRUE,
-                  row.names = FALSE, col.names = FALSE, sep = ",")
+    write.table(
+      df,
+      file = output_file,
+      append = TRUE,
+      sep = ",",
+      row.names = FALSE,
+      col.names = FALSE,
+      quote = TRUE,
+      na = "NA"
+    )
   }
 }
 
