@@ -158,53 +158,36 @@ def clean_nan_data(
     data: pd.DataFrame,
     output_csv: Path,
     max_row_loss_frac: float = 0.05,
-    max_col_nan_frac: float = 0.05,
 ):
-    log_path = (
-        output_csv.parent /
-        f"nan_cleanup_{output_csv.stem}.log"
-    )
-
+    log_path = output_csv.parent / f"nan_cleanup_{output_csv.stem}.log"
     log_lines = []
-    n_rows_initial = len(data)
 
     # Replace inf with NaN
     data = data.replace([np.inf, -np.inf], np.nan)
 
-    # --- Drop columns with too many NaNs ---
-    col_nan_frac = data.isna().mean()
-    cols_to_drop = [
-        c for c in col_nan_frac.index
-        if col_nan_frac[c] > max_col_nan_frac and c != "simulator"
-    ]
+    n_rows_initial = len(data)
+    if n_rows_initial == 0:
+        return data  # leeres DataFrame
 
-    if cols_to_drop:
-        log_lines.append(
-            f"Dropped columns (> {max_col_nan_frac:.0%} NaN): "
-            + ", ".join(cols_to_drop)
-        )
-        data = data.drop(columns=cols_to_drop)
+    for col in data.columns:
+        if col == "simulator":
+            continue
 
-    # --- Handle remaining NaNs via row deletion ---
-    rows_with_nan = data.isna().any(axis=1)
-    n_bad_rows = rows_with_nan.sum()
-    row_loss_frac = n_bad_rows / n_rows_initial if n_rows_initial > 0 else 0
+        if data[col].isna().any():
+            n_nan = data[col].isna().sum()
+            frac_nan = n_nan / n_rows_initial
 
-    if n_bad_rows > 0:
-        if row_loss_frac <= max_row_loss_frac:
-            data = data.loc[~rows_with_nan].copy()
-            log_lines.append(
-                f"Dropped {n_bad_rows}/{n_rows_initial} rows "
-                f"({row_loss_frac:.2%}) due to NaNs"
-            )
-        else:
-            remaining_bad_cols = data.columns[data.isna().any()].tolist()
-            if remaining_bad_cols:
-                data = data.drop(columns=remaining_bad_cols)
+            if frac_nan < max_row_loss_frac:
+                # Lösche nur die betroffenen Zeilen
+                data = data[~data[col].isna()]
                 log_lines.append(
-                    f"Row loss {row_loss_frac:.2%} > {max_row_loss_frac:.2%}; "
-                    f"dropped remaining columns with NaNs: "
-                    + ", ".join(remaining_bad_cols)
+                    f"Dropped {n_nan} rows ({frac_nan:.2%}) due to NaNs in column '{col}'."
+                )
+            else:
+                # Lösche die ganze Spalte
+                data = data.drop(columns=[col])
+                log_lines.append(
+                    f"Dropped column '{col}' ({frac_nan:.2%} NaNs >= {max_row_loss_frac:.2%})."
                 )
 
     # --- Write log only if something happened ---

@@ -24,23 +24,68 @@ def load_csv_float32(file):
     return pd.read_csv(file, dtype=np.float32)
 
 
-def filter_invalid_statistics(data_dict, log_file):
-    all_stats = set.intersection(*(set(df.columns) for df in data_dict.values() if df is not None))
-    removed_stats, kept_stats = [], []
+def filter_invalid_statistics(
+    data_dict,
+    log_file,
+    max_nan_fraction=0.05,
+    min_remaining_rows=10
+):
+    all_stats = set.intersection(
+        *(set(df.columns) for df in data_dict.values() if df is not None)
+    )
 
-    for stat in all_stats:
-        has_invalid = any(df[stat].isna().any() or df[stat].isin([np.inf, -np.inf]).any()
-                          for df in data_dict.values() if df is not None)
-        if has_invalid:
+    removed_stats = []
+    kept_stats = []
+    log_lines = []
+
+    for stat in sorted(all_stats):
+        drop_stat = False
+        stat_logs = []
+
+        for sim, df in data_dict.items():
+            if df is None or stat not in df.columns:
+                continue
+
+            total_rows = len(df)
+            invalid_mask = df[stat].isna() | ~np.isfinite(df[stat])
+            n_invalid = invalid_mask.sum()
+            frac_invalid = n_invalid / total_rows if total_rows > 0 else 0
+
+            if n_invalid == 0:
+                continue
+
+            stat_logs.append(
+                f"[{sim}] {stat}: found {n_invalid}/{total_rows} invalid rows ({frac_invalid:.2%})"
+            )
+
+            # Entscheidung: Spalte dropen oder nur Zeilen
+            if frac_invalid >= max_nan_fraction or (total_rows - n_invalid) < min_remaining_rows:
+                drop_stat = True
+                stat_logs.append(f"[{sim}] {stat}: exceeds thresholds → drop column")
+                break
+
+        if drop_stat:
             removed_stats.append(stat)
             for df in data_dict.values():
                 if df is not None and stat in df.columns:
                     df.drop(columns=[stat], inplace=True)
+            log_lines.extend(stat_logs)
         else:
             kept_stats.append(stat)
+            for sim, df in data_dict.items():
+                if df is not None and stat in df.columns:
+                    before = len(df)
+                    # nur die Zeilen mit NaN/Inf löschen
+                    df.drop(index=df[~np.isfinite(df[stat]) | df[stat].isna()].index, inplace=True)
+                    after = len(df)
+                    if before != after:
+                        log_lines.append(f"[{sim}] {stat}: kept column, dropped {before-after} rows")
 
+    # --- Write log ---
     with open(log_file, "w") as f:
-        f.write("=== Removed statistics due to NaN/Inf ===\n")
+        f.write("=== NaN / Inf cleanup log ===\n\n")
+        f.write("\n".join(log_lines))
+        f.write("\n\n=== Removed statistics ===\n")
         f.write("\n".join(removed_stats))
         f.write("\n\n=== Kept statistics ===\n")
         f.write("\n".join(kept_stats))
