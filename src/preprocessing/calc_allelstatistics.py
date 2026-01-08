@@ -128,8 +128,14 @@ def compute_stats(haps: allel.HaplotypeArray, positions, pops={}):
                 'sfs_kurtosis': 0.0,
                 'mean_ld': 0.0,
                 'var_ld': 0.0,
-                'mean_pairwise_distance': 0.0
+                'mean_pairwise_distance': 0.0,
+                'h1': 1.0,
+                'h12': 1.0,
+                'h123': 1.0,
+                'h2_h1': 0.0,
+                'hap_div': 0.0
             }
+
 
         n_hap = hsub.shape[1]
 
@@ -212,7 +218,7 @@ def compute_stats(haps: allel.HaplotypeArray, positions, pops={}):
         try:
             h1, h12, h123, h2_h1 = allel.garud_h(hsub)
         except Exception:
-            h1, h12, h123, h2_h1 = 0, 0, 0, 0 
+            h1, h12, h123, h2_h1 = 1.0, 1.0, 1.0, 0 
 
         # Haplotype diversity
         try:
