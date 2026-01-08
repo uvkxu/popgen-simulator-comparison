@@ -210,7 +210,7 @@ def compute_stats(haps: allel.HaplotypeArray, positions, pops={}):
 
         # Mean pairwise distance (Hamming)
         try:
-            mean_dist = float(np.mean(allel.mean_pairwise_difference(hsub)))
+            mean_dist = float(np.mean(allel.mean_pairwise_difference(hsub.count_alleles())))
         except Exception:
             mean_dist = 0.0
 
