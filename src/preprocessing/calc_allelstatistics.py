@@ -304,7 +304,7 @@ def compute_stats(haps: allel.HaplotypeArray, positions, pops={}):
 # ============================================================
 # --- Helper to compute per-block stats and flatten ---
 # ============================================================
-def calculate_block_stats(positions, genotypes, sample_sizes):
+def calculate_block_stats(positions, genotypes, sample_sizes, per_pop_stats=False):
     if positions.size > 1:
         dup = positions[np.where(np.diff(positions) == 0)]
         """
@@ -410,7 +410,7 @@ def main(input_file, output_file, combo_yaml, per_pop_stats=False):
         
     # Compute statistics for each block in the file
     for block_idx, (positions, genotypes) in enumerate(zip(all_positions, all_genotypes)):
-        allel_features = calculate_block_stats(positions, genotypes, sample_structure)
+        allel_features = calculate_block_stats(positions, genotypes, sample_structure, per_pop_stats)
 
         # === NEW: Direct MSA from binary genotypes ===
 
