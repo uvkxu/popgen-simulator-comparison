@@ -210,6 +210,7 @@ __marimo__/
 # Ignore all simulation outputs in data/raw, but keep folder structure
 data/*
 results/*
+results-run2/*
 logs/*
 
 # Ignore seedms

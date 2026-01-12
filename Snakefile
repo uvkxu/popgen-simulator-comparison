@@ -7,4 +7,4 @@ include: "rules/plots.smk"
 
 rule all:
     input:
-        "logs/summary.tsv"
+        COMPLETE_OUTPUTS

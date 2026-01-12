@@ -328,7 +328,7 @@ def calculate_block_stats(positions, genotypes, sample_sizes):
 
     # Flatten dictionary for CSV
     flat = {}
-    if len(sample_sizes) > 1:
+    if len(sample_sizes) > 1 and per_pop_stats:
         pops = {}
         start = 0
 
@@ -378,7 +378,7 @@ def write_block_to_csv(block_features, output_file):
 # ============================================================
 # --- Main function ---
 # ============================================================
-def main(input_file, output_file, combo_yaml):
+def main(input_file, output_file, combo_yaml, per_pop_stats=False):
     if not input_file.exists():
         raise FileNotFoundError(f"Input file not found: {input_file}")
 
@@ -510,6 +510,12 @@ if __name__ == '__main__':
         help="Yaml file, which contains all combo parameters"
     )
 
+    parser.add_argument(
+        "--per-pop-stats",
+        action="store_true",
+        help="Compute allele statistics separately for each population"
+    )
+
     args = parser.parse_args()
 
-    main(args.input, args.output, args.combo_yaml)
+    main(args.input, args.output, args.combo_yaml, args.per_pop_stats)
