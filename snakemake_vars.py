@@ -30,6 +30,8 @@ FEATURES_DIR = DATA_DIR / "features"
 TREE_FEATURES_DIR = FEATURES_DIR / "tree"
 ALLEL_FEATURES_DIR = FEATURES_DIR / "allele"
 
+PIGOT_RHO_DIR = FEATURES_DIR / "pigot_rho"
+
 CLEAN_DIR = DATA_DIR / "cleaned"
 
 PLOTS_RESULTS_DIR = RESULTS_DIR / "plots"
@@ -49,7 +51,7 @@ CMD_SUBDIR = "commands"
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
 SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
-REPS = 50
+REPS = 5
 NUM_REPLICATES = 2
 PRECISION = 17
 MAX_OVERALL_SAMPLES = 200
@@ -426,6 +428,19 @@ def get_topfeatures_input(config, group, mode, feature_type, combo=None):
     ]
 
 
+def get_pigotrho_input(simulators):
+    if isinstance(simulators, str):
+        simulators = [simulators]
+
+    return [
+        f"{PIGOT_RHO_DIR}/{config}/{combo}/rep{i+1}/{sim}_pigotrho_features.csv"
+        for config in all_configs
+        for combo in combinations_by_config[config]
+        for sim in simulators
+        for i in range(REPS)
+    ]
+
+
 RAW_INPUTS = [
     f"{RAW_DATA_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
     for config in all_configs
@@ -626,15 +641,15 @@ TOPFEATURES_ALLEL_BROWNING = [
 
 TOPFEATURES_TREE_JACOBS = [
     f"{TREE_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_feature_ranking_file(sim_group)}"
-    for mode in ["precision_applied", "precision_skipped", "recombination_applied", "recombination_skipped", "overall"]
+    for mode in GROUPING_MODES
     for sim_group in simulator_groups
 ] + [
     f"{TREE_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_feature_ranking_barplot(sim_group)}"
-    for mode in ["precision_applied", "precision_skipped", "recombination_applied", "recombination_skipped", "overall"]
+    for mode in GROUPING_MODES
     for sim_group in simulator_groups
 ] + [
     f"{TREE_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for mode in ["precision_applied", "precision_skipped", "recombination_applied", "recombination_skipped", "overall"]
+    for mode in GROUPING_MODES
     for sim_group in simulator_groups
     for classifier in CLASSIFIERS
 ]
@@ -642,15 +657,15 @@ TOPFEATURES_TREE_JACOBS = [
 
 TOPFEATURES_ALLEL_JACOBS = [
     f"{ALLEL_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_feature_ranking_file(sim_group)}"
-    for mode in ["precision_applied", "precision_skipped"]
+    for mode in GROUPING_MODES
     for sim_group in simulator_groups
 ] + [
     f"{ALLEL_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_feature_ranking_barplot(sim_group)}"
-    for mode in ["precision_applied", "precision_skipped"]
+    for mode in GROUPING_MODES
     for sim_group in simulator_groups
 ] + [
     f"{ALLEL_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for mode in ["precision_applied", "precision_skipped"]
+    for mode in GROUPING_MODES
     for sim_group in simulator_groups
     for classifier in CLASSIFIERS
 ]

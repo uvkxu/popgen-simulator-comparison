@@ -50,3 +50,25 @@ rule compute_plots_allel_by_mode:
         --grouped_by {wildcards.mode}
         touch {output.dummy}
         """
+
+
+rule compute_plots_pigot_rho:
+    input:
+        lambda wildcards: get_pigotrho_input(wildcards.simulator)
+    output:
+        dummy=f"{PLOTS_RESULTS_DIR}/pigotrho/{{simulator}}/.done"
+    conda:
+        "../envs/plot-env.yaml"
+    params:
+        input_dir = lambda wildcards: f"{PIGOT_RHO_DIR}/",
+        output_dir = lambda wildcards: f"{PLOTS_RESULTS_DIR}/pigotrho/{wildcards.simulator}",
+        err_file = lambda wildcards: f"{PIGOT_RHO_DIR}/errorlog.err"
+    shell:
+        """
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/models/plot_pigot_rho.py \
+        --input_folder {params.input_dir} \
+        --output_folder {params.output_dir} \
+        --simulators {wildcards.simulator} 
+        touch {output.dummy}
+        """
