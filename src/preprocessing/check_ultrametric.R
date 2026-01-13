@@ -90,6 +90,10 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
     effective_pop_size = effective_pop_size,
     num_branches = num_branches,
     sample_size = sample_size,
+    overall_sample_size = overall_sample_size,
+    tree_height = tree_height,
+    mean_branch_length = mean_branch_length,
+    crown_age = crown_age,
     stringsAsFactors = FALSE
   )
 }
