@@ -80,6 +80,9 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
   effective_pop_size <- combo_params$population_size
   sample_size <- combo_params$sample_structure[1]
   overall_sample_size <- combo_params$overall_samples
+  tree_height <- tryCatch(treestats::tree_height(tr), error = function(e) NA)
+  mean_branch_length <- tryCatch(treestats::mean_branch_length(tr), error = function(e) NA)
+  crown_age <- tryCatch(treestats::crown_age(tr), error = function(e) NA)
 
   results[[length(results) + 1]] <- data.frame(
     pigot_rho = pigot_rho,
