@@ -83,6 +83,19 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
   tree_height <- tryCatch(treestats::tree_height(tr), error = function(e) NA)
   mean_branch_length <- tryCatch(treestats::mean_branch_length(tr), error = function(e) NA)
   crown_age <- tryCatch(treestats::crown_age(tr), error = function(e) NA)
+  # brts: Branching Times, absteigend sortiert
+  brts <- sort(branching.times(tr), decreasing = TRUE)
+
+  n3 <- 1 + length(brts)
+  mid_point <- brts[1] / 2
+
+  # index_mid_point = Anzahl Werte >= mid_point
+  index_mid_point <- sum(brts >= mid_point)
+
+  n2 <- 1 + index_mid_point
+
+
+
 
   results[[length(results) + 1]] <- data.frame(
     pigot_rho = pigot_rho,
@@ -94,7 +107,9 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
     tree_height = tree_height,
     mean_branch_length = mean_branch_length,
     crown_age = crown_age,
-    stringsAsFactors = FALSE
+    stringsAsFactors = FALSE,
+    n2 = n2,
+    n3 = n3
   )
 }
 close(con)
