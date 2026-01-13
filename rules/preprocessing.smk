@@ -66,20 +66,19 @@ rule compute_tree_features_single_file:
 
 
 rule compute_pigot_rho_stats_ms:
-    input:
-        cleaned = f"{CLEAN_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_cleaned_output.txt",
-        combo_yaml = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     output:
         pigotrhostats = f"{PIGOT_RHO_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_pigotrho_features.csv"
     params:
-        err_file = lambda w: f"{PIGOT_RHO_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
+        err_file = lambda w: f"{PIGOT_RHO_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
+        cleaned = f"{CLEAN_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_cleaned_output.txt",
+        combo_yaml = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     conda:
         "../envs/treestats-env.yaml"
     shell:
         """
         scripts/run_with_errorlog.sh {params.err_file} \
         Rscript src/preprocessing/check_ultrametric.R \
-            {input.cleaned} {output.pigotrhostats} {input.combo_yaml}
+            {params.cleaned} {output.pigotrhostats} {params.combo_yaml}
         """
     
 
