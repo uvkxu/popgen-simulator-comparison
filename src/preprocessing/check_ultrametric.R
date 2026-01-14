@@ -87,60 +87,48 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
     if (length(tmp) != 1) NA else tmp
   } else existing_row$crown_age
 
-  # --- Assumptions checks ---
-  all_parents <- tr$edge[,1]
-  all_children <- tr$edge[,2]
-
-  # tatsächlicher Root
-  actual_root_node <- setdiff(all_parents, all_children)
+  # --- Root node check ---
+  actual_root_node <- setdiff(tr$edge[,1], tr$edge[,2])
   if (length(actual_root_node) != 1) {
-    stop("Root node could not be uniquely determined")
-  }
-  actual_root_node <- actual_root_node[1]
-
-  # Root, wie im C-Code angenommen
-  root_node <- tr$edge[1,1]
-
-  # Prüfen, ob sie übereinstimmen
-  new_row$right_root_node <- if (is.null(existing_row) || !"right_root_node" %in% names(existing_df)) {
-    actual_root_node == root_node  # TRUE oder FALSE
+    warning("Root node could not be uniquely determined, setting right_root_node = FALSE")
+    new_row$right_root_node <- FALSE
   } else {
-    existing_row$right_root_node
+    actual_root_node <- actual_root_node[1]
+    root_node <- tr$edge[1,1]
+    # Vergleich absichern gegen Vektor/NA
+    new_row$right_root_node <- if (length(root_node) == 1 && !is.na(root_node)) {
+      actual_root_node == root_node
+    } else {
+      FALSE
+    }
   }
 
-  # --- Check "right tip nodes" according to C++ assumption ---
-  new_row$right_tip_nodes <- if (is.null(existing_row) || !"right_tip_nodes" %in% names(existing_df)) {
+  # --- Right tip nodes check ---
+  crown <- root_node
+  tip_nodes <- seq_along(tr$tip.label)
+  right_tip_nodes <- TRUE
 
-    # crown node bestimmen
-    crown <- root_node  # entspricht phy.edge[0,0] im C++ Code
-
-    # alle Tip-Knoten
-    tip_nodes <- 1:length(tr$tip.label)
-
-    # Über alle edges iterieren und Annahme prüfen
-    right_tip_nodes <- TRUE
+  if (length(tip_nodes) == 0 || length(crown) != 1 || is.na(crown)) {
+    right_tip_nodes <- FALSE
+  } else {
     for (i in seq_len(nrow(tr$edge))) {
       child <- tr$edge[i,2]
       if (child < crown) {
-        # sollte ein Tip-Knoten sein
         if (!(child %in% tip_nodes)) {
           right_tip_nodes <- FALSE
           break
         }
       } else {
-        # sollte kein Tip-Knoten sein
         if (child %in% tip_nodes) {
           right_tip_nodes <- FALSE
           break
         }
       }
     }
-
-    right_tip_nodes
-
-  } else {
-    existing_row$right_tip_nodes
   }
+
+  new_row$right_tip_nodes <- right_tip_nodes
+
 
 
   # --- Branching times ---
