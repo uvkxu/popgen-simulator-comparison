@@ -41,16 +41,24 @@ def plot_pigot_rho_relationships(csv_files, output_folder):
     
     df = pd.concat(all_dfs, ignore_index=True)
     
-    # --- 1. Boxplots by ultrametric ---
-    plt.figure(figsize=(6, 4))
-    df_box = [df.loc[df['is_ultrametric'], 'pigot_rho'],
-              df.loc[~df['is_ultrametric'], 'pigot_rho']]
-    plt.boxplot(df_box, labels=['Ultrametric', 'Non-Ultrametric'])
-    plt.ylabel("Pigot's ρ")
-    plt.title("Pigot's ρ by Ultrametricity")
-    plt.tight_layout()
-    plt.savefig(output_folder / "pigot_rho_ultrametric.png")
-    plt.close()
+    bool_stats = {
+            "is_ultrametric": "Ultrametricity",
+            "right_root_node": "Root Node Correctness",
+            "right_tip_nodes": "Tip Node ID Correctness"
+        }
+
+    # --- 1. Boolean stats ---
+    for col, title_suffix in bool_stats.items():
+        plot_path = output_folder / f"pigot_rho_{col}.png"
+
+        plt.figure(figsize=(6, 4))
+        df_box = [df.loc[df[col], 'pigot_rho'], df.loc[~df[col], 'pigot_rho']]
+        plt.boxplot(df_box, labels=[f"{title_suffix} = True", f"{title_suffix} = False"])
+        plt.ylabel("Pigot's ρ")
+        plt.title(f"Pigot's ρ by {title_suffix}")
+        plt.tight_layout()
+        plt.savefig(plot_path)
+        plt.close()
     
     # --- 2. Boxplots by sample_size and effective_pop_size ---
     for col in ['sample_size', 'effective_pop_size', 'overall_sample_size']:

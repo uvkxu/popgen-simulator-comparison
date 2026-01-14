@@ -6,57 +6,39 @@ library(yaml)
 
 # --- Argument parsing ---
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) < 3) {
-  stop("Usage: Rscript run_treestats_clean.R <input_file> <output_file> <combo_yaml>")
-}
+if (length(args) < 3) stop("Usage: Rscript run_treestats_clean.R <input_file> <output_file> <combo_yaml>")
 
 input_file  <- args[1]
 output_file <- args[2]
 combo_yaml  <- args[3]
 
 # --- Checks ---
-if (!file.exists(input_file)) {
-  stop("Input file does not exist: ", input_file)
-}
-
-if (!file.exists(combo_yaml)) {
-  stop("YAML config file does not exist: ", combo_yaml)
-}
+if (!file.exists(input_file)) stop("Input file does not exist: ", input_file)
+if (!file.exists(combo_yaml)) stop("YAML config file does not exist: ", combo_yaml)
 
 # --- Ensure output directory exists ---
 output_dir <- dirname(output_file)
-if (!dir.exists(output_dir)) {
-  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-}
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 # --- Read YAML config ---
 combo_params <- yaml::read_yaml(combo_yaml)
 required <- c("sequence_length")
 missing <- setdiff(required, names(combo_params))
-if (length(missing) > 0) {
-  stop("Missing fields in ", combo_yaml, ": ", paste(missing, collapse = ", "))
-}
-
+if (length(missing) > 0) stop("Missing fields in ", combo_yaml, ": ", paste(missing, collapse = ", "))
 seq_length <- combo_params$sequence_length
-
-# Check for recombination (optional)
-has_recomb <- "recombination_rate" %in% names(combo_params) &&
-               !is.null(combo_params$recombination_rate) &&
-               combo_params$recombination_rate != 0
 
 # --- Helper functions ---
 is_tree_line <- function(line) {
   grepl("\\(", line) & grepl(";+", line) &
-  !grepl("^\\s*//", line) &
-  !grepl("^\\s*segsites", line, ignore.case = TRUE) &
-  !grepl("^\\s*positions", line, ignore.case = TRUE)
+    !grepl("^\\s*//", line) &
+    !grepl("^\\s*segsites", line, ignore.case = TRUE) &
+    !grepl("^\\s*positions", line, ignore.case = TRUE)
 }
 
-clean_tree_line <- function(line) {
-  trimws(sub(";+$", ";", line))
-}
+clean_tree_line <- function(line) trimws(sub(";+$", ";", line))
 
-# --- Main loop ---
+# --- Load existing results ---
+existing_df <- if (file.exists(output_file)) read.csv(output_file, stringsAsFactors = FALSE) else data.frame()
 results <- list()
 skipped <- 0L
 
@@ -64,58 +46,125 @@ con <- file(input_file, open = "r")
 while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
   if (!is_tree_line(line)) next
   line <- clean_tree_line(line)
-  
-  tr <- tryCatch(ape::read.tree(text = line), error = function(e) NULL)
-  tr_unweighted <- tr
-  tr_unweighted$edge.length <- rep(1, nrow(tr_unweighted$edge))
 
+  tr <- tryCatch(ape::read.tree(text = line), error = function(e) NULL)
   if (is.null(tr)) {
     skipped <- skipped + 1L
     next
   }
 
-  pigot_rho <- tryCatch(treestats::pigot_rho(tr), error = function(e) NA)
-  num_branches <- tryCatch(treestats::phylogenetic_diversity(tr_unweighted), error = function(e) NA)
-  is_ultrametric <- ape::is.ultrametric(tr, tol = 1e-7)
-  effective_pop_size <- combo_params$population_size
-  sample_size <- combo_params$sample_structure[1]
-  overall_sample_size <- combo_params$overall_samples
-  tree_height <- tryCatch(treestats::tree_height(tr), error = function(e) NA)
-  mean_branch_length <- tryCatch(treestats::mean_branch_length(tr), error = function(e) NA)
-  crown_age <- tryCatch(treestats::crown_age(tr), error = function(e) NA)
-  # brts: Branching Times, absteigend sortiert
+  tr_unweighted <- tr
+  tr_unweighted$edge.length <- rep(1, nrow(tr_unweighted$edge))
+
+  # --- Check if tree already exists in output ---
+  existing_row <- if (nrow(existing_df) > 0) existing_df[1, FALSE] else NULL  # nur Struktur
+
+  new_row <- list()
+
+  # --- Compute only missing stats ---
+  new_row$pigot_rho <- if (is.null(existing_row) || !"pigot_rho" %in% names(existing_df)) {
+    tryCatch(treestats::pigot_rho(tr), error = function(e) NA)
+  } else existing_row$pigot_rho
+
+  new_row$num_branches <- if (is.null(existing_row) || !"num_branches" %in% names(existing_df)) {
+    tryCatch(treestats::phylogenetic_diversity(tr_unweighted), error = function(e) NA)
+  } else existing_row$num_branches
+
+  new_row$is_ultrametric <- if (is.null(existing_row) || !"is_ultrametric" %in% names(existing_df)) {
+    ape::is.ultrametric(tr, tol = 1e-7)
+  } else existing_row$is_ultrametric
+
+  new_row$tree_height <- if (is.null(existing_row) || !"tree_height" %in% names(existing_df)) {
+    tryCatch(treestats::tree_height(tr), error = function(e) NA)
+  } else existing_row$tree_height
+
+  new_row$mean_branch_length <- if (is.null(existing_row) || !"mean_branch_length" %in% names(existing_df)) {
+    tryCatch(treestats::mean_branch_length(tr), error = function(e) NA)
+  } else existing_row$mean_branch_length
+
+  new_row$crown_age <- if (is.null(existing_row) || !"crown_age" %in% names(existing_df)) {
+    tmp <- tryCatch(treestats::crown_age(tr), error = function(e) NA)
+    if (length(tmp) != 1) NA else tmp
+  } else existing_row$crown_age
+
+  # --- Assumptions checks ---
+  all_parents <- tr$edge[,1]
+  all_children <- tr$edge[,2]
+
+  # tatsächlicher Root
+  actual_root_node <- setdiff(all_parents, all_children)
+  if (length(actual_root_node) != 1) {
+    stop("Root node could not be uniquely determined")
+  }
+  actual_root_node <- actual_root_node[1]
+
+  # Root, wie im C-Code angenommen
+  root_node <- tr$edge[1,1]
+
+  # Prüfen, ob sie übereinstimmen
+  new_row$right_root_node <- if (is.null(existing_row) || !"right_root_node" %in% names(existing_df)) {
+    actual_root_node == root_node  # TRUE oder FALSE
+  } else {
+    existing_row$right_root_node
+  }
+
+  # --- Check "right tip nodes" according to C++ assumption ---
+  new_row$right_tip_nodes <- if (is.null(existing_row) || !"right_tip_nodes" %in% names(existing_df)) {
+
+    # crown node bestimmen
+    crown <- root_node  # entspricht phy.edge[0,0] im C++ Code
+
+    # alle Tip-Knoten
+    tip_nodes <- 1:length(tr$tip.label)
+
+    # Über alle edges iterieren und Annahme prüfen
+    right_tip_nodes <- TRUE
+    for (i in seq_len(nrow(tr$edge))) {
+      child <- tr$edge[i,2]
+      if (child < crown) {
+        # sollte ein Tip-Knoten sein
+        if (!(child %in% tip_nodes)) {
+          right_tip_nodes <- FALSE
+          break
+        }
+      } else {
+        # sollte kein Tip-Knoten sein
+        if (child %in% tip_nodes) {
+          right_tip_nodes <- FALSE
+          break
+        }
+      }
+    }
+
+    right_tip_nodes
+
+  } else {
+    existing_row$right_tip_nodes
+  }
+
+
+  # --- Branching times ---
   brts <- sort(branching.times(tr), decreasing = TRUE)
-
-  n3 <- 1 + length(brts)
+  new_row$n3 <- if (is.null(existing_row) || !"n3" %in% names(existing_df)) 1 + length(brts) else existing_row$n3
   mid_point <- brts[1] / 2
+  new_row$n2 <- if (is.null(existing_row) || !"n2" %in% names(existing_df)) 1 + sum(brts >= mid_point) else existing_row$n2
 
-  # index_mid_point = Anzahl Werte >= mid_point
-  index_mid_point <- sum(brts >= mid_point)
+  # --- Add constant params ---
+  new_row$effective_pop_size <- combo_params$population_size
+  new_row$sample_size <- combo_params$sample_structure[1]
+  new_row$overall_sample_size <- combo_params$overall_samples
 
-  n2 <- 1 + index_mid_point
-
-
-
-
-  results[[length(results) + 1]] <- data.frame(
-    pigot_rho = pigot_rho,
-    is_ultrametric = is_ultrametric,
-    effective_pop_size = effective_pop_size,
-    num_branches = num_branches,
-    sample_size = sample_size,
-    overall_sample_size = overall_sample_size,
-    tree_height = tree_height,
-    mean_branch_length = mean_branch_length,
-    crown_age = crown_age,
-    stringsAsFactors = FALSE,
-    n2 = n2,
-    n3 = n3
-  )
+  results[[length(results) + 1]] <- as.data.frame(new_row, stringsAsFactors = FALSE)
 }
 close(con)
 
-# --- Combine and write results ---
-df <- do.call(rbind, results)
-write.csv(df, file = output_file, row.names = FALSE)
+# --- Combine with existing dataframe ---
+df_new <- do.call(rbind, results)
+if (nrow(existing_df) > 0) {
+  df <- rbind(existing_df, df_new)
+} else {
+  df <- df_new
+}
 
+write.csv(df, file = output_file, row.names = FALSE)
 cat(sprintf("✅ Done: %s (%d trees skipped)\n", output_file, skipped))
