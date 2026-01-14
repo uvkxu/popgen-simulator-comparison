@@ -40,6 +40,14 @@ def plot_pigot_rho_relationships(csv_files, output_folder):
         return
     
     df = pd.concat(all_dfs, ignore_index=True)
+    nan_cols = []
+
+    for col in df.columns:
+        if df[col].isna().any():
+            nan_cols.append(col)
+    
+    if nan_cols:
+        raise ValueError(f"Columns with NaN values found: {nan_cols}. Please clean the data before plotting.")
     
     bool_stats = {
             "is_ultrametric": "Ultrametricity",
