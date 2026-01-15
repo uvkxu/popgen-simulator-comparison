@@ -1,98 +1,116 @@
-#!/usr/bin/env Rscript
-
 library(ape)
 library(treestats)
 library(yaml)
 
-create_branch_set <- function(tr) {
-  node_ages <- node.depth.edgelength(tr)
-  max_age   <- max(node_ages)
+# ============================================================
+# C++-NAHE HILFSFUNKTIONEN
+# ============================================================
 
-  branchset <- vector("list", nrow(tr$edge))
+get_start_date <- function(branchset, parent_label) {
+  for (b in branchset) {
+    if (b$own_label == parent_label) {
+      return(b$end_date)
+    }
+  }
+  stop("Parent label not found in branchset")
+}
 
-  for (i in seq_len(nrow(tr$edge))) {
-    parent <- tr$edge[i, 1]
-    child  <- tr$edge[i, 2]
-    bl     <- tr$edge.length[i]
+remove_from_branchset <- function(branchset, tip_label) {
+  to_remove <- tip_label
+  repeat {
+    parents <- vapply(branchset, function(b) b$parent_label, numeric(1))
+    own     <- vapply(branchset, function(b) b$own_label, numeric(1))
+    idx <- which(own %in% to_remove)
+    if (length(idx) == 0) break
+    to_remove <- parents[idx]
+    branchset <- branchset[-idx]
+  }
+  branchset
+}
 
-    end_date   <- max_age - node_ages[parent]
-    start_date <- end_date - bl
+create_branch_set_cpp_like <- function(tr,
+                                       max_t = 1e12,
+                                       crown_age,
+                                       extinct_acc = 1e-6) {
 
-    branchset[[i]] <- list(
-      start_date = start_date,
-      end_date   = end_date,
-      parent     = parent,
-      child      = child
+  edge <- tr$edge
+  el   <- tr$edge.length
+  crown <- edge[1, 1]
+
+  branchset <- list()
+  tip_times <- list()
+
+  for (i in seq_len(nrow(edge))) {
+
+    parent_label <- edge[i, 1]
+    start_date <- if (parent_label == crown) 0 else
+      get_start_date(branchset, parent_label)
+
+    if (start_date > max_t) next
+
+    own_label <- edge[i, 2]
+    bl <- el[i]
+    end_date <- start_date + bl
+
+    if (end_date > max_t) {
+      end_date <- max_t
+      bl <- end_date - start_date
+    }
+
+    if (own_label < crown && end_date < crown_age && end_date < max_t) {
+      tip_times[[length(tip_times) + 1]] <- c(own_label, end_date)
+    }
+
+    branchset[[length(branchset) + 1]] <- list(
+      start_date   = start_date,
+      parent_label = parent_label,
+      own_label    = own_label,
+      end_date     = end_date,
+      bl           = bl
     )
+  }
+
+  if (length(tip_times) > 0) {
+    limit <- min(crown_age, max_t)
+    for (tt in tip_times) {
+      if (abs(limit - tt[2]) > extinct_acc) {
+        branchset <- remove_from_branchset(branchset, tt[1])
+      }
+    }
   }
 
   branchset
 }
 
+num_lineages_cpp_like <- function(branchset, t) {
+  sum(vapply(branchset, function(b)
+    b$start_date < t && b$end_date >= t,
+    logical(1)))
+}
+
+# ============================================================
+# PIGOT RHO DIAGNOSE (C++-NAH)
+# ============================================================
 
 calc_pigot_rho_diagnose <- function(tr) {
 
-  # -------------------------
-  # 1. EDGE + EDGE LENGTH
-  # -------------------------
   edge <- tr$edge
   el   <- tr$edge.length
-
-  if (is.null(edge) || is.null(el))
-    stop("Tree has no edge or edge.length")
-
-  # -------------------------
-  # 2. CROWN AGE (wie C++)
-  # -------------------------
   crown_age <- treestats::crown_age(tr)
   mid_point <- crown_age * 0.5
+  crown_node <- edge[1, 1]
 
-  # -------------------------
-  # 3. C++ ROOT ASSUMPTION
-  # -------------------------
-  crown_node <- edge[1, 1]   # phy.edge[0][0]
+  # exakt wie C++
+  n3 <- sum(edge[, 2] < crown_node)
 
-  # -------------------------
-  # 4. n3 = count_extant_lineages
-  # -------------------------
-  n3 <- 0L
-  for (i in seq_len(nrow(edge))) {
-    if (edge[i, 2] < crown_node) {
-      n3 <- n3 + 1L
-    }
-  }
+  branchset <- create_branch_set_cpp_like(tr, crown_age = crown_age)
+  n2 <- num_lineages_cpp_like(branchset, mid_point)
 
-  # -------------------------
-  # 5. branchset ≈ branching.times
-  # -------------------------
-  # create_branch_set(...) is effectively encoding lineage survival
-  # branching.times gives node heights from present backwards
-  branchset <- create_branch_set(tr)
-
-  n2 <- 0L
-  for (i in seq_along(branchset)) {
-    if (branchset[[i]]$start_date < mid_point &&
-        branchset[[i]]$end_date   >= mid_point) {
-      n2 <- n2 + 1L
-    }
-  }
-
-  # -------------------------
-  # 7. FIXED n1
-  # -------------------------
   n1 <- 2L
-
-  # -------------------------
-  # 8. r1, r2 (NO SAFETY)
-  # -------------------------
   r1 <- (log(n2) - log(n1)) / mid_point
   r2 <- (log(n3) - log(n2)) / mid_point
-
   rho <- (r2 - r1) / (r1 + r2)
 
-  # -------------------------
-  # 9. FULL DIAGNOSTICS
-  # -------------------------
   list(
     crown_age  = crown_age,
     mid_point  = mid_point,
@@ -187,73 +205,16 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
   new_row$is_ultrametric <- if (is.null(existing_row) || !"is_ultrametric" %in% names(existing_df)) {
     ape::is.ultrametric(tr)
   } else existing_row$is_ultrametric
-   
-  new_row$tree_height <- if (is.null(existing_row) || !"tree_height" %in% names(existing_df)) {
-    tryCatch(treestats::tree_height(tr), error = function(e) NA)
-  } else existing_row$tree_height
-
-  new_row$mean_branch_length <- if (is.null(existing_row) || !"mean_branch_length" %in% names(existing_df)) {
-    tryCatch(treestats::mean_branch_length(tr), error = function(e) NA)
-  } else existing_row$mean_branch_length
 
   new_row$crown_age <- if (is.null(existing_row) || !"crown_age" %in% names(existing_df)) {
     diag$crown_age
   } else existing_row$crown_age
-
-  # --- Root node check ---
-  actual_root_node <- setdiff(tr$edge[,1], tr$edge[,2])
-  if (length(actual_root_node) != 1) {
-    warning("Root node could not be uniquely determined, setting right_root_node = FALSE")
-    new_row$right_root_node <- FALSE
-  } else {
-    actual_root_node <- actual_root_node[1]
-    root_node <- tr$edge[1,1]
-    # Vergleich absichern gegen Vektor/NA
-    new_row$right_root_node <- if (length(root_node) == 1 && !is.na(root_node)) {
-      actual_root_node == root_node
-    } else {
-      FALSE
-    }
-  }
-
-  # --- Right tip nodes check ---
-  crown <- root_node
-  tip_nodes <- seq_along(tr$tip.label)
-  right_tip_nodes <- TRUE
-
-  if (length(tip_nodes) == 0 || length(crown) != 1 || is.na(crown)) {
-    right_tip_nodes <- FALSE
-  } else {
-    for (i in seq_len(nrow(tr$edge))) {
-      child <- tr$edge[i,2]
-      if (child < crown) {
-        if (!(child %in% tip_nodes)) {
-          right_tip_nodes <- FALSE
-          break
-        }
-      } else {
-        if (child %in% tip_nodes) {
-          right_tip_nodes <- FALSE
-          break
-        }
-      }
-    }
-  }
-
-  new_row$right_tip_nodes <- right_tip_nodes
-
-
 
   # --- Branching times ---
   brts <- sort(branching.times(tr), decreasing = TRUE)
   new_row$n3 <- if (is.null(existing_row) || !"n3" %in% names(existing_df)) 1 + length(brts) else existing_row$n3
   mid_point <- brts[1] / 2
   new_row$n2 <- if (is.null(existing_row) || !"n2" %in% names(existing_df)) 1 + sum(brts >= mid_point) else existing_row$n2
-
-  # --- Add constant params ---
-  new_row$effective_pop_size <- combo_params$population_size
-  new_row$sample_size <- combo_params$sample_structure[1]
-  new_row$overall_sample_size <- combo_params$overall_samples
 
   results[[length(results) + 1]] <- as.data.frame(new_row, stringsAsFactors = FALSE)
 }
@@ -269,6 +230,3 @@ if (nrow(existing_df) > 0) {
 
 write.csv(df, file = output_file, row.names = FALSE)
 cat(sprintf("✅ Done: %s (%d trees skipped)\n", output_file, skipped))
-
-
-
