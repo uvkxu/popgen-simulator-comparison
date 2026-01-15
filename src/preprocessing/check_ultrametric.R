@@ -4,50 +4,31 @@ library(ape)
 library(treestats)
 library(yaml)
 
-# --- Diagnosefähige Pigot rho Berechnung ---
-calc_pigot_rho_diagnose_correct <- function(tr) {
-  out <- list(
-    diag_n2 = NA,
-    diag_n3 = NA,
-    diag_r1 = NA,
-    diag_r2 = NA,
-    diag_rho = NA
-  )
+create_branch_set <- function(tr) {
+  node_ages <- node.depth.edgelength(tr)
+  max_age   <- max(node_ages)
 
-  if (is.null(tr$edge) || nrow(tr$edge) == 0) return(out)
+  branchset <- vector("list", nrow(tr$edge))
 
-  crown_age <- tryCatch(treestats::crown_age(tr), error = function(e) NA)
-  if (is.na(crown_age) || length(crown_age) != 1) return(out)
-
-  mid_point <- crown_age / 2
-  n1 <- 2
-
-  root_node <- tr$edge[1, 1]
-  tip_nodes <- seq_along(tr$tip.label)
-
-  n3 <- 0
   for (i in seq_len(nrow(tr$edge))) {
-    child <- tr$edge[i, 2]
-    if (child < root_node) n3 <- n3 + 1
+    parent <- tr$edge[i, 1]
+    child  <- tr$edge[i, 2]
+    bl     <- tr$edge.length[i]
+
+    end_date   <- max_age - node_ages[parent]
+    start_date <- end_date - bl
+
+    branchset[[i]] <- list(
+      start_date = start_date,
+      end_date   = end_date,
+      parent     = parent,
+      child      = child
+    )
   }
 
-  brts <- sort(branching.times(tr), decreasing = TRUE)
-  n2 <- 1 + sum(brts >= mid_point)
-
-  if (n2 <= 0 || n3 <= 0) return(out)
-
-  r1 <- (log(n2) - log(n1)) / mid_point
-  r2 <- (log(n3) - log(n2)) / mid_point
-  rho <- (r2 - r1) / (r1 + r2)
-
-  list(
-    diag_n2 = n2,
-    diag_n3 = n3,
-    diag_r1 = r1,
-    diag_r2 = r2,
-    diag_rho = rho
-  )
+  branchset
 }
+
 
 calc_pigot_rho_diagnose <- function(tr) {
 
@@ -86,17 +67,15 @@ calc_pigot_rho_diagnose <- function(tr) {
   # -------------------------
   # create_branch_set(...) is effectively encoding lineage survival
   # branching.times gives node heights from present backwards
-  brts <- sort(branching.times(tr), decreasing = TRUE)
+  branchset <- create_branch_set(tr)
 
-  # -------------------------
-  # 6. num_lineages(t)
-  # -------------------------
-  # C++ condition:
-  # start_date < t && end_date >= t
-  #
-  # branching.times encode END of branches
-  # lineage alive at t ↔ branching time >= t
-  n2 <- 1L + sum(brts >= mid_point)
+  n2 <- 0L
+  for (i in seq_along(branchset)) {
+    if (branchset[[i]]$start_date < mid_point &&
+        branchset[[i]]$end_date   >= mid_point) {
+      n2 <- n2 + 1L
+    }
+  }
 
   # -------------------------
   # 7. FIXED n1
