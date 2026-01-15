@@ -96,6 +96,19 @@ def plot_pigot_rho_relationships(csv_files, output_folder):
         plt.savefig(output_folder / "pigot_rho_vs_n2_n3_ratio.png")
         plt.close()
 
+    if 'diag_r1' in df.columns and 'diag_r2' in df.columns:
+        df_ratio = df.copy()
+        df_ratio['r1_r2_ratio'] = df_ratio['diag_r1'] / df_ratio['diag_r2']
+
+        plt.figure(figsize=(6, 4))
+        plt.scatter(df_ratio['r1_r2_ratio'], df_ratio['pigot_rho'], alpha=0.6)
+        plt.xlabel("r1 / r2 ratio")
+        plt.ylabel("Pigot's ρ")
+        plt.title("Pigot's ρ vs r1/r2 ratio")
+        plt.tight_layout()
+        plt.savefig(output_folder / "pigot_rho_vs_r1_r2_ratio.png")
+        plt.close()
+
     
     # --- 3. Scatter plot Pigot's ρ vs num_branches ---
     for stat in ['num_branches', 'tree_height', 'mean_branch_length', 'crown_age', 
