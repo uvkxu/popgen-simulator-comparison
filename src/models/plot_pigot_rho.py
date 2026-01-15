@@ -82,35 +82,6 @@ def plot_pigot_rho_relationships(csv_files, output_folder):
         plt.tight_layout()
         plt.savefig(output_folder / f"pigot_rho_by_{col}.png")
         plt.close()
-    
-    # Optional: ratio of population / sample size
-    if 'sample_size' in df.columns and 'effective_pop_size' in df.columns:
-        df_ratio = df.copy()
-        df_ratio['pop_sample_ratio'] = df_ratio['effective_pop_size'] / df_ratio['sample_size']
-        unique_values = sorted(df_ratio['pop_sample_ratio'].dropna().unique())
-        plt.figure(figsize=(max(6, len(unique_values)), 4))
-        data = [df_ratio.loc[df_ratio['pop_sample_ratio'] == val, 'pigot_rho'] for val in unique_values]
-        plt.boxplot(data, labels=[f"{v:.1f}" for v in unique_values])
-        plt.ylabel("Pigot's ρ")
-        plt.xlabel("Population / Sample size ratio")
-        plt.title("Pigot's ρ by pop/sample ratio")
-        plt.tight_layout()
-        plt.savefig(output_folder / "pigot_rho_by_pop_sample_ratio.png")
-        plt.close()
-
-    if 'overall_sample_size' in df.columns and 'effective_pop_size' in df.columns:
-        df_ratio = df.copy()
-        df_ratio['pop_sample_ratio'] = df_ratio['effective_pop_size'] / df_ratio['overall_sample_size']
-        unique_values = sorted(df_ratio['pop_sample_ratio'].dropna().unique())
-        plt.figure(figsize=(max(6, len(unique_values)), 4))
-        data = [df_ratio.loc[df_ratio['pop_sample_ratio'] == val, 'pigot_rho'] for val in unique_values]
-        plt.boxplot(data, labels=[f"{v:.1f}" for v in unique_values])
-        plt.ylabel("Pigot's ρ")
-        plt.xlabel("Population / Sample size ratio")
-        plt.title("Pigot's ρ by pop/sample ratio")
-        plt.tight_layout()
-        plt.savefig(output_folder / "pigot_rho_by_pop_overall_sample_ratio.png")
-        plt.close()
 
     if 'n2' in df.columns and 'n3' in df.columns:
         df_ratio = df.copy()
@@ -127,7 +98,8 @@ def plot_pigot_rho_relationships(csv_files, output_folder):
 
     
     # --- 3. Scatter plot Pigot's ρ vs num_branches ---
-    for stat in ['num_branches', 'tree_height', 'mean_branch_length', 'crown_age', "n2", "n3"]:
+    for stat in ['num_branches', 'tree_height', 'mean_branch_length', 'crown_age', 
+                    "n2", "n3", "diag_rho", "diag_n2", "diag_n3", "diag_r1", "diag_r2"]:
         if stat in df.columns:
             plt.figure(figsize=(6, 4))
             plt.scatter(df[stat], df['pigot_rho'], alpha=0.6)

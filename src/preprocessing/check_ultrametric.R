@@ -4,6 +4,51 @@ library(ape)
 library(treestats)
 library(yaml)
 
+# --- Diagnosefähige Pigot rho Berechnung ---
+calc_pigot_rho_diagnose <- function(tr) {
+  out <- list(
+    diag_n2 = NA,
+    diag_n3 = NA,
+    diag_r1 = NA,
+    diag_r2 = NA,
+    diag_rho = NA
+  )
+
+  if (is.null(tr$edge) || nrow(tr$edge) == 0) return(out)
+
+  crown_age <- tryCatch(treestats::crown_age(tr), error = function(e) NA)
+  if (is.na(crown_age) || length(crown_age) != 1) return(out)
+
+  mid_point <- crown_age / 2
+  n1 <- 2
+
+  root_node <- tr$edge[1, 1]
+  tip_nodes <- seq_along(tr$tip.label)
+
+  n3 <- 0
+  for (i in seq_len(nrow(tr$edge))) {
+    child <- tr$edge[i, 2]
+    if (child < root_node) n3 <- n3 + 1
+  }
+
+  brts <- sort(branching.times(tr), decreasing = TRUE)
+  n2 <- 1 + sum(brts >= mid_point)
+
+  if (n2 <= 0 || n3 <= 0) return(out)
+
+  r1 <- (log(n2) - log(n1)) / mid_point
+  r2 <- (log(n3) - log(n2)) / mid_point
+  rho <- (r2 - r1) / (r1 + r2)
+
+  list(
+    diag_n2 = n2,
+    diag_n3 = n3,
+    diag_r1 = r1,
+    diag_r2 = r2,
+    diag_rho = rho
+  )
+}
+
 # --- Argument parsing ---
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 3) stop("Usage: Rscript run_treestats_clean.R <input_file> <output_file> <combo_yaml>")
@@ -65,6 +110,16 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
   new_row$pigot_rho <- if (is.null(existing_row) || !"pigot_rho" %in% names(existing_df)) {
     tryCatch(treestats::pigot_rho(tr), error = function(e) NA)
   } else existing_row$pigot_rho
+
+  # --- Diagnose Pigot rho (C++-nah) ---
+  diag <- calc_pigot_rho_diagnose(tr)
+
+  new_row$diag_n2  <- diag$diag_n2
+  new_row$diag_n3  <- diag$diag_n3
+  new_row$diag_r1  <- diag$diag_r1
+  new_row$diag_r2  <- diag$diag_r2
+  new_row$diag_rho <- diag$diag_rho
+
 
   new_row$num_branches <- if (is.null(existing_row) || !"num_branches" %in% names(existing_df)) {
     tryCatch(treestats::phylogenetic_diversity(tr_unweighted), error = function(e) NA)
@@ -156,3 +211,6 @@ if (nrow(existing_df) > 0) {
 
 write.csv(df, file = output_file, row.names = FALSE)
 cat(sprintf("✅ Done: %s (%d trees skipped)\n", output_file, skipped))
+
+
+
