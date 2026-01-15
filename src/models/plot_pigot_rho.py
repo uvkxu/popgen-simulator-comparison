@@ -52,7 +52,8 @@ def plot_pigot_rho_relationships(csv_files, output_folder):
     bool_stats = {
             "is_ultrametric": "Ultrametricity",
             "right_root_node": "Root Node Correctness",
-            "right_tip_nodes": "Tip Node ID Correctness"
+            "right_tip_nodes": "Tip Node ID Correctness",
+            "is_matrix": "Format as Matrix"
         }
 
     # --- 1. Boolean stats ---

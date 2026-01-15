@@ -126,9 +126,17 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
   } else existing_row$num_branches
 
   new_row$is_ultrametric <- if (is.null(existing_row) || !"is_ultrametric" %in% names(existing_df)) {
-    ape::is.ultrametric(tr, tol = 1e-7)
+    ape::is.ultrametric(tr)
   } else existing_row$is_ultrametric
 
+  new_row$is_matrix <- if (is.null(existing_row) || !"is_matrix" %in% names(existing_df)) {
+    if (inherits(tr, "matrix")) {
+      TRUE
+    } else {
+      FALSE
+    }
+  } else existing_row$is_matrix
+   
   new_row$tree_height <- if (is.null(existing_row) || !"tree_height" %in% names(existing_df)) {
     tryCatch(treestats::tree_height(tr), error = function(e) NA)
   } else existing_row$tree_height
