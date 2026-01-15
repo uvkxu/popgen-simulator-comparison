@@ -5,7 +5,7 @@ library(treestats)
 library(yaml)
 
 # --- Diagnosefähige Pigot rho Berechnung ---
-calc_pigot_rho_diagnose <- function(tr) {
+calc_pigot_rho_diagnose_correct <- function(tr) {
   out <- list(
     diag_n2 = NA,
     diag_n3 = NA,
@@ -48,6 +48,84 @@ calc_pigot_rho_diagnose <- function(tr) {
     diag_rho = rho
   )
 }
+
+calc_pigot_rho_diagnose <- function(tr) {
+
+  # -------------------------
+  # 1. EDGE + EDGE LENGTH
+  # -------------------------
+  edge <- tr$edge
+  el   <- tr$edge.length
+
+  if (is.null(edge) || is.null(el))
+    stop("Tree has no edge or edge.length")
+
+  # -------------------------
+  # 2. CROWN AGE (wie C++)
+  # -------------------------
+  crown_age <- treestats::crown_age(tr)
+  mid_point <- crown_age * 0.5
+
+  # -------------------------
+  # 3. C++ ROOT ASSUMPTION
+  # -------------------------
+  crown_node <- edge[1, 1]   # phy.edge[0][0]
+
+  # -------------------------
+  # 4. n3 = count_extant_lineages
+  # -------------------------
+  n3 <- 0L
+  for (i in seq_len(nrow(edge))) {
+    if (edge[i, 2] < crown_node) {
+      n3 <- n3 + 1L
+    }
+  }
+
+  # -------------------------
+  # 5. branchset ≈ branching.times
+  # -------------------------
+  # create_branch_set(...) is effectively encoding lineage survival
+  # branching.times gives node heights from present backwards
+  brts <- sort(branching.times(tr), decreasing = TRUE)
+
+  # -------------------------
+  # 6. num_lineages(t)
+  # -------------------------
+  # C++ condition:
+  # start_date < t && end_date >= t
+  #
+  # branching.times encode END of branches
+  # lineage alive at t ↔ branching time >= t
+  n2 <- 1L + sum(brts >= mid_point)
+
+  # -------------------------
+  # 7. FIXED n1
+  # -------------------------
+  n1 <- 2L
+
+  # -------------------------
+  # 8. r1, r2 (NO SAFETY)
+  # -------------------------
+  r1 <- (log(n2) - log(n1)) / mid_point
+  r2 <- (log(n3) - log(n2)) / mid_point
+
+  rho <- (r2 - r1) / (r1 + r2)
+
+  # -------------------------
+  # 9. FULL DIAGNOSTICS
+  # -------------------------
+  list(
+    crown_age  = crown_age,
+    mid_point  = mid_point,
+    crown_node = crown_node,
+    diag_n2 = n2,
+    diag_n3 = n3,
+    diag_r1 = r1,
+    diag_r2 = r2,
+    diag_rho = rho
+  )
+}
+
 
 # --- Argument parsing ---
 args <- commandArgs(trailingOnly = TRUE)
@@ -119,23 +197,17 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
   new_row$diag_r1  <- diag$diag_r1
   new_row$diag_r2  <- diag$diag_r2
   new_row$diag_rho <- diag$diag_rho
+  new_row$mid_point <- diag$mid_point
+  new_row$crown_node <- diag$crown_node
 
 
-  new_row$num_branches <- if (is.null(existing_row) || !"num_branches" %in% names(existing_df)) {
-    tryCatch(treestats::phylogenetic_diversity(tr_unweighted), error = function(e) NA)
-  } else existing_row$num_branches
+  new_row$num_nodes <- if (is.null(existing_row) || !"num_nodes" %in% names(existing_df)) {
+    tr$Nnode
+  } else existing_row$num_nodes
 
   new_row$is_ultrametric <- if (is.null(existing_row) || !"is_ultrametric" %in% names(existing_df)) {
     ape::is.ultrametric(tr)
   } else existing_row$is_ultrametric
-
-  new_row$is_matrix <- if (is.null(existing_row) || !"is_matrix" %in% names(existing_df)) {
-    if (inherits(tr, "matrix")) {
-      TRUE
-    } else {
-      FALSE
-    }
-  } else existing_row$is_matrix
    
   new_row$tree_height <- if (is.null(existing_row) || !"tree_height" %in% names(existing_df)) {
     tryCatch(treestats::tree_height(tr), error = function(e) NA)
@@ -146,8 +218,7 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
   } else existing_row$mean_branch_length
 
   new_row$crown_age <- if (is.null(existing_row) || !"crown_age" %in% names(existing_df)) {
-    tmp <- tryCatch(treestats::crown_age(tr), error = function(e) NA)
-    if (length(tmp) != 1) NA else tmp
+    diag$crown_age
   } else existing_row$crown_age
 
   # --- Root node check ---

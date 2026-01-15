@@ -52,8 +52,7 @@ def plot_pigot_rho_relationships(csv_files, output_folder):
     bool_stats = {
             "is_ultrametric": "Ultrametricity",
             "right_root_node": "Root Node Correctness",
-            "right_tip_nodes": "Tip Node ID Correctness",
-            "is_matrix": "Format as Matrix"
+            "right_tip_nodes": "Tip Node ID Correctness"
         }
 
     # --- 1. Boolean stats ---
@@ -113,7 +112,7 @@ def plot_pigot_rho_relationships(csv_files, output_folder):
     
     # --- 3. Scatter plot Pigot's ρ vs num_branches ---
     for stat in ['num_branches', 'tree_height', 'mean_branch_length', 'crown_age', 
-                    "n2", "n3", "diag_rho", "diag_n2", "diag_n3", "diag_r1", "diag_r2"]:
+                    "n2", "n3", "diag_rho", "diag_n2", "diag_n3", "diag_r1", "diag_r2", "mid_point", "crown_node"]:
         if stat in df.columns:
             plt.figure(figsize=(6, 4))
             plt.scatter(df[stat], df['pigot_rho'], alpha=0.6)
