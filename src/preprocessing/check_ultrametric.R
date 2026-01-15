@@ -2,127 +2,102 @@ library(ape)
 library(treestats)
 library(yaml)
 
-# ============================================================
-# C++-NAHE HILFSFUNKTIONEN
-# ============================================================
-
-get_start_date <- function(branchset, parent_label) {
-  for (b in branchset) {
-    if (b$own_label == parent_label) {
-      return(b$end_date)
-    }
-  }
-  stop("Parent label not found in branchset")
-}
-
-remove_from_branchset <- function(branchset, tip_label) {
-  to_remove <- tip_label
-  repeat {
-    parents <- vapply(branchset, function(b) b$parent_label, numeric(1))
-    own     <- vapply(branchset, function(b) b$own_label, numeric(1))
-    idx <- which(own %in% to_remove)
-    if (length(idx) == 0) break
-    to_remove <- parents[idx]
-    branchset <- branchset[-idx]
-  }
-  branchset
-}
-
-create_branch_set_cpp_like <- function(tr,
-                                       max_t = 1e12,
-                                       crown_age,
-                                       extinct_acc = 1e-6) {
-
-  edge <- tr$edge
-  el   <- tr$edge.length
-  crown <- edge[1, 1]
+# -------------------------
+# Create branch set (C++ logic)
+# -------------------------
+create_branch_set <- function(tr, max_t = 1e12, crown_age = NULL, extinct_acc = 1e-6) {
+  if (is.null(crown_age)) crown_age <- treestats::crown_age(tr)
+  crown <- tr$edge[1,1]
 
   branchset <- list()
   tip_times <- list()
 
-  for (i in seq_len(nrow(edge))) {
+  # helper to get start date for a parent
+  get_start_date <- function(branchset, parent_label) {
+    for (b in branchset) {
+      if (b$child == parent_label) return(b$end_date)
+    }
+    return(0.0)
+  }
 
-    parent_label <- edge[i, 1]
-    start_date <- if (parent_label == crown) 0 else
-      get_start_date(branchset, parent_label)
+  for (i in seq_len(nrow(tr$edge))) {
+    parent_label <- tr$edge[i,1]
+    child_label  <- tr$edge[i,2]
+    bl           <- tr$edge.length[i]
 
+    start_date <- if (parent_label == crown) 0 else get_start_date(branchset, parent_label)
     if (start_date > max_t) next
 
-    own_label <- edge[i, 2]
-    bl <- el[i]
     end_date <- start_date + bl
+    if (end_date > max_t) end_date <- max_t
 
-    if (end_date > max_t) {
-      end_date <- max_t
-      bl <- end_date - start_date
+    if (child_label < crown && end_date < crown_age && end_date < max_t) {
+      tip_times[[length(tip_times)+1]] <- list(label=child_label, end=end_date)
     }
 
-    if (own_label < crown && end_date < crown_age && end_date < max_t) {
-      tip_times[[length(tip_times) + 1]] <- c(own_label, end_date)
-    }
-
-    branchset[[length(branchset) + 1]] <- list(
-      start_date   = start_date,
-      parent_label = parent_label,
-      own_label    = own_label,
-      end_date     = end_date,
-      bl           = bl
+    branchset[[length(branchset)+1]] <- list(
+      start_date = start_date,
+      end_date   = end_date,
+      parent     = parent_label,
+      child      = child_label,
+      bl         = bl
     )
   }
 
+  # remove extinct tips
   if (length(tip_times) > 0) {
-    limit <- min(crown_age, max_t)
-    for (tt in tip_times) {
-      if (abs(limit - tt[2]) > extinct_acc) {
-        branchset <- remove_from_branchset(branchset, tt[1])
-      }
-    }
+    limit <- min(max_t, crown_age)
+    branchset <- branchset[!sapply(branchset, function(b) {
+      any(sapply(tip_times, function(tip) {
+        abs(limit - tip$end) > extinct_acc && b$child == tip$label
+      }))
+    })]
   }
 
-  branchset
+  return(branchset)
 }
 
-num_lineages_cpp_like <- function(branchset, t) {
-  sum(vapply(branchset, function(b)
-    b$start_date < t && b$end_date >= t,
-    logical(1)))
-}
-
-# ============================================================
-# PIGOT RHO DIAGNOSE (C++-NAH)
-# ============================================================
-
+# -------------------------
+# Calc Pigot Rho Diagnose
+# -------------------------
 calc_pigot_rho_diagnose <- function(tr) {
-
   edge <- tr$edge
-  el   <- tr$edge.length
+  if (is.null(edge) || nrow(edge)==0) stop("Tree has no edges")
   crown_age <- treestats::crown_age(tr)
   mid_point <- crown_age * 0.5
-  crown_node <- edge[1, 1]
+  crown_node <- edge[1,1]
 
-  # exakt wie C++
-  n3 <- sum(edge[, 2] < crown_node)
+  # n3 = extant lineages (C++ logic)
+  tip_nodes <- seq_along(tr$tip.label)
+  n3 <- sum(sapply(edge[,2], function(child) if (child < crown_node) child %in% tip_nodes else FALSE))
 
-  branchset <- create_branch_set_cpp_like(tr, crown_age = crown_age)
-  n2 <- num_lineages_cpp_like(branchset, mid_point)
+  # n2 = lineages at mid_point (branchset)
+  branchset <- create_branch_set(tr, max_t = 1e12, crown_age = crown_age, extinct_acc = 1e-6)
+  n2 <- sum(sapply(branchset, function(b) b$start_date < mid_point && b$end_date >= mid_point))
 
-  n1 <- 2L
-  r1 <- (log(n2) - log(n1)) / mid_point
-  r2 <- (log(n3) - log(n2)) / mid_point
-  rho <- (r2 - r1) / (r1 + r2)
+  # n1 fixed
+  n1 <- 2
 
-  list(
+  # numerisch stabil
+  n2_safe <- max(n2,1)
+  n3_safe <- max(n3,1)
+  r1 <- (log(n2_safe) - log(n1)) / mid_point
+  r2 <- (log(n3_safe) - log(n2_safe)) / mid_point
+  denom <- r1 + r2
+  if (!is.finite(denom) || abs(denom) < 1e-12) denom <- 1e-12
+  rho <- (r2 - r1) / denom
+
+  return(list(
     crown_age  = crown_age,
     mid_point  = mid_point,
     crown_node = crown_node,
-    diag_n2 = n2,
-    diag_n3 = n3,
-    diag_r1 = r1,
-    diag_r2 = r2,
-    diag_rho = rho
-  )
+    diag_n2    = n2,
+    diag_n3    = n3,
+    diag_r1    = r1,
+    diag_r2    = r2,
+    diag_rho   = rho
+  ))
 }
-
 
 # --- Argument parsing ---
 args <- commandArgs(trailingOnly = TRUE)
