@@ -7,7 +7,4 @@ include: "rules/plots.smk"
 
 rule all:
     input:
-        expand(
-            f"{PLOTS_RESULTS_DIR}/pigotrho/{{simulator}}/.done",
-            simulator="ms"
-        )
+        COMPLETE_OUTPUTS
