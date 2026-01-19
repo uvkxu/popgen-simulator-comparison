@@ -1,0 +1,82 @@
+description: Demographic model of ghost admixture into eastern gorillas from Pawar
+  et al. (2023)
+doi:
+- https://doi.org/10.1038/s41559-023-02145-2
+mutation_rate: 1.235e-08
+time_units: generations
+metadata:
+  model_id: GorillaGhost_5P23
+  species: GorGor
+  
+demes:
+- name: ghost
+  description: Extinct ghost lineage
+  epochs:
+  - end_time: 180071.57894736843
+    start_size: 35381
+  - end_time: 0
+    start_size: 25000.0
+- name: mountain
+  description: Contemporary Mountain Gorillas
+  start_time: 180071.57894736843
+  ancestors:
+  - ghost
+  epochs:
+  - end_time: 50814.78947368421
+    start_size: 14364
+  - end_time: 792.0
+    start_size: 5325.0
+  - end_time: 490.0
+    start_size: 3009.0
+  - end_time: 480.0
+    start_size: 115.0
+  - end_time: 0
+    start_size: 2158.0
+- name: western_lowland
+  description: Contemporary Western Lowland Gorillas
+  start_time: 50814.78947368421
+  ancestors:
+  - mountain
+  epochs:
+  - end_time: 23911.21052631579
+    start_size: 98135
+  - end_time: 2152.4210526315787
+    start_size: 48288.0
+  - end_time: 0
+    start_size: 64749.0
+- name: cross_river
+  description: Contemporary Cross River Gorillas
+  start_time: 23911.21052631579
+  ancestors:
+  - western_lowland
+  epochs:
+  - end_time: 0
+    start_size: 14558
+- name: eastern_lowland
+  description: Contemporary Eastern Lowland Gorillas
+  start_time: 792.0
+  ancestors:
+  - mountain
+  epochs:
+  - end_time: 380.0
+    start_size: 21982
+  - end_time: 1.5789473684210527
+    start_size: 243.0
+  - end_time: 0
+    start_size: 20894.0
+migrations:
+- source: ghost
+  dest: mountain
+  start_time: 2015.7894736842106
+  end_time: 2014.7894736842106
+  rate: 0.02477
+- source: western_lowland
+  dest: mountain
+  start_time: 1789.5736842105264
+  end_time: 1789.4736842105262
+  rate: 0.002768
+- source: mountain
+  dest: western_lowland
+  start_time: 1789.5736842105264
+  end_time: 1789.4736842105262
+  rate: 0.00827

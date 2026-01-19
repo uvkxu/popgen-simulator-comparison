@@ -13,3 +13,7 @@ dependencies:
   - r-rspectra
   - r-e1071
   - r-igraph
+  - r-dplyr
+  - r-yaml
+  - r-nloptr
+  - gfortran

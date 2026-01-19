@@ -1,0 +1,33 @@
+sample_size: 50
+num_replicates: 100
+sequence_length: 10000
+mutation_rate: 1.45e-9
+generation_time: 0.1
+
+populations:
+  - name: AFR
+    initial_size: 8603000
+    sample_size: 25
+  - name: EUR
+    initial_size: 1075000
+    sample_size: 25
+
+
+demography_events:
+  - type: size_change
+    time: 154600
+    population: EUR
+    size: 2200
+
+  - type: population_pulse_migration
+    time: 158000
+    proportion: 1.0
+    dest: AFR
+    source: EUR
+
+  - type: size_change
+    time: 600000
+    population: AFR
+    size: 1720600
+
+  

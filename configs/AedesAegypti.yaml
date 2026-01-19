@@ -1,6 +1,0 @@
-population_size: 1000000
-sample_size: 10
-sequence_length: 100
-recombination_rate: 2.91e-09
-mutation_rate: 3.5e-09
-num_replicates: 50

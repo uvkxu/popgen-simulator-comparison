@@ -1,29 +1,93 @@
 include: "../snakemake_vars.py"
 
-rule compute_top_features_single_config:
+
+rule copy_combo_yaml_tree_features:
     input:
-        directory(f"{TREESTATS_DATA_DIR}/{{config}}")
+        combo_yaml = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     output:
-        directory(f"{TOPFEATURES_RESULTS_DIR}/{{config}}")
+        copy_file = f"{TREE_FEATURES_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+    run:
+        from pathlib import Path
+        import shutil
+
+        Path(output.copy_file).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(input.combo_yaml, output.copy_file)
+
+
+rule copy_combo_yaml_allel_features:
+    input:
+        combo_yaml = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+    output:
+        copy_file = f"{ALLEL_FEATURES_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+    run:
+        from pathlib import Path
+        import shutil
+
+        Path(output.copy_file).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(input.combo_yaml, output.copy_file)
+
+    
+rule compute_tree_topfeatures_grouped_by_mode:
+    input:
+        lambda wildcards: get_topfeatures_input(wildcards.config, wildcards.group_string, wildcards.mode, "tree")
+    output:
+        f"{TREE_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_with_summary.csv",
+        f"{TREE_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_barplot.png",
+        f"{TREE_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{XGB_STR}.png",
+        f"{TREE_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{RF_STR}.png",
+        f"{TREE_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{LR_STR}.png",
+    wildcard_constraints:
+        mode = "|".join(VALID_GROUPING_MODES)
+    resources:
+        mem_mb=lambda wildcards, input: estimate_mem_mb_classification(f"{TREE_FEATURES_DIR}/{wildcards.config}/")
+    params:
+        args_group=lambda wildcards: ",".join(
+            wildcards.group_string.split("_")
+        ),
+        input_dir = lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/",
+        output_dir = lambda wildcards: f"{TREE_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}",
+        err_file = lambda wildcards: f"{TREE_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}/errorlog.err"
     conda:
         "../envs/models-env.yaml"
     shell:
         """
-        python src/models/get_top_features.py {TREESTATS_DATA_DIR}/{wildcards.config} {TOPFEATURES_RESULTS_DIR}/{wildcards.config}
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/models/get_top_features.py \
+        --input_folder {params.input_dir} \
+        --output_folder {params.output_dir} \
+        --simulators {params.args_group} \
+        --grouped_by {wildcards.mode}
         """
 
-rule compute_top_features_every_config:
-    input:
-        expand(f"{TOPFEATURES_RESULTS_DIR}/{{config}}", config=all_configs)
 
-rule compute_top_features_altogether:
+rule compute_allel_topfeatures_grouped_by_mode:
     input:
-        directory(f"{TREESTATS_DATA_DIR}")
+        lambda wildcards: get_topfeatures_input(wildcards.config, wildcards.group_string, wildcards.mode, "allel")
     output:
-        directory(f"{TOPFEATURES_RESULTS_DIR}/all")
+        f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_with_summary.csv",
+        f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_barplot.png",
+        f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{XGB_STR}.png",
+        f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{RF_STR}.png",
+        f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{LR_STR}.png",
+    resources:
+        mem_mb=lambda wildcards, input: estimate_mem_mb_classification(f"{ALLEL_FEATURES_DIR}/{wildcards.config}/")
+    wildcard_constraints:
+        mode = "|".join(VALID_GROUPING_MODES)
+    params:
+        args_group=lambda wildcards: ",".join(
+            wildcards.group_string.split("_")
+        ),
+        input_dir = lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/",
+        output_dir = lambda wildcards: f"{ALLEL_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}",
+        err_file = lambda wildcards: f"{ALLEL_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}/errorlog.err"
     conda:
         "../envs/models-env.yaml"
     shell:
         """
-        python src/models/get_top_features.py {TREESTATS_DATA_DIR} {TOPFEATURES_RESULTS_DIR}/all
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/models/get_top_features.py \
+        --input_folder {params.input_dir} \
+        --output_folder {params.output_dir} \
+        --simulators {params.args_group} \
+        --grouped_by {wildcards.mode}
         """

@@ -1,127 +1,261 @@
 #!/usr/bin/env python3
 import pandas as pd
-import seaborn as sns
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
 import numpy as np
 import sys
 import os
+import yaml
+import argparse
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
 UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(UTILS_ROOT)
 
-from snakemake_vars import SIMULATORS, FILE_FORMATS
-from utils.io_helpers import collect_csv_files
+from snakemake_vars import SIMULATORS, VALID_GROUPING_MODES
+from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
-CSV_TYPES = [FILE_FORMATS["stats"].format(SIM=sim) for sim in SIMULATORS]
 
-def load_and_merge(files):
-    """Load multiple CSV files and merge them row-wise."""
-    if not files:
-        return None
-    dfs = [pd.read_csv(f) for f in files]
-    return pd.concat(dfs, ignore_index=True) if dfs else None
+def load_csv_float32(file):
+    """Load a single CSV with float32 dtype to save memory."""
+    return pd.read_csv(file, dtype=np.float32)
 
-def filter_invalid_statistics(data_dict, log_file):
-    all_stats = set.intersection(*(set(df.columns) for df in data_dict.values() if df is not None))
-    removed_stats, kept_stats = [], []
 
-    for stat in all_stats:
-        has_invalid = any(df[stat].isna().any() or df[stat].isin([np.inf, -np.inf]).any() 
-                          for df in data_dict.values() if df is not None)
-        if has_invalid:
+def filter_invalid_statistics(
+    data_dict,
+    log_file,
+    max_nan_fraction=0.05,
+    min_remaining_rows=10
+):
+    all_stats = set.intersection(
+        *(set(df.columns) for df in data_dict.values() if df is not None)
+    )
+
+    removed_stats = []
+    kept_stats = []
+    log_lines = []
+
+    for stat in sorted(all_stats):
+        drop_stat = False
+        stat_logs = []
+
+        for sim, df in data_dict.items():
+            if df is None or stat not in df.columns:
+                continue
+
+            total_rows = len(df)
+            invalid_mask = df[stat].isna() | ~np.isfinite(df[stat])
+            n_invalid = invalid_mask.sum()
+            frac_invalid = n_invalid / total_rows if total_rows > 0 else 0
+
+            if n_invalid == 0:
+                continue
+
+            stat_logs.append(
+                f"[{sim}] {stat}: found {n_invalid}/{total_rows} invalid rows ({frac_invalid:.2%})"
+            )
+
+            # Entscheidung: Spalte dropen oder nur Zeilen
+            if frac_invalid >= max_nan_fraction or (total_rows - n_invalid) < min_remaining_rows:
+                drop_stat = True
+                stat_logs.append(f"[{sim}] {stat}: exceeds thresholds → drop column")
+                break
+
+        if drop_stat:
             removed_stats.append(stat)
             for df in data_dict.values():
-                if df is not None:
+                if df is not None and stat in df.columns:
                     df.drop(columns=[stat], inplace=True)
+            log_lines.extend(stat_logs)
         else:
             kept_stats.append(stat)
+            for sim, df in data_dict.items():
+                if df is not None and stat in df.columns:
+                    before = len(df)
+                    # nur die Zeilen mit NaN/Inf löschen
+                    df.drop(index=df[~np.isfinite(df[stat]) | df[stat].isna()].index, inplace=True)
+                    after = len(df)
+                    if before != after:
+                        log_lines.append(f"[{sim}] {stat}: kept column, dropped {before-after} rows")
 
+    # --- Write log ---
     with open(log_file, "w") as f:
-        f.write("=== Removed statistics due to NaN/Inf ===\n")
-        for stat in removed_stats:
-            f.write(stat + "\n")
-        f.write("\n=== Kept statistics ===\n")
-        for stat in kept_stats:
-            f.write(stat + "\n")
+        f.write("=== NaN / Inf cleanup log ===\n\n")
+        f.write("\n".join(log_lines))
+        f.write("\n\n=== Removed statistics ===\n")
+        f.write("\n".join(removed_stats))
+        f.write("\n\n=== Kept statistics ===\n")
+        f.write("\n".join(kept_stats))
 
     return data_dict, kept_stats
 
-def melt_data_for_plotting(data_dict):
-    dfs = []
-    for sim_name, df in data_dict.items():
-        if df is not None:
-            df_long = df.melt(var_name="Statistic", value_name="Value")
-            df_long["Simulation"] = sim_name
-            dfs.append(df_long)
-    combined = pd.concat(dfs, ignore_index=True) if dfs else None
-    return combined
 
-def plot_boxplots(combined_df, output_dir):
-    stats = combined_df["Statistic"].unique()
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    for stat in stats:
-        df_stat = combined_df[combined_df["Statistic"] == stat]
-        plt.figure(figsize=(6,4))
-        sns.boxplot(x="Simulation", y="Value", data=df_stat)
-        plt.title(stat)
-        plt.tight_layout()
-        out_file = output_dir / f"{stat}_boxplot.png"
-        plt.savefig(out_file)
-        plt.close()
-        print(f"Saved boxplot: {out_file}")
-
-def main():
-    if len(sys.argv) != 3:
-        print("Usage: python plot_boxplots.py <input_folder> <output_folder>")
-        sys.exit(1)
-
-    input_folder = Path(sys.argv[1])
-    output_folder = Path(sys.argv[2])
-
-    if not input_folder.exists():
-        print(f"Input folder does not exist: {input_folder}")
-        sys.exit(1)
-
+def get_features_by_simulator(csv_files, output_folder, selected_simulators):
+    """Load CSVs per simulator and filter invalid statistics."""
     output_folder.mkdir(parents=True, exist_ok=True)
     log_file = output_folder / "removed_statistics.log"
 
-    # Collect all CSV files (list of Paths)
-    csv_files = collect_csv_files(input_folder, CSV_TYPES)
-
     if not csv_files:
         print("No CSV files found in input folder.")
-        return
+        return None
 
-    # Organize files by simulator type
-    data_dict = {sim: [] for sim in SIMULATORS}
+    data_dict = {sim: [] for sim in selected_simulators}
+
     for f in csv_files:
-        fname = f.name.lower()
-        if "msprime" in fname:
-            data_dict["msprime"].append(f)
-        elif "msms" in fname:
-            data_dict["msms"].append(f)
-        elif "ms_" in fname or fname == "ms.csv":
-            data_dict["ms"].append(f)
-        else:
+        sim = detect_simulator_from_yaml(input_file=f)
+        if sim is None:
             print(f"Skipping unknown file: {f}")
+            continue
+        data_dict[sim].append(f)
 
-    # Load and merge CSVs per simulator
-    data_dict = {k: load_and_merge(v) for k, v in data_dict.items() if v}
+    # Load CSVs one by one and concatenate
+    for sim in data_dict:
+        files = data_dict[sim]
+        if files:
+            dfs = [load_csv_float32(f) for f in files]
+            data_dict[sim] = pd.concat(dfs, ignore_index=True)
+        else:
+            data_dict[sim] = None
 
     # Filter invalid statistics
     data_dict, kept_stats = filter_invalid_statistics(data_dict, log_file)
-
     if not kept_stats:
         print("No valid statistics to plot after filtering NaN/Inf. See log for details.")
+        return None
+
+    return data_dict
+
+
+def plot_boxplots(csv_files, output_folder, selected_simulators):
+    data_dict = get_features_by_simulator(csv_files, output_folder, selected_simulators)
+    if not data_dict:
         return
 
-    combined_df = melt_data_for_plotting(data_dict)
-    plot_boxplots(combined_df, output_folder)
-    print(f"All boxplots saved to {output_folder}, removed/kept statistics logged in {log_file}")
+    kept_stats = next(iter(data_dict.values())).columns.tolist()
+
+    for stat in kept_stats:
+        plt.figure(figsize=(6, 4))
+        data_to_plot = []
+        labels = []
+
+        for sim_name, df in data_dict.items():
+            if df is not None and stat in df.columns:
+                values = df[stat].dropna()
+                if len(values) > 0:
+                    data_to_plot.append(values)
+                    labels.append(sim_name)
+
+        if len(data_to_plot) < 2 or sum(len(d) for d in data_to_plot) < 5:
+            plt.close()
+            continue
+
+        plt.boxplot(data_to_plot, labels=labels)
+        plt.title(stat)
+        plt.tight_layout()
+        out_file = output_folder / f"{stat}_boxplot.png"
+        plt.savefig(out_file)
+        plt.close()
+        del data_to_plot
+
+
+def plot_histograms(csv_files, output_folder, selected_simulators):
+    data_dict = get_features_by_simulator(csv_files, output_folder, selected_simulators)
+    if not data_dict:
+        return
+
+    kept_stats = next(iter(data_dict.values())).columns.tolist()
+
+    for stat in kept_stats:
+        plt.figure(figsize=(7, 5))
+        plotted = False
+        for sim_name, df in data_dict.items():
+            if df is not None and stat in df.columns:
+                values = df[stat].dropna()
+                if len(values) > 0:
+                    plt.hist(values, bins=50, alpha=0.3, label=sim_name, density=True)
+                    plotted = True
+
+        if not plotted:
+            plt.close()
+            continue
+
+        plt.title(f"Distribution of {stat}")
+        plt.xlabel(stat)
+        plt.ylabel("Density")
+        plt.legend(title="Simulator")
+        plt.tight_layout()
+        out_file = output_folder / f"{stat}_histogram.png"
+        plt.savefig(out_file)
+        plt.close()
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Extract top features from simulation results.")
+    parser.add_argument("--input_folder", type=Path, required=True, help="Input folder containing result files")
+    parser.add_argument("--output_folder", type=Path, required=True, help="Output folder path")
+    parser.add_argument("--simulators", type=lambda s: s.split(","), default=SIMULATORS,
+                        help="Comma-separated list of simulators (e.g. sim1,sim2)")
+    parser.add_argument("--grouped_by", type=str, choices=VALID_GROUPING_MODES, default="single",
+                        help=f"Grouping mode. Choices: {', '.join(VALID_GROUPING_MODES)} (default: single)")
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    input_folder = args.input_folder
+    output_folder = args.output_folder
+    selected_simulators = args.simulators
+    grouped_by = args.grouped_by
+
+    output_folder.mkdir(parents=True, exist_ok=True)
+
+    csv_groups = {
+        "precision_applied": [],
+        "precision_skipped": [],
+        "recombination_applied": [],
+        "recombination_skipped": []
+    }
+
+    if grouped_by in ["single", "overall"]:
+        csv_files = collect_csv_files(input_folder)
+        plot_boxplots(csv_files, output_folder, selected_simulators)
+        plot_histograms(csv_files, output_folder, selected_simulators)
+        return
+
+    # group CSV files based on YAML params
+    for root, _, files in os.walk(input_folder):
+        root_path = Path(root)
+        combo_yamls = [f for f in files if f.endswith((".yaml", ".yml"))]
+        if not combo_yamls:
+            continue
+
+        combo_yaml_path = root_path / combo_yamls[0]
+        with open(combo_yaml_path, "r") as f:
+            combo_params = yaml.safe_load(f)
+
+        usePrecision = bool(combo_params.get("usePrecision"))
+        recombination_rate = float(combo_params.get("recombination_rate") or 0)
+        csv_files = collect_csv_files(root_path)
+
+        if usePrecision:
+            csv_groups["precision_applied"].extend(csv_files)
+            if recombination_rate:
+                csv_groups["recombination_applied"].extend(csv_files)
+            else:
+                csv_groups["recombination_skipped"].extend(csv_files)
+        else:
+            csv_groups["precision_skipped"].extend(csv_files)
+
+    if grouped_by not in csv_groups or not csv_groups[grouped_by]:
+        print(f"No CSV files found for mode {grouped_by}")
+        return
+
+    plot_boxplots(csv_groups[grouped_by], output_folder, selected_simulators)
+    plot_histograms(csv_groups[grouped_by], output_folder, selected_simulators)
+
 
 if __name__ == "__main__":
     main()

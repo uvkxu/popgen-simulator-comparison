@@ -1,0 +1,8 @@
+name: dem-models-plot-env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - git+https://github.com/uvkxu/demes-python.git@main

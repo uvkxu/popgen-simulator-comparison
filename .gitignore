@@ -209,9 +209,9 @@ __marimo__/
 
 # Ignore all simulation outputs in data/raw, but keep folder structure
 data/*
-!data/raw/.gitkeep
-
 results/*
+results-run2/*
+logs/*
 
 # Ignore seedms
 /seedms
@@ -221,4 +221,10 @@ seedms
 .snakemake/
 .vscode
 
+**/Snakefile
+Snakefile
 
+resultico/
+
+.Rhistory
+.RData

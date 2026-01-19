@@ -1,0 +1,29 @@
+description: This is a model fit to contemporary samples of wild North American mallard and black duck, using the “split-migration” model of dadi
+doi:
+  - https://doi.org/10.1111/mec.15343
+time_units: generations
+mutation_rate: 4.83e-9
+demes:
+  - name: Ancestral
+    epochs:
+      - start_size: 819535
+        end_time: 158076
+
+  - name: Mallard
+    description: Wild North American mallards
+    ancestors: [Ancestral]
+    epochs:
+      - start_size: 1570000
+        end_time: 0
+
+  - name: Black_duck
+    description: Wild black ducks
+    ancestors: [Ancestral]
+    epochs:
+      - start_size: 1370000
+        end_time: 0
+
+migrations:
+- {demes: [Mallard, Black_duck], rate: 1.72e-6}
+    
+  
