@@ -44,11 +44,15 @@ def clean_sim_output(input_file, output_file, sequence_length,
                     if not hapline:  # EOF
                         break
                     hapline = hapline.strip()
-                    if not hapline or not set(hapline).issubset({"0", "1"}):
+                    if not hapline or not hapline.isdigit():
                         break  # Ende des Blocks
                     haplotypes.append(list(map(int, hapline)))
 
                 haplotypes = np.array(haplotypes, dtype=int)
+
+                # Binarize haplotypes to ensure comparability across simulators
+                # (SLiM allows stacked mutations, ms/msprime do not)
+                haplotypes[haplotypes > 1] = 1
 
                 # Normalisierung der Positionen
                 all_integer_like = np.all(np.abs(positions - np.round(positions)) < 1e-9)
