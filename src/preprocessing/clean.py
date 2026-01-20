@@ -102,7 +102,7 @@ def clean_sim_output(input_file, output_file, sequence_length,
                             val = round(val, branch_decimals)
                         val *= factor
                         return f":{val:.{branch_decimals if branch_decimals else 6}f}"
-                scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, line)
+                scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, line) if factor != 1 else line
                 fout.write(scaled_line + "\n")
 
             else:
@@ -170,6 +170,8 @@ def main():
     
     output_file = args.output
     output_file.parent.mkdir(parents=True, exist_ok=True)
+    factor = combo_params.get("population_size", 0.25)
+    factor = 4 * factor if factor else 0.25
 
     clean_sim_output(
         input_file=input_file,
@@ -177,7 +179,7 @@ def main():
         sequence_length=combo_params["sequence_length"],
         branch_decimals=precision,
         position_decimals=precision,
-        factor= 4 * combo_params["population_size"],
+        factor=factor,
         branches_already_scaled=(sim == "msprime" or sim == "slim")
     )
 

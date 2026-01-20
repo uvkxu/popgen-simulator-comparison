@@ -51,8 +51,8 @@ CMD_SUBDIR = "commands"
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
 # SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
-SIMULATORS = ["slim10", "slim20", "slim50", "slim100", "slim500", "slim1000"]
-REPS = 300
+SIMULATORS = ["slim10", "slim20", "slim50", "slim100", "slim200", "slim500", "slim1000"]
+REPS = 100
 NUM_REPLICATES = 1
 PRECISION = 17
 MAX_OVERALL_SAMPLES = 200
@@ -76,13 +76,13 @@ all_configs.remove("freedman_wolf") # exclude due to long runtime and not possib
 
 scale_factor_by_config = {
     "browning_america": [10, 50, 100, 500],
-    "gutenkunst_ooa": [10, 50, 100, 500],
+    "gutenkunst_ooa": [10, 50, 100],
     "jacobs_papuans": [10, 20, 50],
     "kamm_westerneurasia": [10, 20],
-    "lavretsky_ducks": [50, 100, 1000],
-    "li_african3epoch": [50, 100, 1000],
+    "lavretsky_ducks": [500, 1000],
+    "li_african3epoch": [500, 1000],
     "locke_orangutan": [10, 50, 100, 500],
-    "one_population": [10, 50, 100, 500],
+    "one_population": [10, 50, 100],
     "pawar_gorilla": [10, 20],
     "zigzag": [10, 50, 100, 500]
 }
@@ -524,13 +524,13 @@ ALL_FEATURES = [
     f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
     for config in all_configs
     for combo in combinations_by_config[config]
-    for sim in SIMULATORS
+    for sim in ["slim" + str(factor) for factor in scale_factor_by_config[config]]
     for i in range(REPS)
 ] + [
     f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
     for config in all_configs
     for combo in combinations_by_config[config]
-    for sim in SIMULATORS
+    for sim in ["slim" + str(factor) for factor in scale_factor_by_config[config]]
     for i in range(REPS)
 ]
 
