@@ -15,8 +15,8 @@ CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
-DATA_DIR = Path("/hits/fast/cme/kuchve/run2/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/run2/results")
+DATA_DIR = Path("/hits/fast/cme/kuchve/slim_eval/data")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/slim_eval/results")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -50,9 +50,10 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
-REPS = 5
-NUM_REPLICATES = 2
+# SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
+SIMULATORS = ["slim1", "slim10", "slim20", "slim50", "slim100", "slim500", "slim1000"]
+REPS = 300
+NUM_REPLICATES = 1
 PRECISION = 17
 MAX_OVERALL_SAMPLES = 200
 
@@ -69,7 +70,22 @@ CLASSIFIERS = [XGB_STR, RF_STR, LR_STR]
 
 
 all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
-# all_own_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{OWN_CONFIG_DIR}/*.yaml")]
+# all_own_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{OWN_CONFIG_DIR}/*.yaml")] # exclude for now due to long runtime
+all_configs.remove("freedman_wolf") # exclude due to long runtime and not possible to scale with slim
+
+
+scale_factor_by_config = {
+    "browning_america": [1, 10, 50, 100, 500],
+    "gutenkunst_ooa": [1, 10, 50, 100, 500],
+    "jacobs_papuans": [1, 10, 20, 50],
+    "kamm_westerneurasia": [1, 10, 20],
+    "lavretsky_ducks": [1, 50, 100, 1000],
+    "li_african3epoch": [1, 50, 100, 1000],
+    "locke_orangutan": [1, 10, 50, 100, 500],
+    "one_population": [1, 10, 50, 100, 500],
+    "pawar_gorilla": [1, 10, 20],
+    "zigzag": [1, 10, 50, 100, 500]
+}
 
 def get_num_sampled_populations(config_path):
     num_pops = 0
@@ -81,13 +97,32 @@ def get_num_sampled_populations(config_path):
             num_pops += 1
     return num_pops
 
-def get_combinations(config_path, variable_file):
+def get_combinations(config_path):
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
+    '''
     vars_dict = parse_variable_file(variable_file)
     if get_num_sampled_populations(config_path) < 2:
         vars_dict.pop("population_sizes", None)
+    keys = list(vars_dict.keys())
+    combos = itertools.product(*vars_dict.values())
+    '''
+    num_pops = get_num_sampled_populations(config_path)
+    sample_size = 0
+    for s in [4, 8, 16, 32]:
+        sample_size = s
+        if s * num_pops >= 32:
+            break
+        
+
+    vars_dict = {
+        "sample_sizes": [sample_size],
+        "sequence_lengths": [100_000],
+        "recombination_rates": [0.0, 1e-8],
+        "usePrecision": [True]
+    }
+
     keys = list(vars_dict.keys())
     combos = itertools.product(*vars_dict.values())
 
@@ -123,7 +158,7 @@ all_combo_folders = set()
 
 for config_name in all_configs:
     config_file = Path(CONFIG_DIR) / f"{config_name}.yaml"
-    keys, all_combos_by_config = get_combinations(config_file, VARIABLE_FILE_PATH)
+    keys, all_combos_by_config = get_combinations(config_file)
     num_populations = get_num_sampled_populations(config_file)
     
     combos = []
@@ -358,7 +393,7 @@ VALID_GROUPING_MODES = [
     "recombination_applied", "recombination_skipped",
     "overall", "single"
 ]
-GROUPING_MODES = ["overall"]
+GROUPING_MODES = ["recombination_applied", "recombination_skipped"]
 
 def format_feature_ranking_file(group):
     return f"feature_ranking_{'_'.join(group)}_with_summary.csv"
@@ -369,14 +404,35 @@ def format_feature_ranking_barplot(group):
 def format_classifier_importance_plot(classifier, group):
     return f"feature_importance_{'_'.join(group)}_{classifier}.png"
             
-simulator_groups = list(combinations(SIMULATORS, 2))
-simulator_groups.append(tuple(SIMULATORS))
-simulator_groups = list(dict.fromkeys(simulator_groups))
+simulator_groups = [combo for combo in combinations(SIMULATORS, 2) if "slim1" in combo]
 
-def get_topfeatures_input(config, group, mode, feature_type, combo=None):
+filtered_groups_by_config = {}
+
+for config_name in scale_factor_by_config:
+    allowed_factors = scale_factor_by_config[config_name]
+    
+    # Filter simulator_groups: nur Tupel, die beide Zahlen in allowed_factors haben
+    filtered_groups = []
+    for sim1, sim2 in simulator_groups:
+        # Zahlen aus den slim-Namen extrahieren
+        num1 = int(sim1.replace("slim", "")) if "slim" in sim1 else None
+        num2 = int(sim2.replace("slim", "")) if "slim" in sim2 else None
+        
+        # Prüfen, ob beide Zahlen in allowed_factors sind
+        if (num1 in allowed_factors if num1 is not None else True) and \
+           (num2 in allowed_factors if num2 is not None else True):
+            filtered_groups.append((sim1, sim2))
+    
+    filtered_groups_by_config[config_name] = filtered_groups
+
+
+def get_topfeatures_input(config, mode, feature_type, group=None, combo=None):
     result = []
     if type(group) is str:
         group = group.split("_")
+
+    if group is None:
+        group = list({sim for tup in filtered_groups_by_config[config] for sim in tup})
 
     if mode not in VALID_GROUPING_MODES:
         raise ValueError(f"Invalid mode: {mode}")
@@ -449,6 +505,7 @@ RAW_INPUTS = [
     for i in range(REPS)
 ]
 
+
 ALL_COMBO_YAML = [
     f"{RAW_DATA_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
     for config in all_configs
@@ -482,17 +539,17 @@ ALL_TREE_TOPFEATURES = [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
     for config in all_configs
     for mode in GROUPING_MODES
-    for sim_group in simulator_groups
+    for sim_group in filtered_groups_by_config[config]
 ] + [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
     for config in all_configs
     for mode in GROUPING_MODES
-    for sim_group in simulator_groups
+    for sim_group in filtered_groups_by_config[config]
 ] + [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
     for config in all_configs
     for mode in GROUPING_MODES
-    for sim_group in simulator_groups
+    for sim_group in filtered_groups_by_config[config]
     for classifier in CLASSIFIERS
 ]
 
@@ -501,17 +558,17 @@ ALL_ALLEL_TOPFEATURES = [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
     for config in all_configs
     for mode in GROUPING_MODES
-    for sim_group in simulator_groups
+    for sim_group in filtered_groups_by_config[config]
 ] + [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
     for config in all_configs
     for mode in GROUPING_MODES
-    for sim_group in simulator_groups
+    for sim_group in filtered_groups_by_config[config]
 ] + [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
     for config in all_configs
     for mode in GROUPING_MODES
-    for sim_group in simulator_groups
+    for sim_group in filtered_groups_by_config[config]
     for classifier in CLASSIFIERS
 ]
 
@@ -533,6 +590,11 @@ COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES + ALL_PLOTS
 
 
 
+
+
+
+
+
 BIGGEST_SIMULATION = [
     f"{RAW_DATA_DIR}/jacobs_papuans/{combo}/rep1/{FILE_FORMATS['raw'].format(SIM=sim)}"
     for config in ["jacobs_papuans"]
@@ -542,8 +604,8 @@ BIGGEST_SIMULATION = [
 
 
 RAW_BROWNING = [
-    f"{RAW_DATA_DIR}/browning_america/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
-    for combo in combinations_by_config["browning_america"]
+    f"{RAW_DATA_DIR}/one_population/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
+    for combo in combinations_by_config["one_population"]
     for sim in SIMULATORS
     for i in range(REPS)
 ]
@@ -571,12 +633,6 @@ TREE_FEATURES_ZIGZAG = [
     for i in range(REPS)
 ]
 
-TREE_FEATURES_FREEDMAN = [
-    f"{TREE_FEATURES_DIR}/freedman_wolf/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
-    for combo in combinations_by_config["freedman_wolf"]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
 
 TREE_FEATURES_JACOBS = [
     f"{TREE_FEATURES_DIR}/jacobs_papuans/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"

@@ -60,12 +60,7 @@ with open(config_path, "r") as f:
 
 samples = get_sample_sizes(config, combo["sample_sizes"])
 
-population_size = combo.get("population_sizes")
-if not population_size:
-    population_size = config.get("population_size")
-
-if not population_size:
-    raise ValueError("An effective population size needs to be specified")
+population_size = combo.get("population_sizes", None)
 
 metadata = {
     "sequence_length": combo["sequence_lengths"],

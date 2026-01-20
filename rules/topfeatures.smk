@@ -29,7 +29,7 @@ rule copy_combo_yaml_allel_features:
     
 rule compute_tree_topfeatures_grouped_by_mode:
     input:
-        lambda wildcards: get_topfeatures_input(wildcards.config, wildcards.group_string, wildcards.mode, "tree")
+        lambda wildcards: get_topfeatures_input(config = wildcards.config, mode = wildcards.mode, feature_type = "tree", group = wildcards.group_string)
     output:
         f"{TREE_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_with_summary.csv",
         f"{TREE_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_barplot.png",
@@ -62,7 +62,7 @@ rule compute_tree_topfeatures_grouped_by_mode:
 
 rule compute_allel_topfeatures_grouped_by_mode:
     input:
-        lambda wildcards: get_topfeatures_input(wildcards.config, wildcards.group_string, wildcards.mode, "allel")
+        lambda wildcards: get_topfeatures_input(config = wildcards.config, mode = wildcards.mode, feature_type = "allel", group = wildcards.group_string)
     output:
         f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_with_summary.csv",
         f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_barplot.png",

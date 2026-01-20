@@ -10,6 +10,7 @@ from pathlib import Path
 from msprime import BinaryMutationModel
 import stdpopsim
 import json
+import re
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
@@ -241,31 +242,29 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
             raise
 
     # slim with stdpopsim
-    elif sim == "slim":
+    elif sim == "slim" or sim.startswith("slim"):
         if not sim_path or not os.path.exists(sim_path):
                 raise FileNotFoundError(f"{sim} executable not found at {sim_path}.")
 
         model_id = config.get("metadata", {}).get("model_id")
         species_name = config.get("metadata", {}).get("species")
+        scaling_factor = int(re.search(r'\d+', sim).group())
 
-        try:
-            run_slim_stdpopsim(
-                graph=graph,
-                model_id=model_id,
-                species_name=species_name,
-                samples=samples,
-                nreps=nreps,
-                output_file=output_file,
-                slim_path=sim_path
-            )
+        run_slim_stdpopsim(
+            graph=graph,
+            model_id=model_id,
+            species_name=species_name,
+            samples=samples,
+            nreps=nreps,
+            output_file=output_file,
+            slim_path=sim_path,
+            scaling_factor=scaling_factor
+        )
 
-            if log_file:
-                log_step(log_file, "simulation", json.dumps(combo), sim, success_inc=1, failed_inc=0)
-        except Exception as e:
-            if log_file:
-                log_step(log_file, "simulation", json.dumps(combo), sim, success_inc=0, failed_inc=1, 
-                        info=str(e))
-            raise
+        if log_file:
+            log_step(log_file, "simulation", json.dumps(combo), sim, success_inc=1, failed_inc=0)
+
+        
 
         '''
         for factor in [10, 20, 50, 100, 200, 500, 1000]:
@@ -382,7 +381,7 @@ if sim=="ms":
         sim_path = ms_path
 elif sim=="msms":
     sim_path = msms_path
-elif sim=="slim":
+elif sim=="slim" or sim.startswith("slim"):
     sim_path = slim_path
 
 run_command_demes(
