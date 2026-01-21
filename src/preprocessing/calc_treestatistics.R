@@ -427,7 +427,7 @@ header_written <- FALSE
 
 # Cache for avoiding duplicate computation
 # Cache only for tree topology → stats do NOT depend on segment length
-unique_tree_cache <- list()
+# unique_tree_cache <- list()
 
 con <- file(input_file, open = "r")
 while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
@@ -440,28 +440,19 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
     next
   }
 
-  # Canonical *topology only*
-  canon <- ape::write.tree(tr)
+  
+  tr_unweighted <- tr
+  tr_unweighted$edge.length <- rep(1, nrow(tr_unweighted$edge))
 
-  # ======================
-  #   CACHE LOOKUP
-  # ======================
-  if (canon %in% names(unique_tree_cache)) {
-    combined <- unique_tree_cache[[canon]]
-  } else {
-    tr_unweighted <- tr
-    tr_unweighted$edge.length <- rep(1, nrow(tr_unweighted$edge))
-
-    tree_stats <- calculate_all_treestats(tr, normalize = FALSE, weighted = TRUE)
-    tree_stats_unweighted <- calculate_all_treestats(tr_unweighted, normalize = FALSE, weighted = FALSE)
-    if (is.null(tree_stats) || is.null(tree_stats_unweighted)) {
-      skipped <- skipped + 1L
-      next
-    }
-
-    combined <- as.data.frame(as.list(c(tree_stats, tree_stats_unweighted)))
-    unique_tree_cache[[canon]] <- combined
+  tree_stats <- calculate_all_treestats(tr, normalize = FALSE, weighted = TRUE)
+  tree_stats_unweighted <- calculate_all_treestats(tr_unweighted, normalize = FALSE, weighted = FALSE)
+  if (is.null(tree_stats) || is.null(tree_stats_unweighted)) {
+    skipped <- skipped + 1L
+    next
   }
+
+  combined <- as.data.frame(as.list(c(tree_stats, tree_stats_unweighted)))
+    
 
   # Extract relative segment length (not part of caching key!)
   if (has_recomb) {
