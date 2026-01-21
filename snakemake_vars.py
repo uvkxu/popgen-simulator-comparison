@@ -15,8 +15,8 @@ CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
-DATA_DIR = Path("/hits/fast/cme/kuchve/slim_eval/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/slim_eval/results")
+DATA_DIR = Path("/hits/fast/cme/kuchve/slim_eval_time/data")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/slim_eval_time/results")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -51,8 +51,9 @@ CMD_SUBDIR = "commands"
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
 # SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
-SIMULATORS = ["slim10", "slim20", "slim50", "slim100", "slim200", "slim500", "slim1000"]
-REPS = 100
+SIMULATORS = ["slim1", "slim2", "slim5", "slim10", "slim20", "slim50", 
+"slim100", "slim200", "slim500", "slim1000", "msms", "msprime", "ms"]
+REPS = 1
 NUM_REPLICATES = 1
 PRECISION = 17
 MAX_OVERALL_SAMPLES = 200
@@ -72,19 +73,20 @@ CLASSIFIERS = [XGB_STR, RF_STR, LR_STR]
 all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
 # all_own_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{OWN_CONFIG_DIR}/*.yaml")] # exclude for now due to long runtime
 all_configs.remove("freedman_wolf") # exclude due to long runtime and not possible to scale with slim
-
+all_configs.remove("lavretsky_ducks") # exclude due to long runtime
+all_configs.remove("li_african3epoch") # exclude due to long runtime
 
 scale_factor_by_config = {
-    "browning_america": [10, 50, 100, 500],
-    "gutenkunst_ooa": [10, 50, 100],
-    "jacobs_papuans": [10, 20, 50],
-    "kamm_westerneurasia": [10, 20],
-    "lavretsky_ducks": [500, 1000],
-    "li_african3epoch": [500, 1000],
-    "locke_orangutan": [10, 50, 100, 500],
-    "one_population": [10, 50, 100],
-    "pawar_gorilla": [10, 20],
-    "zigzag": [10, 50, 100, 500]
+    "browning_america": [1, 2, 5, 10],
+    "gutenkunst_ooa": [1, 10, 50, 100],
+    "jacobs_papuans": [1, 10, 20, 50],
+    "kamm_westerneurasia": [1, 2, 5],
+    "lavretsky_ducks": [100, 500, 1000],
+    "li_african3epoch": [100, 500, 1000],
+    "locke_orangutan": [1, 10, 50, 100, 500],
+    "one_population": [1, 5, 10, 50],
+    "pawar_gorilla": [1, 10, 20],
+    "zigzag": [1, 10, 50, 100, 500]
 }
 
 def get_num_sampled_populations(config_path):
@@ -109,19 +111,22 @@ def get_combinations(config_path):
     combos = itertools.product(*vars_dict.values())
     '''
     num_pops = get_num_sampled_populations(config_path)
-    sample_size = 0
-    for s in [4, 8, 16, 32]:
-        sample_size = s
-        if s * num_pops >= 32:
+    sample_size = 4
+    for s in [8, 16, 32, 64, 128]:
+        if s * num_pops > 200:
             break
+        sample_size = s
         
 
     vars_dict = {
         "sample_sizes": [sample_size],
-        "sequence_lengths": [100_000],
+        "sequence_lengths": [1_00_000],
         "recombination_rates": [0.0, 1e-8],
         "usePrecision": [True]
     }
+
+    if num_pops >= 2:
+        vars_dict["population_sizes"] = [100_000]
 
     keys = list(vars_dict.keys())
     combos = itertools.product(*vars_dict.values())
@@ -501,7 +506,7 @@ RAW_INPUTS = [
     f"{RAW_DATA_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
     for config in all_configs
     for combo in combinations_by_config[config]
-    for sim in SIMULATORS
+    for sim in ["ms", "msprime", "msms"] + ["slim" + str(factor) for factor in scale_factor_by_config[config]]
     for i in range(REPS)
 ]
 
@@ -592,8 +597,13 @@ COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES + ALL_PLOTS
 
 
 
-
-
+CLEAN_BROWNING = [
+    f"{CLEAN_DIR}/browning_america/{combo}/rep{i+1}/{FILE_FORMATS['cleaned'].format(SIM=sim)}"
+    for config in ["browning_america"]
+    for combo in combinations_by_config[config]
+    for sim in ["slim50"]
+    for i in range(REPS)
+]
 
 BIGGEST_SIMULATION = [
     f"{RAW_DATA_DIR}/jacobs_papuans/{combo}/rep1/{FILE_FORMATS['raw'].format(SIM=sim)}"
@@ -604,9 +614,10 @@ BIGGEST_SIMULATION = [
 
 
 RAW_BROWNING = [
-    f"{RAW_DATA_DIR}/one_population/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
-    for combo in combinations_by_config["one_population"]
-    for sim in SIMULATORS
+    f"{RAW_DATA_DIR}/browning_america/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
+    for config in ["browning_america"]
+    for combo in combinations_by_config[config]
+    for sim in ["ms", "msprime", "msms"] #["slim" + str(factor) for factor in scale_factor_by_config[config]]
     for i in range(REPS)
 ]
 
@@ -626,10 +637,10 @@ ALLEL_FEATURES_ZIGZAG = [
     for i in range(REPS)
 ]
 
-TREE_FEATURES_ZIGZAG = [
-    f"{TREE_FEATURES_DIR}/zigzag/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
-    for combo in combinations_by_config["zigzag"]
-    for sim in SIMULATORS
+TREE_FEATURES_BROWNING = [
+    f"{TREE_FEATURES_DIR}/browning_america/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
+    for combo in combinations_by_config["browning_america"]
+    for sim in ["slim50"]
     for i in range(REPS)
 ]
 
@@ -650,13 +661,6 @@ ALLEL_FEATURES_JACOBS = [
 
 ALLEL_FEATURES_BROWNING = [
     f"{ALLEL_FEATURES_DIR}/browning_america/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
-    for combo in combinations_by_config["browning_america"]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-TREE_FEATURES_BROWNING = [
-    f"{TREE_FEATURES_DIR}/browning_america/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
     for combo in combinations_by_config["browning_america"]
     for sim in SIMULATORS
     for i in range(REPS)

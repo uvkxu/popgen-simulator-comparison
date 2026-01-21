@@ -11,6 +11,7 @@ from msprime import BinaryMutationModel
 import stdpopsim
 import json
 import re
+import time
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
@@ -118,6 +119,7 @@ def run_slim_stdpopsim(graph, model_id, species_name, samples, nreps, output_fil
     lines = []
 
     for rep_index in range(1, nreps + 1):
+        start_time = time.time()
         ts = engine.simulate(
             demographic_model=model,
             contig=contig,
@@ -125,7 +127,13 @@ def run_slim_stdpopsim(graph, model_id, species_name, samples, nreps, output_fil
             slim_path=slim_path,
             slim_scaling_factor=scaling_factor
         ) 
+        end_time = time.time()
+        elapsed = end_time - start_time
+        hours = int(elapsed // 3600)
+        minutes = int((elapsed % 3600) // 60)
+        seconds = elapsed % 60
 
+        lines.extend([f"# SLiM simulation time: {hours}h {minutes}m {seconds:.2f}s"])
         lines.extend(to_ms_format(ts, rep_index))
     
     with open(output_file, "w") as f:
@@ -186,9 +194,18 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
                 format_str = "0" + (("." + "0"*precision))
                 cmd += f' -oFP {format_str}'
 
+        start_time = time.time()
+
         result = subprocess.run(cmd.split(), capture_output=True, text=True)
 
+        end_time = time.time()
+        elapsed = end_time - start_time
+        hours = int(elapsed // 3600)
+        minutes = int((elapsed % 3600) // 60)
+        seconds = elapsed % 60
+
         with open(output_file, "w") as f:
+            f.write(f"# Simulation time: {hours}h {minutes}m {seconds:.2f}s\n")
             f.write(result.stdout)
 
         if result.returncode != 0 or result.stderr:
@@ -220,14 +237,22 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
             params["sequence_length"] = graph.sequence_length
 
         try:
+            start_time = time.time()
             replicates = msprime.sim_ancestry(**params)
             lines = []
 
             for rep_index, ts in enumerate(replicates, start=1):
                 mts = msprime.sim_mutations(ts, rate=graph.mutation_rate, model=BinaryMutationModel())
                 lines.extend(to_ms_format(mts, rep_index))
+            
+            end_time = time.time()
+            elapsed = end_time - start_time
+            hours = int(elapsed // 3600)
+            minutes = int((elapsed % 3600) // 60)
+            seconds = elapsed % 60
 
             with open(output_file, "w") as f:
+                f.write(f"# MSprime simulation time: {hours}h {minutes}m {seconds:.2f}s\n")
                 f.write("\n".join(lines))
 
             # Log success
