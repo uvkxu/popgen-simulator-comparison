@@ -171,7 +171,7 @@ def main():
     output_file = args.output
     output_file.parent.mkdir(parents=True, exist_ok=True)
     factor = combo_params.get("population_size", 0.25)
-    factor = 4 * factor if factor else 0.25
+    factor = 4 * factor if factor else 1
 
     clean_sim_output(
         input_file=input_file,
@@ -180,7 +180,7 @@ def main():
         branch_decimals=precision,
         position_decimals=precision,
         factor=factor,
-        branches_already_scaled=(sim == "msprime" or sim == "slim")
+        branches_already_scaled=(sim == "msprime" or sim == "slim" or "slim" in sim)
     )
 
 if __name__ == "__main__":
