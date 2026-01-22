@@ -51,8 +51,8 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
-REPS = 5
+SIMULATORS = ["msms", "msprime", "ms", "slim"] #msms_ms behaves the same as just msms
+REPS = 50
 NUM_REPLICATES = 2
 PRECISION = 17
 MAX_OVERALL_SAMPLES = 200
@@ -70,7 +70,7 @@ CLASSIFIERS = [XGB_STR, RF_STR, LR_STR]
 
 
 all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
-# all_own_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{OWN_CONFIG_DIR}/*.yaml")]
+all_configs.remove("freedman_wolf")  # exclude for now due to long runtime
 
 def get_num_sampled_populations(config_path):
     num_pops = 0
@@ -478,6 +478,20 @@ ALL_FEATURES = [
     for i in range(REPS)
 ]
 
+ALL_SLIM_FEATURES = [
+    f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for sim in ["slim"]
+    for i in range(REPS)
+] + [
+    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for sim in ["slim"]
+    for i in range(REPS)
+]
+
 
 ALL_TREE_TOPFEATURES = [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
@@ -534,149 +548,10 @@ COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES + ALL_PLOTS
 
 
 
-BIGGEST_SIMULATION = [
-    f"{RAW_DATA_DIR}/jacobs_papuans/{combo}/rep1/{FILE_FORMATS['raw'].format(SIM=sim)}"
-    for config in ["jacobs_papuans"]
-    for combo in combinations_by_config[config]
-    for sim in ["msms"]
-]
-
-
-RAW_BROWNING = [
-    f"{RAW_DATA_DIR}/browning_america/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
-    for combo in combinations_by_config["browning_america"]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-
-RAW_ZIGZAG_MSMS = [
+RAW_SINGLE = [
     f"{RAW_DATA_DIR}/zigzag/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
     for combo in combinations_by_config["zigzag"]
-    for sim in ["msms"]
-    for i in range(REPS)
-]
-
-
-ALLEL_FEATURES_ZIGZAG = [
-    f"{ALLEL_FEATURES_DIR}/zigzag/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
-    for combo in combinations_by_config["zigzag"]
     for sim in SIMULATORS
     for i in range(REPS)
 ]
 
-TREE_FEATURES_ZIGZAG = [
-    f"{TREE_FEATURES_DIR}/zigzag/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
-    for combo in combinations_by_config["zigzag"]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-TREE_FEATURES_FREEDMAN = [
-    f"{TREE_FEATURES_DIR}/freedman_wolf/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
-    for combo in combinations_by_config["freedman_wolf"]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-TREE_FEATURES_JACOBS = [
-    f"{TREE_FEATURES_DIR}/jacobs_papuans/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
-    for combo in combinations_by_config["jacobs_papuans"]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-ALLEL_FEATURES_JACOBS = [
-    f"{ALLEL_FEATURES_DIR}/jacobs_papuans/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
-    for combo in combinations_by_config["jacobs_papuans"]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-ALLEL_FEATURES_BROWNING = [
-    f"{ALLEL_FEATURES_DIR}/browning_america/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
-    for combo in combinations_by_config["browning_america"]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-TREE_FEATURES_BROWNING = [
-    f"{TREE_FEATURES_DIR}/browning_america/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
-    for combo in combinations_by_config["browning_america"]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-
-
-TOPFEATURES_TREE_BROWNING = [
-    f"{TREE_TOPFEATURES_DIR}/browning_america/{mode}/{format_feature_ranking_file(sim_group)}"
-    for mode in ["precision_applied", "precision_skipped", "recombination_applied", "recombination_skipped", "overall"]
-    for sim_group in simulator_groups
-] + [
-    f"{TREE_TOPFEATURES_DIR}/browning_america/{mode}/{format_feature_ranking_barplot(sim_group)}"
-    for mode in ["precision_applied", "precision_skipped", "recombination_applied", "recombination_skipped", "overall"]
-    for sim_group in simulator_groups
-] + [
-    f"{TREE_TOPFEATURES_DIR}/browning_america/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for mode in ["precision_applied", "precision_skipped", "recombination_applied", "recombination_skipped", "overall"]
-    for sim_group in simulator_groups
-    for classifier in CLASSIFIERS
-]
-
-
-TOPFEATURES_ALLEL_BROWNING = [
-    f"{ALLEL_TOPFEATURES_DIR}/browning_america/{mode}/{format_feature_ranking_file(sim_group)}"
-    for mode in ["precision_applied", "precision_skipped"]
-    for sim_group in simulator_groups
-] + [
-    f"{ALLEL_TOPFEATURES_DIR}/browning_america/{mode}/{format_feature_ranking_barplot(sim_group)}"
-    for mode in ["precision_applied", "precision_skipped"]
-    for sim_group in simulator_groups
-] + [
-    f"{ALLEL_TOPFEATURES_DIR}/browning_america/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for mode in ["precision_applied", "precision_skipped"]
-    for sim_group in simulator_groups
-    for classifier in CLASSIFIERS
-]
-
-TOPFEATURES_TREE_JACOBS = [
-    f"{TREE_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_feature_ranking_file(sim_group)}"
-    for mode in GROUPING_MODES
-    for sim_group in simulator_groups
-] + [
-    f"{TREE_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_feature_ranking_barplot(sim_group)}"
-    for mode in GROUPING_MODES
-    for sim_group in simulator_groups
-] + [
-    f"{TREE_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for mode in GROUPING_MODES
-    for sim_group in simulator_groups
-    for classifier in CLASSIFIERS
-]
-
-
-TOPFEATURES_ALLEL_JACOBS = [
-    f"{ALLEL_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_feature_ranking_file(sim_group)}"
-    for mode in GROUPING_MODES
-    for sim_group in simulator_groups
-] + [
-    f"{ALLEL_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_feature_ranking_barplot(sim_group)}"
-    for mode in GROUPING_MODES
-    for sim_group in simulator_groups
-] + [
-    f"{ALLEL_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for mode in GROUPING_MODES
-    for sim_group in simulator_groups
-    for classifier in CLASSIFIERS
-]
-
-ALL_PLOTS_JACOBS = [
-    f"{TREEFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
-    for config in ["jacobs_papuans"]
-    for mode in GROUPING_MODES
-] + [
-    f"{ALLELFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
-    for config in ["jacobs_papuans"]
-    for mode in GROUPING_MODES
-]

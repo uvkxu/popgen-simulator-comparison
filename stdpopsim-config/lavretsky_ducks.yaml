@@ -7,7 +7,7 @@ mutation_rate: 4.83e-09
 metadata:
   model_id: MallardBlackDuck_2L19
   species: AnaPla
-  
+  scaling_factor: 100
 demes:
 - name: Ancestral
   description: Ancestral population

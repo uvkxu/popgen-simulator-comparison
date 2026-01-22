@@ -8,7 +8,7 @@ time_units: generations
 metadata:
   model_id: TwoSpecies_2L11
   species: PonAbe
-  
+  scaling_factor: 2
 demes:
 - name: Bornean
   description: Pongo pygmaeus (Bornean) population

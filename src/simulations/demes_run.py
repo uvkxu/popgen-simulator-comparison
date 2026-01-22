@@ -78,10 +78,18 @@ def to_ms_format(ts, rep_index):
 
     return lines
     
-# TODO: compute good scaling_factor to make computation more efficient
-def run_slim_stdpopsim(graph, model_id, species_name, samples, nreps, output_file, slim_path):
-    species = stdpopsim.get_species(species_name) 
-    model = species.get_demographic_model(model_id)
+
+def run_slim_stdpopsim(graph, model_id, species_name, samples, nreps, output_file, slim_path, scaling_factor=1):
+    if species_name and model_id:
+        species = stdpopsim.get_species(species_name)
+        model = species.get_demographic_model(model_id)
+    else:
+        model = stdpopsim.DemographicModel(
+            id="custom_demes_model",
+            description="Custom demes model",
+            long_description="A custom demes model loaded from a demes graph.",
+            model=msprime.Demography.from_demes(graph),
+        )
 
     if graph.recombination_rate:
         contig = stdpopsim.Contig.basic_contig(
@@ -113,7 +121,7 @@ def run_slim_stdpopsim(graph, model_id, species_name, samples, nreps, output_fil
             contig=contig,
             samples=msprime_samples,
             slim_path=slim_path,
-            slim_scaling_factor=100
+            slim_scaling_factor=scaling_factor
         ) 
 
         lines.extend(to_ms_format(ts, rep_index))
@@ -231,7 +239,53 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
                         info=str(e))
             raise
 
+    # slim with stdpopsim
+    elif sim == "slim":
+        if not sim_path or not os.path.exists(sim_path):
+                raise FileNotFoundError(f"{sim} executable not found at {sim_path}.")
 
+        model_id = config.get("metadata", {}).get("model_id")
+        species_name = config.get("metadata", {}).get("species")
+        scaling_factor = config["metadata"]["scaling_factor"]
+
+        try:
+            run_slim_stdpopsim(
+                graph=graph,
+                model_id=model_id,
+                species_name=species_name,
+                samples=samples,
+                nreps=nreps,
+                output_file=output_file,
+                slim_path=sim_path,
+                scaling_factor=scaling_factor
+            )
+
+            if log_file:
+                log_step(log_file, "simulation", json.dumps(combo), sim, success_inc=1, failed_inc=0)
+        except Exception as e:
+            if log_file:
+                log_step(log_file, "simulation", json.dumps(combo), sim, success_inc=0, failed_inc=1, 
+                        info=str(e))
+            raise
+
+        '''
+        for factor in [10, 20, 50, 100, 200, 500, 1000]:
+            try:
+                run_slim_stdpopsim(
+                    graph=graph,
+                    model_id=model_id,
+                    species_name=species_name,
+                    samples=samples,
+                    nreps=nreps,
+                    output_file=output_file,
+                    slim_path=sim_path,
+                    scaling_factor=factor
+                )
+                print("Scaling factor", factor, "succeeded.")
+            except RuntimeError:
+                print(f"Scaling factor {factor} too large.")
+                break
+        '''
     else:
         raise ValueError(f"Unsupported simulator: {sim}")
 
@@ -277,7 +331,7 @@ parser.add_argument(
 parser.add_argument(
     "--simulator",
     type=str,
-    choices=["ms", "msms", "msprime"],
+    choices=SIMULATORS,
     help="Which simulator(s) to run (default: all)",
     required=True
 )

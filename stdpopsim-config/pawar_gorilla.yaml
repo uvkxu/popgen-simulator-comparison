@@ -7,7 +7,7 @@ time_units: generations
 metadata:
   model_id: GorillaGhost_5P23
   species: GorGor
-  
+  scaling_factor: 10
 demes:
 - name: ghost
   description: Extinct ghost lineage
