@@ -83,7 +83,7 @@ scale_factor_by_config = {
     "kamm_westerneurasia": [1, 2, 5],
     "lavretsky_ducks": [100, 500, 1000],
     "li_african3epoch": [100, 500, 1000],
-    "locke_orangutan": [1, 10, 50, 100, 500],
+    "locke_orangutan": [1, 10, 50, 100],
     "one_population": [1, 5, 10, 50],
     "pawar_gorilla": [1, 10, 20],
     "zigzag": [1, 10, 50, 100, 500]
@@ -120,7 +120,7 @@ def get_combinations(config_path):
 
     vars_dict = {
         "sample_sizes": [sample_size],
-        "sequence_lengths": [1_00_000],
+        "sequence_lengths": [1_000_000],
         "recombination_rates": [0.0, 1e-8],
         "usePrecision": [True]
     }
@@ -521,7 +521,7 @@ CLEAN_INPUTS = [
     f"{CLEAN_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['cleaned'].format(SIM=sim)}"
     for config in all_configs
     for combo in combinations_by_config[config]
-    for sim in SIMULATORS
+    for sim in ["ms", "msprime", "msms"] + ["slim" + str(factor) for factor in scale_factor_by_config[config]]
     for i in range(REPS)
 ]
 
