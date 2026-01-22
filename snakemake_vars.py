@@ -79,12 +79,12 @@ all_configs.remove("li_african3epoch") # exclude due to long runtime
 scale_factor_by_config = {
     "browning_america": [1, 2, 5, 10],
     "gutenkunst_ooa": [1, 10, 50, 100],
-    "jacobs_papuans": [1, 5, 10, 20, 50],
+    "jacobs_papuans": [1, 4, 5, 10, 20, 50],
     "kamm_westerneurasia": [1, 2, 4, 5],
     "lavretsky_ducks": [100, 500, 1000],
     "li_african3epoch": [100, 500, 1000],
-    "locke_orangutan": [1, 2, 5, 10, 50, 100],
-    "one_population": [1, 5, 10, 50],
+    "locke_orangutan": [1, 2, 4, 10, 50, 100],
+    "one_population": [1, 2, 5, 10, 50],
     "pawar_gorilla": [1, 5, 10, 20],
     "zigzag": [1, 2, 5, 10, 50, 100, 500]
 }
