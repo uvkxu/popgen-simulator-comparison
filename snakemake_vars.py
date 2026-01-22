@@ -51,7 +51,7 @@ CMD_SUBDIR = "commands"
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
 # SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
-SIMULATORS = ["slim1", "slim2", "slim5", "slim10", "slim20", "slim50", 
+SIMULATORS = ["slim1", "slim2", "slim4", "slim5", "slim10", "slim20", "slim50", 
 "slim100", "slim200", "slim500", "slim1000", "msms", "msprime", "ms"]
 REPS = 1
 NUM_REPLICATES = 1
@@ -79,14 +79,14 @@ all_configs.remove("li_african3epoch") # exclude due to long runtime
 scale_factor_by_config = {
     "browning_america": [1, 2, 5, 10],
     "gutenkunst_ooa": [1, 10, 50, 100],
-    "jacobs_papuans": [1, 10, 20, 50],
-    "kamm_westerneurasia": [1, 2, 5],
+    "jacobs_papuans": [1, 5, 10, 20, 50],
+    "kamm_westerneurasia": [1, 2, 4, 5],
     "lavretsky_ducks": [100, 500, 1000],
     "li_african3epoch": [100, 500, 1000],
-    "locke_orangutan": [1, 10, 50, 100],
+    "locke_orangutan": [1, 2, 5, 10, 50, 100],
     "one_population": [1, 5, 10, 50],
-    "pawar_gorilla": [1, 10, 20],
-    "zigzag": [1, 10, 50, 100, 500]
+    "pawar_gorilla": [1, 5, 10, 20],
+    "zigzag": [1, 2, 5, 10, 50, 100, 500]
 }
 
 def get_num_sampled_populations(config_path):
