@@ -2,7 +2,7 @@ include: "../snakemake_vars.py"
 
 rule run_config_combo_rep_simulation_demes:
     input:
-        config_file = f"{CONFIG_DIR}/{{config}}.yaml"
+        config_file = ancient(f"{CONFIG_DIR}/{{config}}.yaml")
     output:
         output_file = protected(f"{RAW_DATA_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_output.txt")
     params:
@@ -31,7 +31,7 @@ rule run_config_combo_rep_simulation_demes:
 
 rule create_combo_yaml_file:
     input:
-        config_file = f"{CONFIG_DIR}/{{config}}.yaml"
+        config_file = ancient(f"{CONFIG_DIR}/{{config}}.yaml")
     output:
         output_file = protected(f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}")
     params:
