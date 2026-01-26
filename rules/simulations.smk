@@ -4,7 +4,7 @@ rule run_config_combo_rep_simulation_demes:
     input:
         config_file = f"{CONFIG_DIR}/{{config}}.yaml"
     output:
-        output_file = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_output.txt"
+        output_file = protected(f"{RAW_DATA_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_output.txt")
     params:
         combo_json=lambda w: combo_folder_to_json[w.combo],
         err_file=lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
@@ -33,7 +33,7 @@ rule create_combo_yaml_file:
     input:
         config_file = f"{CONFIG_DIR}/{{config}}.yaml"
     output:
-        output_file = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+        output_file = protected(f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}")
     params:
         combo_json=lambda w: combo_folder_to_json[w.combo],
         err_file = lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/errorlog.err"
