@@ -72,6 +72,16 @@ CLASSIFIERS = [XGB_STR, RF_STR, LR_STR]
 all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
 all_configs.remove("freedman_wolf")  # exclude for now due to long runtime
 
+VALID_GROUPING_MODES = [
+    "precision_applied", "precision_skipped",
+    "recombination_applied", "recombination_skipped",
+    "overall", "single", 
+    "sample_size_4", "sample_size_8", "sample_size_16",
+    "sample_size_32", "sample_size_64", "sample_size_128"
+]
+GROUPING_MODES = ["sample_size_4", "sample_size_8", "sample_size_16",
+    "sample_size_32", "sample_size_64", "sample_size_128"]
+
 def get_num_sampled_populations(config_path):
     num_pops = 0
     with open(config_path, "r") as f:
@@ -365,15 +375,6 @@ def estimate_mem_mb_plot_features(
 
 # Generate all feature file names for each simulator group
 # and create a mapping from feature file to the corresponding simulator group
-VALID_GROUPING_MODES = [
-    "precision_applied", "precision_skipped",
-    "recombination_applied", "recombination_skipped",
-    "overall", "single", 
-    "sample_size_4", "sample_size_8", "sample_size_16",
-    "sample_size_32", "sample_size_64", "sample_size_128"
-]
-GROUPING_MODES = ["sample_size_4", "sample_size_8", "sample_size_16",
-    "sample_size_32", "sample_size_64", "sample_size_128"]
 
 def format_feature_ranking_file(group):
     return f"feature_ranking_{'_'.join(group)}_with_summary.csv"
