@@ -567,8 +567,16 @@ ALL_PLOTS = [
 COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES + ALL_PLOTS
 
 
-
-
+MEAN_SAMPLE_SIZE_OUTPUT = [
+    path
+    for config in all_configs
+    for group in simulator_groups
+    for path in [
+        f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/mean_all_features_{'_'.join(group)}_by_sample_size.csv",
+        f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/mean_all_features_{'_'.join(group)}.csv",
+        f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/mean_all_features_{'_'.join(group)}_vs_sample_size.png",
+    ]
+]
 
 
 RAW_SINGLE = [
