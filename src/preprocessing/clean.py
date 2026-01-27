@@ -169,6 +169,10 @@ def main():
     precision = args.precision if bool(combo_params["usePrecision"]) else None
     
     output_file = args.output
+    if output_file.exists():
+        print(f"Output file already exists, skipping: {output_file}")
+        return
+
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     clean_sim_output(

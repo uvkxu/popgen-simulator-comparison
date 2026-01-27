@@ -134,6 +134,7 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
     """Run a single simulator and write its raw output to a .txt file."""
 
     if output_file.exists():
+        print(f"Output file already exists, skipping: {output_file}")
         return
     output_file.parent.mkdir(parents=True, exist_ok=True)
 

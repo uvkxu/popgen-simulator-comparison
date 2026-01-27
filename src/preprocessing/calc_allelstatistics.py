@@ -385,6 +385,10 @@ def main(input_file, output_file, combo_yaml, per_pop_stats=False):
     if not combo_yaml.exists():
         raise FileNotFoundError(f"Combo parameter file not found: {combo_yaml}")
 
+    if output_file.exists():
+        print(f"Output file already exists, skipping: {output_file}")
+        return
+
     with open(input_file, "r") as infile:
         input_content = infile.read()
 
