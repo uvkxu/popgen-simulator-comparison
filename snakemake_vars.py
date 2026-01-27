@@ -153,7 +153,7 @@ for config_name in all_configs:
 
         possible_mode = f"sample_size_{int(combo.get('sample_sizes'))}"
         if possible_mode in GROUPING_MODES:
-            modes_by_config[config_name] += possible_mode
+            modes_by_config[config_name].append(possible_mode)
 
         combo_folder = format_combination_as_folder_name(combo)
         all_combo_folders.add(combo_folder)
@@ -165,7 +165,7 @@ for config_name in all_configs:
 
     for mode in GROUPING_MODES:
         if not "sample_size" in mode:
-            modes_by_config[config_name] += mode
+            modes_by_config[config_name].append(mode)
 
 
 def estimate_mem_mb(config, combo, func, simulator=None):
