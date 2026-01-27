@@ -11,7 +11,7 @@ rule copy_combo_yaml_tree_features:
         import shutil
 
         Path(output.copy_file).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(input.combo_yaml, output.copy_file)
+        shutil.copyfile(input.combo_yaml, output.copy_file)
 
 
 rule copy_combo_yaml_allel_features:
@@ -24,7 +24,7 @@ rule copy_combo_yaml_allel_features:
         import shutil
 
         Path(output.copy_file).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(input.combo_yaml, output.copy_file)
+        shutil.copyfile(input.combo_yaml, output.copy_file)
 
     
 rule compute_tree_topfeatures_grouped_by_mode:
@@ -90,4 +90,27 @@ rule compute_allel_topfeatures_grouped_by_mode:
         --output_folder {params.output_dir} \
         --simulators {params.args_group} \
         --grouped_by {wildcards.mode}
+        """
+
+
+rule aggregate_tree_all_features_by_sample_size:
+    input:
+        base_dir = lambda wc: f"{TREE_TOPFEATURES_DIR}/{wc.config}"
+    output:
+        by_sample_size = f"{TREE_TOPFEATURES_DIR}/{{config}}/aggregated/mean_all_features_{{group_string}}_by_sample_size.csv",
+        mean = f"{TREE_TOPFEATURES_DIR}/{{config}}/aggregated/mean_all_features_{{group_string}}.csv",
+        plot = f"{TREE_TOPFEATURES_DIR}/{{config}}/aggregated/mean_all_features_{{group_string}}_vs_sample_size.png",
+    params:
+        group_string = lambda wc: wc.group_string,
+        output_dir = lambda wc: f"{TREE_TOPFEATURES_DIR}/{wc.config}/aggregated",
+        err_file = lambda wc: f"{TREE_TOPFEATURES_DIR}/{wc.config}/aggregated/errorlog.err",
+    conda:
+        "../envs/models-env.yaml"
+    shell:
+        """
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/models/aggregate_all_features_by_sample_size.py \
+            --base_dir {input.base_dir} \
+            --group_string {params.group_string} \
+            --output_dir {params.output_dir}
         """
