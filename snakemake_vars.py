@@ -7,6 +7,7 @@ import itertools
 from itertools import combinations
 import pandas as pd
 import math
+import re
 
 ROOT_DIR = Path(".")
 BIN_DIR = ROOT_DIR / "bin"
