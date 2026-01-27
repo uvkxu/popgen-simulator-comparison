@@ -1,184 +1,158 @@
 #!/usr/bin/env python3
+"""
+Aggregate ALL_FEATURES accuracy across sample sizes where the mode is encoded
+in the folder name (sample_size_<n>), and create a plot.
+"""
+
 from pathlib import Path
 import argparse
 import re
 import pandas as pd
-import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 
-def parse_sample_size_from_filename(stem: str) -> int:
-    """
-    Accepts filenames containing either:
-      - 'sample_size_128'
-      - '_n128'
-    """
-    m = re.search(r"(?:sample_size_|_n)(\d+)", stem)
+def extract_n_from_mode_folder(folder_name: str) -> int:
+    m = re.search(r"sample_size_(\d+)", folder_name)
     if not m:
-        raise ValueError(f"Could not parse sample size from filename: {stem}")
+        raise ValueError(f"Not a sample_size folder: {folder_name}")
     return int(m.group(1))
 
 
-def normalize_group_string(group_items: list[str]) -> str:
-    """
-    Create a stable identifier for a simulator group.
-    Example: ['msprime','ms','scrm'] -> 'ms-msprime-scrm' (sorted)
-    """
-    return "-".join(sorted([g.strip() for g in group_items if g.strip()]))
-
-
-def find_group_files(input_folder: Path, group_id: str) -> list[Path]:
-    """
-    Finds evaluation CSVs for the given group id.
-    We assume your files contain the group id somewhere in the filename.
-    Example filenames:
-      feature_ranking_ms-msprime-scrm_sample_size_128.csv
-      feature_ranking_ms-msprime-scrm_n128.csv
-    """
-    candidates = []
-    for p in input_folder.glob("*.csv"):
-        name = p.name
-        if group_id in name and ("sample_size_" in name or re.search(r"_n\d+", name)):
-            candidates.append(p)
-    return sorted(candidates)
-
-
-def read_all_features_row(csv_path: Path) -> dict:
-    df = pd.read_csv(csv_path).dropna(how="all")
-    if "feature" not in df.columns:
-        raise ValueError(f"Missing 'feature' column in {csv_path}")
-
-    row = df.loc[df["feature"] == "ALL_FEATURES"]
+def read_row(df: pd.DataFrame, key: str) -> pd.Series:
+    row = df.loc[df["feature"] == key]
     if row.empty:
-        raise ValueError(f"No ALL_FEATURES row found in {csv_path}")
-
-    r = row.iloc[0].to_dict()
-    # expected columns in your output
-    needed = ["xgboost", "random_forest", "logistic_regression"]
-    for col in needed:
-        if col not in r:
-            raise ValueError(f"Missing column '{col}' in {csv_path}")
-
-    return {
-        "xgboost": float(r["xgboost"]),
-        "random_forest": float(r["random_forest"]),
-        "logistic_regression": float(r["logistic_regression"]),
-    }
+        raise ValueError(f"Missing row '{key}' in CSV")
+    return row.iloc[0]
 
 
-def load_chance_baselines(input_folder: Path, group_id: str) -> pd.DataFrame | None:
-    """
-    Optional: If you saved chance baselines per sample size into chance_baselines.csv
-    with at least columns: group, sample_size, chance_baseline
-    optionally: n_rows (for weighted mean)
-    """
-    p = input_folder / "chance_baselines.csv"
-    if not p.exists():
-        return None
-    df = pd.read_csv(p)
-    req = {"group", "sample_size", "chance_baseline"}
-    if not req.issubset(set(df.columns)):
-        return None
-    df = df[df["group"] == group_id].copy()
-    return df
+def plot_accuracy_vs_sample_size(df: pd.DataFrame, output_path: Path, title: str):
+    df = df.sort_values("sample_size")
+
+    plt.figure(figsize=(8, 5))
+
+    plt.plot(df["sample_size"], df["xgboost"], marker="o", label="XGBoost")
+    plt.plot(df["sample_size"], df["random_forest"], marker="o", label="Random Forest")
+    plt.plot(df["sample_size"], df["logistic_regression"], marker="o", label="Logistic Regression")
+
+    if "chance_baseline" in df.columns and df["chance_baseline"].notna().any():
+        chance_mean = float(df["chance_baseline"].mean())
+        plt.hlines(
+            y=chance_mean,
+            xmin=df["sample_size"].min(),
+            xmax=df["sample_size"].max(),
+            linestyles="dashed",
+            colors="black",
+            label=f"Chance baseline (mean={chance_mean:.2f})",
+        )
+
+    plt.xlabel("Sample size")
+    plt.ylabel("Accuracy (ALL_FEATURES)")
+    plt.title(title)
+    plt.legend()
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300)
+    plt.close()
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Aggregate ALL_FEATURES accuracy across sample sizes.")
-    ap.add_argument("--input_folder", type=Path, required=True, help="Folder containing per-sample-size evaluation CSVs")
-    ap.add_argument("--output_file", type=Path, required=True, help="Output CSV with mean accuracies")
+    ap = argparse.ArgumentParser()
     ap.add_argument(
-        "--group",
-        type=str,
+        "--base_dir",
+        type=Path,
         required=True,
-        help="Comma-separated simulator group, e.g. 'msprime,ms,scrm' (must match filenames)",
+        help="Directory containing sample_size_<n>/ subfolders",
     )
     ap.add_argument(
-        "--pattern_hint",
+        "--group_string",
         type=str,
-        default="feature_ranking",
-        help="Optional hint: only consider CSVs that contain this substring (default: feature_ranking)",
+        required=True,
+        help="E.g. ms_msprime_scrm",
+    )
+    ap.add_argument(
+        "--output_dir",
+        type=Path,
+        required=True,
+        help="Directory where aggregated CSVs and plots are written",
+    )
+    ap.add_argument(
+        "--plot_title",
+        type=str,
+        default=None,
+        help="Optional plot title",
     )
     args = ap.parse_args()
 
-    input_folder: Path = args.input_folder
-    if not input_folder.exists():
-        raise FileNotFoundError(f"Input folder does not exist: {input_folder}")
+    base_dir: Path = args.base_dir
+    group_string: str = args.group_string
+    output_dir: Path = args.output_dir
 
-    group_items = [s.strip() for s in args.group.split(",")]
-    group_id = normalize_group_string(group_items)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    # collect files
-    files = []
-    for p in input_folder.glob("*.csv"):
-        if args.pattern_hint and args.pattern_hint not in p.name:
+    mode_dirs = sorted(
+        [p for p in base_dir.iterdir() if p.is_dir() and p.name.startswith("sample_size_")]
+    )
+    if not mode_dirs:
+        raise RuntimeError(f"No sample_size_* folders found in {base_dir}")
+
+    per_n_rows = []
+
+    for mode_dir in mode_dirs:
+        n = extract_n_from_mode_folder(mode_dir.name)
+        csv_path = mode_dir / f"feature_ranking_{group_string}_with_summary.csv"
+        if not csv_path.exists():
             continue
-        if group_id in p.name and ("sample_size_" in p.name or re.search(r"_n\d+", p.stem)):
-            files.append(p)
-    files = sorted(files)
 
-    if not files:
-        raise ValueError(
-            f"No matching CSVs found in {input_folder} for group '{group_id}'. "
-            f"Expected filenames containing '{group_id}' and 'sample_size_<n>' or '_n<n>'."
-        )
+        df = pd.read_csv(csv_path).dropna(how="all")
 
-    # build per-n table
-    rows = []
-    for p in files:
-        n = parse_sample_size_from_filename(p.stem)
-        acc = read_all_features_row(p)
-        rows.append({
-            "group": group_id,
+        all_row = read_row(df, "ALL_FEATURES")
+        entry = {
             "sample_size": n,
-            "file": p.name,
-            "xgboost_acc": acc["xgboost"],
-            "random_forest_acc": acc["random_forest"],
-            "logreg_acc": acc["logistic_regression"],
-        })
+            "mode": mode_dir.name,
+            "xgboost": float(all_row["xgboost"]),
+            "random_forest": float(all_row["random_forest"]),
+            "logistic_regression": float(all_row["logistic_regression"]),
+        }
 
-    per_n = pd.DataFrame(rows).sort_values("sample_size").reset_index(drop=True)
+        if "CHANCE_BASELINE" in set(df["feature"]):
+            ch_row = read_row(df, "CHANCE_BASELINE")
+            entry["chance_baseline"] = float(ch_row["max_accuracy"])
 
-    # optionally join chance baselines
-    chance_df = load_chance_baselines(input_folder, group_id)
-    if chance_df is not None:
-        per_n = per_n.merge(
-            chance_df[["sample_size", "chance_baseline"] + (["n_rows"] if "n_rows" in chance_df.columns else [])],
-            on="sample_size",
-            how="left",
-        )
+        per_n_rows.append(entry)
 
-    # compute macro mean (each n equally)
-    acc_cols = ["xgboost_acc", "random_forest_acc", "logreg_acc"]
-    macro_means = per_n[acc_cols].mean(numeric_only=True).to_dict()
+    if not per_n_rows:
+        raise RuntimeError("No matching CSVs found for the given group_string.")
 
-    summary = {
-        "group": group_id,
+    per_n = pd.DataFrame(per_n_rows).sort_values("sample_size").reset_index(drop=True)
+
+    # --- Macro mean across sample sizes ---
+    mean_summary = {
+        "group_string": group_string,
         "n_sample_sizes": int(per_n["sample_size"].nunique()),
-        **{f"macro_mean_{k}": float(v) for k, v in macro_means.items()},
+        "mean_xgboost": float(per_n["xgboost"].mean()),
+        "mean_random_forest": float(per_n["random_forest"].mean()),
+        "mean_logistic_regression": float(per_n["logistic_regression"].mean()),
     }
 
-    # weighted mean if n_rows exists
-    if "n_rows" in per_n.columns and per_n["n_rows"].notna().all():
-        w = per_n["n_rows"].astype(float)
-        for c in acc_cols:
-            summary[f"weighted_mean_{c}"] = float((per_n[c] * w).sum() / w.sum())
+    if "chance_baseline" in per_n.columns:
+        mean_summary["mean_chance_baseline"] = float(per_n["chance_baseline"].mean())
 
-    # also macro mean chance if available
-    if "chance_baseline" in per_n.columns and per_n["chance_baseline"].notna().any():
-        summary["macro_mean_chance_baseline"] = float(per_n["chance_baseline"].mean())
+    # --- Output paths ---
+    by_n_csv = output_dir / f"mean_all_features_{group_string}_by_sample_size.csv"
+    mean_csv = output_dir / f"mean_all_features_{group_string}.csv"
+    plot_png = output_dir / f"mean_all_features_{group_string}_vs_sample_size.png"
 
-    # write outputs
-    args.output_file.parent.mkdir(parents=True, exist_ok=True)
+    per_n.to_csv(by_n_csv, index=False)
+    pd.DataFrame([mean_summary]).to_csv(mean_csv, index=False)
 
-    # 1) per sample size table (sidecar)
-    per_n_out = args.output_file.with_suffix("").as_posix() + "_by_sample_size.csv"
-    per_n.to_csv(per_n_out, index=False)
+    title = args.plot_title or f"ALL_FEATURES accuracy vs. sample size ({group_string})"
+    plot_accuracy_vs_sample_size(per_n, plot_png, title)
 
-    # 2) summary table
-    pd.DataFrame([summary]).to_csv(args.output_file, index=False)
-
-    print(f"Wrote per-sample-size table: {per_n_out}")
-    print(f"Wrote summary means: {args.output_file}")
+    print("Wrote:", by_n_csv)
+    print("Wrote:", mean_csv)
+    print("Wrote:", plot_png)
 
 
 if __name__ == "__main__":
