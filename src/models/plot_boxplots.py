@@ -211,6 +211,11 @@ def main():
     selected_simulators = args.simulators
     grouped_by = args.grouped_by
 
+    sample_size_group = 0
+
+    if "sample_size" in grouped_by:
+        sample_size_group = int(re.search(r"\d+", grouped_by).group())
+
     output_folder.mkdir(parents=True, exist_ok=True)
 
     csv_my_mode = []
