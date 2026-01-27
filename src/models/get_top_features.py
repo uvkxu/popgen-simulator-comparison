@@ -15,6 +15,7 @@ import os
 import yaml
 from itertools import combinations
 import argparse
+import re
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
@@ -27,7 +28,7 @@ from snakemake_vars import VALID_GROUPING_MODES, format_feature_ranking_file, \
 from utils.io_helpers import collect_csv_files, assign_simulator_labels
 
 
-def evaluate_feature(X, y, feature, classifiers, repeats=2, test_size=0.2):
+def evaluate_feature(X, y, feature, classifiers, repeats=1, test_size=0.2):
     """Train each classifier on a single feature multiple times and return max accuracy per classifier."""
     acc_dict = {clf_name: [] for clf_name in classifiers}
     X_feat = X[[feature]].values
@@ -42,7 +43,7 @@ def evaluate_feature(X, y, feature, classifiers, repeats=2, test_size=0.2):
     return {clf_name: np.max(acc_list) for clf_name, acc_list in acc_dict.items()}
 
 
-def evaluate_classifiers(X, y, classifiers, repeats=2, test_size=0.2):
+def evaluate_classifiers(X, y, classifiers, repeats=1, test_size=0.2):
     """Evaluate classifiers on all features together."""
     acc_dict = {clf_name: [] for clf_name in classifiers}
     importance_dict = {}
@@ -82,7 +83,7 @@ def plot_feature_performance(feature_importance_dict, csv_path, group, chance_ba
     Reads the evaluation CSV and produces:
     - one accuracy bar plot
     - one combined feature importance plot
-    - one feature importance plot per classifier (new!)
+    - one feature importance plot per classifier
     """
 
     # --- Accuracy plot ---
@@ -95,9 +96,15 @@ def plot_feature_performance(feature_importance_dict, csv_path, group, chance_ba
     for col in df.columns[1:]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Keep only actual feature rows
-    df_features = df[~df["feature"].isin(["ALL_FEATURES", "PASSED_FEATURES", "OVERALL_MEAN"])]
+    # --- Select & order features for plotting ---
+    special = ["ALL_FEATURES", "PASSED_FEATURES"]
 
+    df_special = df[df["feature"].isin(special)]
+    df_regular = df[~df["feature"].isin(special + ["OVERALL_MEAN", "CHANCE_BASELINE"])]
+
+    df_features = pd.concat([df_special, df_regular], ignore_index=True)
+
+    # --- Plot ---
     features_acc = df_features["feature"]
     metrics = ["max_accuracy"] + CLASSIFIERS
     x = np.arange(len(features_acc))
@@ -114,23 +121,23 @@ def plot_feature_performance(feature_importance_dict, csv_path, group, chance_ba
         )
 
     for i, metric in enumerate(metrics):
-        plt.bar(x + i*width, df_features[metric], width=width, label=metric)
+        plt.bar(x + i * width, df_features[metric], width=width, label=metric)
 
-    plt.xticks(x + width*1.5, features_acc, rotation=90, fontsize=6)
+    plt.xticks(x + width * 1.5, features_acc, rotation=90, fontsize=6)
     plt.ylabel("Accuracy")
     plt.xlabel("Feature")
     plt.title("Model Performance per Feature")
     plt.legend()
     plt.tight_layout()
 
-    base = os.path.splitext(os.path.basename(csv_path))[0]
-    output_ranking_plot = format_feature_ranking_barplot(group)
-    out_path = os.path.join(os.path.dirname(csv_path), output_ranking_plot)
+    out_path = os.path.join(
+        os.path.dirname(csv_path),
+        format_feature_ranking_barplot(group)
+    )
     plt.savefig(out_path, dpi=300)
     plt.close()
-    # print(f"Accuracy plot saved at: {out_path}")
 
-    # --- One plot per classifier (NEW) ---
+    # --- One plot per classifier ---
     for clf_name, importance_dict_single in feature_importance_dict.items():
         features = list(importance_dict_single.keys())
         values = [importance_dict_single[f] for f in features]
@@ -150,8 +157,6 @@ def plot_feature_performance(feature_importance_dict, csv_path, group, chance_ba
 
         plt.savefig(out_path_single, dpi=300)
         plt.close()
-
-        # print(f"Feature importance plot for {clf_name} saved at: {out_path_single}")
 
 
 def clean_nan_data(
@@ -295,6 +300,14 @@ def run_feature_evaluation(
     # --- Summary output ---
     summary_records = []
 
+    summary_records.append({
+        "feature": "CHANCE_BASELINE",
+        "max_accuracy": majority_prop,
+        XGB_STR: np.nan,
+        RF_STR: np.nan,
+        LR_STR: np.nan
+    })
+
     # All feature row
     summary_records.append({
         "feature": "ALL_FEATURES",
@@ -399,6 +412,10 @@ def main():
     acc_factor = args.acc_factor
     simulator_group = args.simulators
     grouped_by = args.grouped_by
+    sample_size_group = 0
+
+    if "sample_size" in grouped_by:
+        sample_size_group = int(re.search(r"\d+", grouped_by).group())
 
     output_folder.mkdir(parents=True, exist_ok=True)
 
@@ -427,14 +444,14 @@ def main():
 
         usePrecision = bool(combo_params.get("usePrecision"))
         recombination_rate = float(combo_params.get("recombination_rate") or 0)
-
-        csv_files = collect_csv_files(root_path)
+        sample_size = int(combo_params["sample_structure"][0]) 
 
         if ((usePrecision and grouped_by == "precision_applied") or
             (not usePrecision and grouped_by == "precision_skipped") or
             (recombination_rate > 0 and grouped_by == "recombination_applied") or
-            (recombination_rate == 0 and grouped_by == "recombination_skipped")):
-            csv_my_mode += csv_files
+            (recombination_rate == 0 and grouped_by == "recombination_skipped") or
+            ("sample_size" in grouped_by and sample_size == sample_size_group and usePrecision)):
+            csv_my_mode += collect_csv_files(root_path)
 
     
     assert_non_empty(csv_files=csv_my_mode, mode=grouped_by)

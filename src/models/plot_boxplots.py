@@ -9,6 +9,7 @@ import sys
 import os
 import yaml
 import argparse
+import re
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
@@ -212,12 +213,7 @@ def main():
 
     output_folder.mkdir(parents=True, exist_ok=True)
 
-    csv_groups = {
-        "precision_applied": [],
-        "precision_skipped": [],
-        "recombination_applied": [],
-        "recombination_skipped": []
-    }
+    csv_my_mode = []
 
     if grouped_by in ["single", "overall"]:
         csv_files = collect_csv_files(input_folder)
@@ -238,23 +234,22 @@ def main():
 
         usePrecision = bool(combo_params.get("usePrecision"))
         recombination_rate = float(combo_params.get("recombination_rate") or 0)
+        sample_size = int(combo_params["sample_structure"][0]) 
         csv_files = collect_csv_files(root_path)
 
-        if usePrecision:
-            csv_groups["precision_applied"].extend(csv_files)
-            if recombination_rate:
-                csv_groups["recombination_applied"].extend(csv_files)
-            else:
-                csv_groups["recombination_skipped"].extend(csv_files)
-        else:
-            csv_groups["precision_skipped"].extend(csv_files)
+        if ((usePrecision and grouped_by == "precision_applied") or
+            (not usePrecision and grouped_by == "precision_skipped") or
+            (recombination_rate > 0 and grouped_by == "recombination_applied") or
+            (recombination_rate == 0 and grouped_by == "recombination_skipped") or
+            ("sample_size" in grouped_by and sample_size == sample_size_group and usePrecision)):
+            csv_my_mode += collect_csv_files(root_path)
 
-    if grouped_by not in csv_groups or not csv_groups[grouped_by]:
+    if not csv_my_mode:
         print(f"No CSV files found for mode {grouped_by}")
         return
 
-    plot_boxplots(csv_groups[grouped_by], output_folder, selected_simulators)
-    plot_histograms(csv_groups[grouped_by], output_folder, selected_simulators)
+    plot_boxplots(csv_my_mode, output_folder, selected_simulators)
+    plot_histograms(csv_my_mode, output_folder, selected_simulators)
 
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
 DATA_DIR = Path("/hits/fast/cme/kuchve/run2/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/run2/results")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/run2/results_per_sample")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -51,7 +51,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["msms", "msprime", "ms", "slim"] #msms_ms behaves the same as just msms
+SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
 REPS = 50
 NUM_REPLICATES = 2
 PRECISION = 17
@@ -119,6 +119,7 @@ def format_combination_as_folder_name(combo):
     return "_".join(f"{k}-{v}" for k, v in combo.items())
 
 combinations_by_config = {}
+modes_by_config = {}
 combo_folder_to_json = {}
 all_combo_folders = set()
 
@@ -126,6 +127,8 @@ for config_name in all_configs:
     config_file = Path(CONFIG_DIR) / f"{config_name}.yaml"
     keys, all_combos_by_config = get_combinations(config_file, VARIABLE_FILE_PATH)
     num_populations = get_num_sampled_populations(config_file)
+
+    modes_by_config[config_name] = []
     
     combos = []
     for values in all_combos_by_config:
@@ -138,6 +141,9 @@ for config_name in all_configs:
         if num_populations * combo.get("sample_sizes") > MAX_OVERALL_SAMPLES:
             continue
 
+        if ("sample_size_" + str(combo.get("sample_sizes"))) in GROUPING_MODES:
+            modes_by_config[config_name] += "sample_size_" + str(combo.get("sample_sizes"))
+
         combo_folder = format_combination_as_folder_name(combo)
         all_combo_folders.add(combo_folder)
 
@@ -145,6 +151,11 @@ for config_name in all_configs:
         combo_folder_to_json[combo_folder] = json.dumps(combo)
     
     combinations_by_config[config_name] = combos
+
+    for mode in GROUPING_MODES:
+        if not "sample_size" in mode:
+            modes_by_config[config_name] += mode
+
 
 def estimate_mem_mb(config, combo, func, simulator=None):
     """
@@ -357,9 +368,12 @@ def estimate_mem_mb_plot_features(
 VALID_GROUPING_MODES = [
     "precision_applied", "precision_skipped",
     "recombination_applied", "recombination_skipped",
-    "overall", "single"
+    "overall", "single", 
+    "sample_size_4", "sample_size_8", "sample_size_16",
+    "sample_size_32", "sample_size_64", "sample_size_128"
 ]
-GROUPING_MODES = ["overall"]
+GROUPING_MODES = ["sample_size_4", "sample_size_8", "sample_size_16",
+    "sample_size_32", "sample_size_64", "sample_size_128"]
 
 def format_feature_ranking_file(group):
     return f"feature_ranking_{'_'.join(group)}_with_summary.csv"
@@ -373,6 +387,7 @@ def format_classifier_importance_plot(classifier, group):
 simulator_groups = list(combinations(SIMULATORS, 2))
 simulator_groups.append(tuple(SIMULATORS))
 simulator_groups = list(dict.fromkeys(simulator_groups))
+# simulator_groups.append(("ms", "msms", "msprime"))
 
 def get_topfeatures_input(config, group, mode, feature_type, combo=None):
     result = []
@@ -405,6 +420,7 @@ def get_topfeatures_input(config, group, mode, feature_type, combo=None):
         combo_string = combo_folder_to_json[combo_folder]
         combo = json.loads(combo_string)
         rate = float(combo.get("recombination_rates"))
+        sample_size = int(combo.get("sample_sizes")) 
         has_recombination = rate is not None and rate > 0
 
         if mode == "precision_applied" and bool(combo["usePrecision"]):
@@ -417,6 +433,10 @@ def get_topfeatures_input(config, group, mode, feature_type, combo=None):
             result.append(combo_folder)
         elif mode == "overall":
             result.append(combo_folder)
+        elif "sample_size" in mode:
+            sample_size_group = int(re.search(r"\d+", mode).group())
+            if sample_size_group == sample_size:
+                result.append(combo_folder)
     
     return [
         f"{root_folder}/{config}/{combo}/rep{i+1}/{FILE_FORMATS[format_file].format(SIM=sim)}"
@@ -496,17 +516,17 @@ ALL_SLIM_FEATURES = [
 ALL_TREE_TOPFEATURES = [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
     for config in all_configs
-    for mode in GROUPING_MODES
+    for mode in modes_by_config[config]
     for sim_group in simulator_groups
 ] + [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
     for config in all_configs
-    for mode in GROUPING_MODES
+    for mode in modes_by_config[config]
     for sim_group in simulator_groups
 ] + [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
     for config in all_configs
-    for mode in GROUPING_MODES
+    for mode in modes_by_config[config]
     for sim_group in simulator_groups
     for classifier in CLASSIFIERS
 ]
@@ -515,17 +535,17 @@ ALL_TREE_TOPFEATURES = [
 ALL_ALLEL_TOPFEATURES = [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
     for config in all_configs
-    for mode in GROUPING_MODES
+    for mode in modes_by_config[config]
     for sim_group in simulator_groups
 ] + [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
     for config in all_configs
-    for mode in GROUPING_MODES
+    for mode in modes_by_config[config]
     for sim_group in simulator_groups
 ] + [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
     for config in all_configs
-    for mode in GROUPING_MODES
+    for mode in modes_by_config[config]
     for sim_group in simulator_groups
     for classifier in CLASSIFIERS
 ]
@@ -534,11 +554,11 @@ ALL_ALLEL_TOPFEATURES = [
 ALL_PLOTS = [
     f"{TREEFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
     for config in all_configs
-    for mode in GROUPING_MODES
+    for mode in modes_by_config[config]
 ] + [
     f"{ALLELFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
     for config in all_configs
-    for mode in GROUPING_MODES
+    for mode in modes_by_config[config]
 ]
 
 COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES + ALL_PLOTS
