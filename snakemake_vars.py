@@ -78,10 +78,13 @@ VALID_GROUPING_MODES = [
     "recombination_applied", "recombination_skipped",
     "overall", "single", 
     "sample_size_4", "sample_size_8", "sample_size_16",
-    "sample_size_32", "sample_size_64", "sample_size_128"
+    "sample_size_32", "sample_size_64", "sample_size_128",
+    "seq_len_1000", "seq_len_10000", "seq_len_100000", "seq_len_1000000"
 ]
-GROUPING_MODES = ["sample_size_4", "sample_size_8", "sample_size_16",
+GROUPING_MODES_TREE = ["sample_size_4", "sample_size_8", "sample_size_16",
     "sample_size_32", "sample_size_64", "sample_size_128"]
+
+GROUPING_MODES_ALLEL = ["seq_len_1000", "seq_len_10000", "seq_len_100000", "seq_len_1000000"]
 
 def get_num_sampled_populations(config_path):
     num_pops = 0
@@ -130,7 +133,7 @@ def format_combination_as_folder_name(combo):
     return "_".join(f"{k}-{v}" for k, v in combo.items())
 
 combinations_by_config = {}
-modes_by_config = {}
+tree_modes_by_config = {}
 combo_folder_to_json = {}
 all_combo_folders = set()
 
@@ -139,7 +142,7 @@ for config_name in all_configs:
     keys, all_combos_by_config = get_combinations(config_file, VARIABLE_FILE_PATH)
     num_populations = get_num_sampled_populations(config_file)
 
-    modes_by_config[config_name] = []
+    tree_modes_by_config[config_name] = []
     
     combos = []
     for values in all_combos_by_config:
@@ -153,8 +156,8 @@ for config_name in all_configs:
             continue
 
         possible_mode = f"sample_size_{int(combo.get('sample_sizes'))}"
-        if possible_mode in GROUPING_MODES:
-            modes_by_config[config_name].append(possible_mode)
+        if possible_mode in GROUPING_MODES_TREE:
+            tree_modes_by_config[config_name].append(possible_mode)
 
         combo_folder = format_combination_as_folder_name(combo)
         all_combo_folders.add(combo_folder)
@@ -164,9 +167,9 @@ for config_name in all_configs:
     
     combinations_by_config[config_name] = combos
 
-    for mode in GROUPING_MODES:
+    for mode in GROUPING_MODES_TREE:
         if not "sample_size" in mode:
-            modes_by_config[config_name].append(mode)
+            tree_modes_by_config[config_name].append(mode)
 
 
 def estimate_mem_mb(config, combo, func, simulator=None):
@@ -390,7 +393,7 @@ def format_classifier_importance_plot(classifier, group):
 simulator_groups = list(combinations(SIMULATORS, 2))
 simulator_groups.append(tuple(SIMULATORS))
 simulator_groups = list(dict.fromkeys(simulator_groups))
-simulator_groups.append(("ms", "msms", "msprime"))
+simulator_groups.append(("msms", "msprime", "ms"))
 
 def get_topfeatures_input(config, group, mode, feature_type, combo=None):
     result = []
@@ -516,20 +519,47 @@ ALL_SLIM_FEATURES = [
 ]
 
 
+def get_topfeatures_by_config(config, sim_group, feature_type):
+    if feature_type = "tree":
+        root_folder = TREE_TOPFEATURES_DIR
+        modes = tree_modes_by_config[config]
+    elif feature_type = "allel":
+        root_folder = ALLEL_TOPFEATURES_DIR
+        modes = GROUPING_MODES_ALLEL
+    else:
+        raise ValueError(f"Invalid feature type: {feature_type}")
+
+    if type(sim_group) is str:
+        sim_group = sim_group.split("_")
+
+
+    return [
+        f"{root_folder}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
+        for mode in modes
+    ] + [
+        f"{root_folder}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
+        for mode in modes
+    ] + [
+        f"{root_folder}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
+        for mode in modes
+        for classifier in CLASSIFIERS
+    ]
+
+
 ALL_TREE_TOPFEATURES = [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
     for config in all_configs
-    for mode in modes_by_config[config]
+    for mode in tree_modes_by_config[config]
     for sim_group in simulator_groups
 ] + [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
     for config in all_configs
-    for mode in modes_by_config[config]
+    for mode in tree_modes_by_config[config]
     for sim_group in simulator_groups
 ] + [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
     for config in all_configs
-    for mode in modes_by_config[config]
+    for mode in tree_modes_by_config[config]
     for sim_group in simulator_groups
     for classifier in CLASSIFIERS
 ]
@@ -538,21 +568,20 @@ ALL_TREE_TOPFEATURES = [
 ALL_ALLEL_TOPFEATURES = [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
     for config in all_configs
-    for mode in modes_by_config[config]
+    for mode in GROUPING_MODES_ALLEL
     for sim_group in simulator_groups
 ] + [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
     for config in all_configs
-    for mode in modes_by_config[config]
+    for mode in GROUPING_MODES_ALLEL
     for sim_group in simulator_groups
 ] + [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
     for config in all_configs
-    for mode in modes_by_config[config]
+    for mode in GROUPING_MODES_ALLEL
     for sim_group in simulator_groups
     for classifier in CLASSIFIERS
 ]
-
 
 ALL_PLOTS = [
     f"{TREEFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
@@ -564,10 +593,11 @@ ALL_PLOTS = [
     for mode in modes_by_config[config]
 ]
 
-COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES + ALL_PLOTS
+
+COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES
 
 
-MEAN_SAMPLE_SIZE_OUTPUT = [
+MEAN_SAMPLE_SIZE_OUTPUT_TREE = [
     path
     for config in all_configs
     for group in simulator_groups
@@ -575,6 +605,17 @@ MEAN_SAMPLE_SIZE_OUTPUT = [
         f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/mean_aggregated_{'_'.join(group)}_with_summary.csv",
         f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_by_sample_size.csv",
         f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_vs_sample_size.png"
+    ]
+]
+
+MEAN_SAMPLE_SIZE_OUTPUT_ALLEL = [
+    path
+    for config in all_configs
+    for group in simulator_groups
+    for path in [
+        f"{ALLEL_TOPFEATURES_DIR}/{config}/aggregated/mean_aggregated_{'_'.join(group)}_with_summary.csv",
+        f"{ALLEL_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_by_seq_len.csv",
+        f"{ALLEL_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_vs_seq_len.png"
     ]
 ]
 

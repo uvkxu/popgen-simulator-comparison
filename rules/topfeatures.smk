@@ -95,10 +95,7 @@ rule compute_allel_topfeatures_grouped_by_mode:
 
 rule aggregate_tree_topfeatures_over_sample_sizes:
     input:
-        csvs = lambda wc: expand(
-            f"{TREE_TOPFEATURES_DIR}/{wc.config}/{sample_mode}/feature_ranking_{wc.group_string}_with_summary.csv",
-            sample_mode=modes_by_config[wc.config]
-        )
+        lambda wildcards: get_topfeatures_by_config(wildcards.config, wildcards.group_string, "tree")
     output:
         mean_csv = f"{TREE_TOPFEATURES_DIR}/{{config}}/aggregated/mean_aggregated_{{group_string}}_with_summary.csv",
         by_n_csv = f"{TREE_TOPFEATURES_DIR}/{{config}}/aggregated/all_features_{{group_string}}_by_sample_size.csv",
@@ -118,3 +115,25 @@ rule aggregate_tree_topfeatures_over_sample_sizes:
             --output_dir {params.out_dir}
         """
 
+
+rule aggregate_allel_topfeatures_over_seq_len:
+    input:
+        lambda wildcards: get_topfeatures_by_config(wildcards.config, wildcards.group_string, "allel")
+    output:
+        mean_csv = f"{ALLEL_TOPFEATURES_DIR}/{{config}}/aggregated/mean_aggregated_{{group_string}}_with_summary.csv",
+        by_n_csv = f"{ALLEL_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_by_seq_len.csv",
+        plot = f"{ALLEL_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_vs_seq_len.png"
+    params:
+        base_dir = lambda wc: f"{ALLEL_TOPFEATURES_DIR}/{wc.config}",
+        out_dir = lambda wc: f"{ALLEL_TOPFEATURES_DIR}/{wc.config}/aggregated",
+        err_file = lambda wc: f"{ALLEL_TOPFEATURES_DIR}/{wc.config}/aggregated/errorlog.err"
+    conda:
+        "../envs/models-env.yaml"
+    shell:
+        r"""
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/models/aggregate_by_seq_len.py \
+            --base_dir {params.base_dir} \
+            --group_string {wildcards.group_string} \
+            --output_dir {params.out_dir}
+        """
