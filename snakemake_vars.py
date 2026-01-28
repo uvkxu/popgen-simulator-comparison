@@ -313,10 +313,6 @@ def estimate_mem_mb_classification(
     if not input_folder.exists():
         raise FileNotFoundError(f"Input directory {input_folder} does not exist.")
 
-    # nur erlaubte Root-Folder (wie in deinem Code)
-    if not (input_folder == ALLEL_FEATURES_DIR or input_folder == TREE_FEATURES_DIR):
-        raise ValueError(f"Unsupported input_folder: {input_folder}")
-
     # --- 1) Basisschätzung für "alles unter input_folder" (einmalig, gecacht) ---
     if input_folder not in size_all_csv:
         csv_files = list(input_folder.rglob("*.csv"))
