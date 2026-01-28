@@ -572,9 +572,9 @@ MEAN_SAMPLE_SIZE_OUTPUT = [
     for config in all_configs
     for group in simulator_groups
     for path in [
-        f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/mean_aggregated_{group_string}_with_summary.csv",
-        f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/all_features_{group_string}_by_sample_size.csv",
-        f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/all_features_{group_string}_vs_sample_size.png"
+        f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/mean_aggregated_{'_'.join(group)}_with_summary.csv",
+        f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_by_sample_size.csv",
+        f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_vs_sample_size.png"
     ]
 ]
 
