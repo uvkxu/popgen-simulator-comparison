@@ -369,10 +369,10 @@ def estimate_mem_mb_classification(
     # --- 3) mode_percentage: grob wie viele Modes partitionieren den Datensatz ---
     mode_percentage = 1.0
     if mode and "sample_size" in mode:
-        denom = max(int(tree_modes_by_config.get(config, 1)), 1)
+        denom = max(len(tree_modes_by_config.get(config, 1)), 1)
         mode_percentage = 1.0 / denom
     elif mode and "seq_len" in mode:
-        denom = max(int(GROUPING_MODES_ALLEL), 1)
+        denom = max(len(GROUPING_MODES_ALLEL), 1)
         mode_percentage = 1.0 / denom
 
     # --- 4) extra Skalierung: größere sample size / seq len => etwas mehr RAM ---
