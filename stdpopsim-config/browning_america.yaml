@@ -6,6 +6,7 @@ mutation_rate: 2.36e-08
 metadata:
   model_id: AmericanAdmixture_4B18
   species: HomSap
+  scaling_factor: 1
 demes:
 - name: AFR
   description: Contemporary African population

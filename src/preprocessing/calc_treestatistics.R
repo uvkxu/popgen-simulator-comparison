@@ -382,6 +382,11 @@ input_file  <- args[1]
 output_file <- args[2]
 combo_yaml  <- args[3]
 
+if (file.exists(output_file)) {
+  cat(sprintf("Output file already exists, skipping: %s\n", output_file))
+  quit(status = 0)
+}
+
 # --- Checks ---
 if (!file.exists(input_file)) {
   stop("Input file does not exist: ", input_file)

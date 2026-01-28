@@ -7,7 +7,7 @@ time_units: generations
 metadata:
   model_id: AncientEurasia_9K19
   species: HomSap
-  
+  scaling_factor: 4
 demes:
 - name: Loschbour
   description: Western hunter-gatherer (WHG)

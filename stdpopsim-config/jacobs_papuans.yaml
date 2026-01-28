@@ -19,7 +19,7 @@ mutation_rate: 1.4e-08
 metadata:
   model_id: PapuansOutOfAfrica_10J19
   species: HomSap
-  
+  scaling_factor: 4
 demes:
 - name: YRI
   description: 1000 Genomes YRI (Yoruba)
