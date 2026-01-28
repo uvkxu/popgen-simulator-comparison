@@ -7,4 +7,4 @@ include: "rules/plots.smk"
 
 rule all:
     input:
-        MEAN_SAMPLE_SIZE_OUTPUT
+        ALL_TREE_TOPFEATURES, ALL_ALLEL_TOPFEATURES
