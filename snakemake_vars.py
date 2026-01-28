@@ -16,8 +16,8 @@ CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
-DATA_DIR = Path("/hits/fast/cme/kuchve/run2/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/run2/results_per_sample")
+DATA_DIR = Path("/hits/fast/cme/kuchve/run3/data")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/run3/results_aggregated")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -52,7 +52,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["msms", "msprime", "ms", "slim"] #msms_ms behaves the same as just msms
+SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
 REPS = 50
 NUM_REPLICATES = 2
 PRECISION = 17
@@ -412,10 +412,10 @@ def format_feature_ranking_barplot(group):
 def format_classifier_importance_plot(classifier, group):
     return f"feature_importance_{'_'.join(group)}_{classifier}.png"
             
-simulator_groups = list(combinations(SIMULATORS, 2))
+# simulator_groups = list(combinations(SIMULATORS, 2))
 simulator_groups.append(tuple(SIMULATORS))
 simulator_groups = list(dict.fromkeys(simulator_groups))
-simulator_groups.append(("msms", "msprime", "ms"))
+# simulator_groups.append(("msms", "msprime", "ms"))
 
 def get_topfeatures_input(config, group, mode, feature_type, combo=None):
     result = []
