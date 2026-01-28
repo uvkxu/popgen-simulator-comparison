@@ -39,7 +39,7 @@ rule compute_tree_topfeatures_grouped_by_mode:
     wildcard_constraints:
         mode = "|".join(VALID_GROUPING_MODES)
     resources:
-        mem_mb=lambda wildcards, input: estimate_mem_mb_classification(f"{TREE_FEATURES_DIR}/{wildcards.config}/")
+        mem_mb=lambda wildcards, input: estimate_mem_mb_classification(f"{TREE_FEATURES_DIR}/{wildcards.config}/", wildcards.config, wildcards.group_string, wildcards.mode)
     params:
         args_group=lambda wildcards: ",".join(
             wildcards.group_string.split("_")
@@ -70,7 +70,7 @@ rule compute_allel_topfeatures_grouped_by_mode:
         f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{RF_STR}.png",
         f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{LR_STR}.png",
     resources:
-        mem_mb=lambda wildcards, input: estimate_mem_mb_classification(f"{ALLEL_FEATURES_DIR}/{wildcards.config}/")
+        mem_mb=lambda wildcards, input: estimate_mem_mb_classification(f"{ALLEL_FEATURES_DIR}/{wildcards.config}/", wildcards.config, wildcards.group_string, wildcards.mode)
     wildcard_constraints:
         mode = "|".join(VALID_GROUPING_MODES)
     params:
@@ -121,8 +121,8 @@ rule aggregate_allel_topfeatures_over_seq_len:
         lambda wildcards: get_topfeatures_by_config(wildcards.config, wildcards.group_string, "allel")
     output:
         mean_csv = f"{ALLEL_TOPFEATURES_DIR}/{{config}}/aggregated/mean_aggregated_{{group_string}}_with_summary.csv",
-        by_n_csv = f"{ALLEL_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_by_seq_len.csv",
-        plot = f"{ALLEL_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_vs_seq_len.png"
+        by_n_csv = f"{ALLEL_TOPFEATURES_DIR}/{{config}}/aggregated/all_features_{{group_string}}_by_seq_len.csv",
+        plot = f"{ALLEL_TOPFEATURES_DIR}/{{config}}/aggregated/all_features_{{group_string}}_vs_seq_len.png"
     params:
         base_dir = lambda wc: f"{ALLEL_TOPFEATURES_DIR}/{wc.config}",
         out_dir = lambda wc: f"{ALLEL_TOPFEATURES_DIR}/{wc.config}/aggregated",
@@ -134,6 +134,6 @@ rule aggregate_allel_topfeatures_over_seq_len:
         scripts/run_with_errorlog.sh {params.err_file} \
         python src/models/aggregate_by_seq_len.py \
             --base_dir {params.base_dir} \
-            --group_string {wildcards.group_string} \
+            --group {wildcards.group_string} \
             --output_dir {params.out_dir}
         """

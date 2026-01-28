@@ -284,8 +284,15 @@ def estimate_mem_mb(config, combo, func, simulator=None):
     return 100
 
 
+# global cache
+size_all_csv = {}
+
+
 def estimate_mem_mb_classification(
     input_folder,
+    config,
+    group,
+    mode,
     dtype_bytes=4,          # float32
     pandas_factor=2.0,
     split_factor=1.5,
@@ -293,89 +300,108 @@ def estimate_mem_mb_classification(
     safety_factor=1.3,
     min_mem_mb=512
 ):
+    """
+    Schnelle Approximation des RAM-Bedarfs (MB) für Classification:
+    - scannt alle CSVs unter input_folder nur EINMAL (caching in size_all_csv)
+    - skaliert dann pro Job über group-Anteil + mode-Anteil + (milde) Größe von sample_size/seq_len
+
+    Erwartet, dass SIMULATORS, tree_modes_by_config, GROUPING_MODES_ALLEL,
+    sowie ALLEL_FEATURES_DIR / TREE_FEATURES_DIR global existieren.
+    """
+
     input_folder = Path(input_folder)
     if not input_folder.exists():
         raise FileNotFoundError(f"Input directory {input_folder} does not exist.")
-    csv_files = list(input_folder.rglob("*.csv"))
 
-    total_rows = 0
-    n_features = None
+    # nur erlaubte Root-Folder (wie in deinem Code)
+    if not (input_folder == ALLEL_FEATURES_DIR or input_folder == TREE_FEATURES_DIR):
+        raise ValueError(f"Unsupported input_folder: {input_folder}")
 
-    for csv in csv_files:
-        csv = Path(csv)
+    # --- 1) Basisschätzung für "alles unter input_folder" (einmalig, gecacht) ---
+    if input_folder not in size_all_csv:
+        csv_files = list(input_folder.rglob("*.csv"))
+        if not csv_files:
+            size_all_csv[input_folder] = min_mem_mb
+        else:
+            total_rows = 0
+            n_cols = None
 
-        # --- number of rows (cheap) ---
-        with csv.open("r") as f:
-            rows = sum(1 for _ in f) - 1
-        total_rows += max(rows, 0)
+            for csv_file in csv_files:
+                # Zeilen zählen (ohne Header)
+                try:
+                    with csv_file.open("r") as f:
+                        rows = sum(1 for _ in f) - 1
+                except OSError:
+                    continue
 
-        # --- number of columns (read only header) ---
-        if n_features is None:
-            df_head = pd.read_csv(csv, nrows=1)
-            n_features = len(df_head.columns) - 1  # minus 'simulator'
+                rows = max(rows, 0)
+                total_rows += rows
 
-    if total_rows <= 0 or n_features <= 0:
-        return min_mem_mb
+                # Spalten nur einmal aus einem nicht-leeren File bestimmen
+                if n_cols is None and rows > 0:
+                    try:
+                        df_head = pd.read_csv(csv_file, nrows=1)
+                        n_cols = len(df_head.columns)  # dep var NICHT abziehen (wie gewünscht)
+                    except Exception:
+                        n_cols = 0
 
-    # --- base data size ---
-    base_bytes = total_rows * n_features * dtype_bytes
+            if total_rows <= 0 or not n_cols or n_cols <= 0:
+                size_all_csv[input_folder] = min_mem_mb
+            else:
+                base_bytes = total_rows * n_cols * dtype_bytes
+                total_bytes = (
+                    base_bytes
+                    * pandas_factor
+                    * split_factor
+                    * model_factor
+                    * safety_factor
+                )
+                mem_mb = math.ceil(total_bytes / 1024**2)
+                size_all_csv[input_folder] = max(mem_mb, min_mem_mb)
 
-    # --- apply overhead factors ---
-    total_bytes = (
-        base_bytes
-        * pandas_factor
-        * split_factor
-        * model_factor
-        * safety_factor
-    )
+    base_mem_mb = size_all_csv[input_folder]
 
-    mem_mb = math.ceil(total_bytes / 1024**2)
+    # --- 2) group_percentage: Anteil Simulatoren im aktuellen group-string ---
+    if isinstance(group, str):
+        group_list = [g for g in group.split("_") if g]
+    else:
+        group_list = list(group)
 
-    return max(mem_mb, min_mem_mb)
+    group_percentage = len(group_list) / max(len(SIMULATORS), 1)
+    group_percentage = max(group_percentage, 1.0 / max(len(SIMULATORS), 1))  # niemals 0
 
+    # --- 3) mode_percentage: grob wie viele Modes partitionieren den Datensatz ---
+    mode_percentage = 1.0
+    if mode and "sample_size" in mode:
+        denom = max(int(tree_modes_by_config.get(config, 1)), 1)
+        mode_percentage = 1.0 / denom
+    elif mode and "seq_len" in mode:
+        denom = max(int(GROUPING_MODES_ALLEL), 1)
+        mode_percentage = 1.0 / denom
 
-def estimate_mem_mb_plot_features(
-    input_folder,
-    dtype_bytes=4,           # float32
-    pandas_factor=2.0,       # Overhead für DataFrame
-    plot_factor=1.2,         # Boxplots/Histogramme temporär im Speicher
-    safety_factor=1.3,       # Sicherheitspuffer
-    min_mem_mb=512
-):
-    """
-    Schätzt den Speicherbedarf (MB) für das Plot-Features-Skript.
-    Lädt keine CSVs, sondern nutzt Zeilen- und Spaltenzählung.
-    """
-    input_folder = Path(input_folder)
-    if not input_folder.exists():
-        raise FileNotFoundError(f"Input directory {input_folder} does not exist.")
-    
-    csv_files = list(input_folder.rglob("*.csv"))
-    total_rows = 0
-    n_features = None
+    # --- 4) extra Skalierung: größere sample size / seq len => etwas mehr RAM ---
+    # Regex lokal (wie gewünscht)
+    re_sample_size = re.compile(r"sample_size_(\d+)")
+    re_seq_len = re.compile(r"seq_len_(\d+)")
 
-    for csv_file in csv_files:
-        # --- Anzahl Zeilen (ohne Header) ---
-        with csv_file.open("r") as f:
-            rows = sum(1 for _ in f) - 1
-            total_rows += max(rows, 0)
+    scale = 1.0
 
-        # --- Anzahl Spalten (nur Header lesen) ---
-        if n_features is None and rows > 0:
-            df_head = pd.read_csv(csv_file, nrows=1)
-            n_features = len(df_head.columns)
+    m = re_sample_size.search(mode or "")
+    if m:
+        n_val = int(m.group(1))
+        # baseline bei 4; wächst mild mit log2(n/4)
+        scale *= (1.0 + 0.10 * max(math.log2(n_val / 4), 0.0))
 
-    if total_rows <= 0 or n_features <= 0:
-        return min_mem_mb
+    m = re_seq_len.search(mode or "")
+    if m:
+        L_val = int(m.group(1))
+        # baseline bei 1000; wächst mild mit log10(L/1000)
+        scale *= (1.0 + 0.08 * max(math.log10(L_val / 1000), 0.0))
 
-    # --- Basisspeicher in Bytes ---
-    base_bytes = total_rows * n_features * dtype_bytes
+    # --- 5) Final ---
+    est_mb = base_mem_mb * group_percentage * mode_percentage * scale
+    return max(min_mem_mb, int(math.ceil(est_mb)))
 
-    # --- Multiplikatoren für pandas, Plot-Overhead und Sicherheit ---
-    total_bytes = base_bytes * pandas_factor * plot_factor * safety_factor
-
-    mem_mb = math.ceil(total_bytes / 1024**2)
-    return max(mem_mb, min_mem_mb)
 
 
 # Generate all feature file names for each simulator group
@@ -520,10 +546,10 @@ ALL_SLIM_FEATURES = [
 
 
 def get_topfeatures_by_config(config, sim_group, feature_type):
-    if feature_type = "tree":
+    if feature_type == "tree":
         root_folder = TREE_TOPFEATURES_DIR
         modes = tree_modes_by_config[config]
-    elif feature_type = "allel":
+    elif feature_type == "allel":
         root_folder = ALLEL_TOPFEATURES_DIR
         modes = GROUPING_MODES_ALLEL
     else:
@@ -586,11 +612,11 @@ ALL_ALLEL_TOPFEATURES = [
 ALL_PLOTS = [
     f"{TREEFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
     for config in all_configs
-    for mode in modes_by_config[config]
+    for mode in tree_modes_by_config[config]
 ] + [
     f"{ALLELFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
     for config in all_configs
-    for mode in modes_by_config[config]
+    for mode in GROUPING_MODES_ALLEL
 ]
 
 
