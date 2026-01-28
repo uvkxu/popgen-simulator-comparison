@@ -93,24 +93,28 @@ rule compute_allel_topfeatures_grouped_by_mode:
         """
 
 
-rule aggregate_tree_all_features_by_sample_size:
+rule aggregate_tree_topfeatures_over_sample_sizes:
     input:
-        base_dir = lambda wc: f"{TREE_TOPFEATURES_DIR}/{wc.config}"
+        csvs = lambda wc: expand(
+            f"{TREE_TOPFEATURES_DIR}/{wc.config}/{sample_mode}/feature_ranking_{wc.group_string}_with_summary.csv",
+            sample_mode=modes_by_config[wc.config]
+        )
     output:
-        by_sample_size = f"{TREE_TOPFEATURES_DIR}/{{config}}/aggregated/mean_all_features_{{group_string}}_by_sample_size.csv",
-        mean = f"{TREE_TOPFEATURES_DIR}/{{config}}/aggregated/mean_all_features_{{group_string}}.csv",
-        plot = f"{TREE_TOPFEATURES_DIR}/{{config}}/aggregated/mean_all_features_{{group_string}}_vs_sample_size.png",
+        mean_csv = f"{TREE_TOPFEATURES_DIR}/{{config}}/aggregated/mean_aggregated_{{group_string}}_with_summary.csv",
+        by_n_csv = f"{TREE_TOPFEATURES_DIR}/{{config}}/aggregated/all_features_{{group_string}}_by_sample_size.csv",
+        plot = f"{TREE_TOPFEATURES_DIR}/{{config}}/aggregated/all_features_{{group_string}}_vs_sample_size.png",
     params:
-        group_string = lambda wc: wc.group_string,
-        output_dir = lambda wc: f"{TREE_TOPFEATURES_DIR}/{wc.config}/aggregated",
-        err_file = lambda wc: f"{TREE_TOPFEATURES_DIR}/{wc.config}/aggregated/errorlog.err",
+        base_dir = lambda wc: f"{TREE_TOPFEATURES_DIR}/{wc.config}",
+        out_dir = lambda wc: f"{TREE_TOPFEATURES_DIR}/{wc.config}/aggregated",
+        err_file = lambda wc: f"{TREE_TOPFEATURES_DIR}/{wc.config}/aggregated/errorlog.err"
     conda:
         "../envs/models-env.yaml"
     shell:
-        """
+        r"""
         scripts/run_with_errorlog.sh {params.err_file} \
-        python src/models/aggregate_all_features_by_sample_size.py \
-            --base_dir {input.base_dir} \
-            --group_string {params.group_string} \
-            --output_dir {params.output_dir}
+        python src/models/aggregate_topfeatures_across_sample_sizes.py \
+            --base_dir {params.base_dir} \
+            --group_string {wildcards.group_string} \
+            --output_dir {params.out_dir}
         """
+
