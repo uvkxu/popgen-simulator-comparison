@@ -17,7 +17,7 @@ CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
 DATA_DIR = Path("/hits/fast/cme/kuchve/run3/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/run3/results_aggregated")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/run3/results_aggregated_final")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -369,12 +369,15 @@ def estimate_mem_mb_classification(
 
     # --- 3) mode_percentage: grob wie viele Modes partitionieren den Datensatz ---
     mode_percentage = 1.0
-    if mode and "sample_size" in mode:
-        denom = max(len(tree_modes_by_config.get(config, 1)), 1)
-        mode_percentage = 1.0 / denom
-    elif mode and "seq_len" in mode:
-        denom = max(len(GROUPING_MODES_ALLEL), 1)
-        mode_percentage = 1.0 / denom
+    mode_split = [t.strip() for t in (mode or "").split(",") if t.strip()]
+
+    for token in mode_split:
+        if "sample_size" in token:
+            denom = max(len(tree_modes_by_config.get(config, [])), 1)
+            mode_percentage *= 1.0 / denom
+        elif "seq_len" in token:
+            denom = max(len(GROUPING_MODES_ALLEL), 1)
+            mode_percentage *= 1.0 / denom
 
     # --- 4) extra Skalierung: größere sample size / seq len => etwas mehr RAM ---
     # Regex lokal (wie gewünscht)
@@ -569,21 +572,30 @@ def get_topfeatures_by_config(config, sim_group, feature_type):
         for classifier in CLASSIFIERS
     ]
 
+combinations_mode = {}
+for config in all_configs:
+    combinations_mode[config] = 
+        [
+            f"{tree_mode},{grouping_mode}"
+            for tree_mode in tree_modes_by_config[config]
+            for grouping_mode in GROUPING_MODES_ALLEL
+        ]
+
 
 ALL_TREE_TOPFEATURES = [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
     for config in all_configs
-    for mode in tree_modes_by_config[config]
+    for mode in combinations_mode[config]
     for sim_group in simulator_groups
 ] + [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
     for config in all_configs
-    for mode in tree_modes_by_config[config]
+    for mode in combinations_mode[config]
     for sim_group in simulator_groups
 ] + [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
     for config in all_configs
-    for mode in tree_modes_by_config[config]
+    for mode in combinations_mode[config]
     for sim_group in simulator_groups
     for classifier in CLASSIFIERS
 ]
@@ -592,17 +604,17 @@ ALL_TREE_TOPFEATURES = [
 ALL_ALLEL_TOPFEATURES = [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
     for config in all_configs
-    for mode in GROUPING_MODES_ALLEL
+    for mode in combinations_mode[config]
     for sim_group in simulator_groups
 ] + [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
     for config in all_configs
-    for mode in GROUPING_MODES_ALLEL
+    for mode in combinations_mode[config]
     for sim_group in simulator_groups
 ] + [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
     for config in all_configs
-    for mode in GROUPING_MODES_ALLEL
+    for mode in combinations_mode[config]
     for sim_group in simulator_groups
     for classifier in CLASSIFIERS
 ]

@@ -352,6 +352,10 @@ def run_feature_evaluation(
     plot_feature_performance(importance_dict, csv_file, simulator_group, chance_baseline=majority_prop)
 
 
+def csv_list(s: str) -> list[str]:
+    return [x.strip() for x in s.split(",") if x.strip()]
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Extract top features from simulation results."
@@ -387,10 +391,14 @@ def parse_args():
 
     parser.add_argument(
         "--grouped_by",
-        type=str,
-        choices=VALID_GROUPING_MODES,
-        default="single",
-        help=f"Grouping mode. Choices: {', '.join(VALID_GROUPING_MODES)} (default: single)",
+        type=csv_list,
+        default=["single"],
+        help=(
+            "Comma-separated list of grouping modes, e.g. "
+            "'precision_applied,recombination_skipped,sample_size500'. "
+            f"Base choices: {', '.join(VALID_GROUPING_MODES)} "
+            "(sample_sizeN / seq_lenN allowed)."
+        ),
     )
 
     return parser.parse_args()
@@ -412,20 +420,34 @@ def main():
     acc_factor = args.acc_factor
     simulator_group = args.simulators
     grouped_by = args.grouped_by
-    sample_size_group = 0
-    seq_len_group = 0
+    normalized_grouped_by = []
+    sample_size_group = None
+    seq_len_group = None
 
-    if "sample_size" in grouped_by:
-        sample_size_group = int(re.search(r"\d+", grouped_by).group())
+    for mode in grouped_by:
+        if mode.startswith("sample_size"):
+            m = re.search(r"\d+", mode)
+            if not m:
+                raise ValueError("sample_size mode needs a number")
+            sample_size_group = int(m.group())
+            normalized_grouped_by.append("sample_size")
 
-    if "seq_len" in grouped_by:
-        seq_len_group = int(re.search(r"\d+", grouped_by).group())
+        elif mode.startswith("seq_len"):
+            m = re.search(r"\d+", mode)
+            if not m:
+                raise ValueError("seq_len mode needs a number")
+            seq_len_group = int(m.group())
+            normalized_grouped_by.append("seq_len")
 
+        else:
+            normalized_grouped_by.append(mode)
+
+    grouped_by = set(normalized_grouped_by)
+    
     output_folder.mkdir(parents=True, exist_ok=True)
-
     csv_my_mode = []
 
-    if "single" == grouped_by or  "overall" == grouped_by:
+    if "single" in grouped_by or "overall" in grouped_by:
         csv_files = collect_csv_files(input_folder)
         run_feature_evaluation(
             simulator_group=simulator_group,
@@ -451,12 +473,14 @@ def main():
         sample_size = int(combo_params["sample_structure"][0])
         seq_len = int(combo_params["sequence_length"])
 
-        if ((usePrecision and grouped_by == "precision_applied") or
-            (not usePrecision and grouped_by == "precision_skipped") or
-            (recombination_rate > 0 and grouped_by == "recombination_applied") or
-            (recombination_rate == 0 and grouped_by == "recombination_skipped") or
-            ("sample_size" in grouped_by and sample_size == sample_size_group and usePrecision) or
-            ("seq_len" in grouped_by and seq_len == seq_len_group and usePrecision)):
+        if (
+            (("precision_applied" not in grouped_by) or usePrecision) and
+            (("precision_skipped" not in grouped_by) or (not usePrecision)) and
+            (("recombination_applied" not in grouped_by) or (recombination_rate > 0)) and
+            (("recombination_skipped" not in grouped_by) or (recombination_rate == 0)) and
+            (("sample_size" not in grouped_by) or (sample_size == sample_size_group and usePrecision)) and
+            (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
+        ):
             csv_my_mode += collect_csv_files(root_path)
 
     
