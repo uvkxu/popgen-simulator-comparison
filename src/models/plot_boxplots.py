@@ -210,11 +210,15 @@ def main():
     output_folder = args.output_folder
     selected_simulators = args.simulators
     grouped_by = args.grouped_by
-
     sample_size_group = 0
+    seq_len_group = 0
 
     if "sample_size" in grouped_by:
         sample_size_group = int(re.search(r"\d+", grouped_by).group())
+
+    if "seq_len" in grouped_by:
+        seq_len_group = int(re.search(r"\d+", grouped_by).group())
+
 
     output_folder.mkdir(parents=True, exist_ok=True)
 
@@ -240,13 +244,14 @@ def main():
         usePrecision = bool(combo_params.get("usePrecision"))
         recombination_rate = float(combo_params.get("recombination_rate") or 0)
         sample_size = int(combo_params["sample_structure"][0]) 
-        csv_files = collect_csv_files(root_path)
+        seq_len = int(combo_params["sequence_length"])
 
         if ((usePrecision and grouped_by == "precision_applied") or
             (not usePrecision and grouped_by == "precision_skipped") or
             (recombination_rate > 0 and grouped_by == "recombination_applied") or
             (recombination_rate == 0 and grouped_by == "recombination_skipped") or
-            ("sample_size" in grouped_by and sample_size == sample_size_group and usePrecision)):
+            ("sample_size" in grouped_by and sample_size == sample_size_group and usePrecision) or
+            ("seq_len" in grouped_by and seq_len == seq_len_group and usePrecision)):
             csv_my_mode += collect_csv_files(root_path)
 
     if not csv_my_mode:
