@@ -1,6 +1,7 @@
 num_replicates: 100
-sequence_length: 1000
+sequence_length: 10000
 mutation_rate: 2.36e-8
+population_size: 100000
 
 populations:
   - name: AFR

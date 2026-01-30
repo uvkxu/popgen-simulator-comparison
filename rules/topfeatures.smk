@@ -109,7 +109,7 @@ rule aggregate_tree_topfeatures_over_sample_sizes:
     shell:
         r"""
         scripts/run_with_errorlog.sh {params.err_file} \
-        python src/models/aggregate_all_features_by_sample_sizes.py \
+        python src/models/aggregate_all_features_by_sample_size.py \
             --base_dir {params.base_dir} \
             --group_string {wildcards.group_string} \
             --output_dir {params.out_dir}
