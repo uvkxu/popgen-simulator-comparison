@@ -574,12 +574,11 @@ def get_topfeatures_by_config(config, sim_group, feature_type):
 
 combinations_mode = {}
 for config in all_configs:
-    combinations_mode[config] = 
-        [
-            f"{tree_mode},{grouping_mode}"
-            for tree_mode in tree_modes_by_config[config]
-            for grouping_mode in GROUPING_MODES_ALLEL
-        ]
+    combinations_mode[config] = [
+        f"{tree_mode},{grouping_mode}"
+        for tree_mode in tree_modes_by_config[config]
+        for grouping_mode in GROUPING_MODES_ALLEL
+    ]
 
 
 ALL_TREE_TOPFEATURES = [
