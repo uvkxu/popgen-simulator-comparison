@@ -35,7 +35,7 @@ PIGOT_RHO_DIR = FEATURES_DIR / "pigot_rho"
 
 CLEAN_DIR = DATA_DIR / "cleaned"
 
-PLOTS_RESULTS_DIR = RESULTS_DIR / "plots"
+PLOTS_RESULTS_DIR = RESULTS_DIR / "plots_backwards"
 TOPFEATURES_RESULTS_DIR = RESULTS_DIR/ "top_features"
 
 ALLEL_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "allele"
@@ -52,7 +52,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["msms", "msprime", "ms", "slim"] #msms_ms behaves the same as just msms
+SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
 REPS = 50
 NUM_REPLICATES = 2
 PRECISION = 17
@@ -71,7 +71,7 @@ CLASSIFIERS = [XGB_STR, RF_STR, LR_STR]
 
 
 all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
-all_configs.remove("freedman_wolf")  # exclude for now due to long runtime
+# all_configs.remove("freedman_wolf")  # exclude for now due to long runtime
 
 VALID_GROUPING_MODES = [
     "precision_applied", "precision_skipped",
