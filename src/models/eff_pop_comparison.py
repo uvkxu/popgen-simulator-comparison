@@ -375,7 +375,7 @@ def main():
         csv_files = collect_csv_files(root_path)
 
         # grouping filter
-         if (
+        if (
             (("precision_applied" not in grouped_by) or usePrecision) and
             (("precision_skipped" not in grouped_by) or (not usePrecision)) and
             (("recombination_applied" not in grouped_by) or (recombination_rate > 0)) and
