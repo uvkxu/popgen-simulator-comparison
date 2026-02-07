@@ -326,6 +326,7 @@ def main():
     input_folder = args.input_folder
     output_folder = args.output_folder
     acc_factor = args.acc_factor
+    grouped_by = args.grouped_by
     simulator = args.simulator
     normalized_grouped_by = []
     sample_size_group = None
