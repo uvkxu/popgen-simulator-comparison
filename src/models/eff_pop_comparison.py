@@ -375,6 +375,8 @@ def main():
         usePrecision = bool(combo_params.get("usePrecision"))
         recombination_rate = float(combo_params.get("recombination_rate") or 0.0)
         effective_pop_size = int(combo_params.get("population_size"))
+        sample_size = int(combo_params["sample_structure"][0]) 
+        seq_len = int(combo_params["sequence_length"])
 
         csv_files = collect_csv_files(root_path)
 
