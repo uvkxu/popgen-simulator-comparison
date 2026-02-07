@@ -7,4 +7,4 @@ include: "rules/plots.smk"
 
 rule all:
     input:
-        CLEAN_INPUTS
+        EFF_CHECK_OUTPUT
