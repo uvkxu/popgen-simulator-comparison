@@ -7,6 +7,7 @@ import itertools
 from itertools import combinations
 import pandas as pd
 import math
+import re
 
 ROOT_DIR = Path(".")
 BIN_DIR = ROOT_DIR / "bin"
@@ -15,8 +16,8 @@ CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
-DATA_DIR = Path("/hits/fast/cme/kuchve/slim_eval_time/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/slim_eval_time/results")
+DATA_DIR = Path("/hits/fast/cme/kuchve/run3/data")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/run3/eff_size_check/")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -45,16 +46,15 @@ TREEFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "tree"
 
 
 SANITY_RESULTS_DIR = RESULTS_DIR / "sanity_checks"
+TREEPLOTS_RESULTS_DIR = RESULTS_DIR/ "treeplots"
 
 CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-# SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
-SIMULATORS = ["slim1", "slim2", "slim4", "slim5", "slim10", "slim20", "slim50", 
-"slim100", "slim200", "slim500", "slim1000", "msms", "msprime", "ms"]
-REPS = 1
-NUM_REPLICATES = 1
+SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
+REPS = 50
+NUM_REPLICATES = 2
 PRECISION = 17
 MAX_OVERALL_SAMPLES = 200
 
@@ -71,21 +71,21 @@ CLASSIFIERS = [XGB_STR, RF_STR, LR_STR]
 
 
 all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
-# all_own_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{OWN_CONFIG_DIR}/*.yaml")] # exclude for now due to long runtime
-all_configs.remove("freedman_wolf") # exclude due to long runtime and not possible to scale with slim
+all_configs.remove("lavretsky_ducks")  # exclude for now due to long runtime
+all_configs.remove("li_african3epoch")
 
-scale_factor_by_config = {
-    "browning_america": [1, 2, 5, 10],
-    "gutenkunst_ooa": [1, 10, 50, 100],
-    "jacobs_papuans": [1, 4, 5, 10, 20, 50],
-    "kamm_westerneurasia": [1, 2, 4, 5],
-    "lavretsky_ducks": [500, 1000],
-    "li_african3epoch": [500, 1000],
-    "locke_orangutan": [1, 2, 4, 10, 50, 100],
-    "one_population": [1, 2, 5, 10, 50],
-    "pawar_gorilla": [1, 5, 10, 20],
-    "zigzag": [1, 2, 5, 10, 50, 100, 500]
-}
+VALID_GROUPING_MODES = [
+    "precision_applied", "precision_skipped",
+    "recombination_applied", "recombination_skipped",
+    "overall", "single", 
+    "sample_size_4", "sample_size_8", "sample_size_16",
+    "sample_size_32", "sample_size_64", "sample_size_128",
+    "seq_len_1000", "seq_len_10000", "seq_len_100000", "seq_len_1000000"
+]
+GROUPING_MODES_TREE = ["sample_size_4", "sample_size_8", "sample_size_16",
+    "sample_size_32", "sample_size_64", "sample_size_128"]
+
+GROUPING_MODES_ALLEL = ["seq_len_1000", "seq_len_10000", "seq_len_100000", "seq_len_1000000"]
 
 def get_num_sampled_populations(config_path):
     num_pops = 0
@@ -97,35 +97,13 @@ def get_num_sampled_populations(config_path):
             num_pops += 1
     return num_pops
 
-def get_combinations(config_path):
+def get_combinations(config_path, variable_file):
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
-    '''
     vars_dict = parse_variable_file(variable_file)
     if get_num_sampled_populations(config_path) < 2:
         vars_dict.pop("population_sizes", None)
-    keys = list(vars_dict.keys())
-    combos = itertools.product(*vars_dict.values())
-    '''
-    num_pops = get_num_sampled_populations(config_path)
-    sample_size = 4
-    for s in [8, 16, 32, 64, 128]:
-        if s * num_pops > 200:
-            break
-        sample_size = s
-        
-
-    vars_dict = {
-        "sample_sizes": [sample_size],
-        "sequence_lengths": [1_000_000],
-        "recombination_rates": [0.0, 1e-8],
-        "usePrecision": [True]
-    }
-
-    if num_pops >= 2:
-        vars_dict["population_sizes"] = [100_000]
-
     keys = list(vars_dict.keys())
     combos = itertools.product(*vars_dict.values())
 
@@ -156,13 +134,16 @@ def format_combination_as_folder_name(combo):
     return "_".join(f"{k}-{v}" for k, v in combo.items())
 
 combinations_by_config = {}
+tree_modes_by_config = {}
 combo_folder_to_json = {}
 all_combo_folders = set()
 
 for config_name in all_configs:
     config_file = Path(CONFIG_DIR) / f"{config_name}.yaml"
-    keys, all_combos_by_config = get_combinations(config_file)
+    keys, all_combos_by_config = get_combinations(config_file, VARIABLE_FILE_PATH)
     num_populations = get_num_sampled_populations(config_file)
+
+    tree_modes_by_config[config_name] = []
     
     combos = []
     for values in all_combos_by_config:
@@ -175,6 +156,10 @@ for config_name in all_configs:
         if num_populations * combo.get("sample_sizes") > MAX_OVERALL_SAMPLES:
             continue
 
+        possible_mode = f"sample_size_{int(combo.get('sample_sizes'))}"
+        if possible_mode in GROUPING_MODES_TREE:
+            tree_modes_by_config[config_name].append(possible_mode)
+
         combo_folder = format_combination_as_folder_name(combo)
         all_combo_folders.add(combo_folder)
 
@@ -182,6 +167,11 @@ for config_name in all_configs:
         combo_folder_to_json[combo_folder] = json.dumps(combo)
     
     combinations_by_config[config_name] = combos
+
+    for mode in GROUPING_MODES_TREE:
+        if not "sample_size" in mode:
+            tree_modes_by_config[config_name].append(mode)
+
 
 def estimate_mem_mb(config, combo, func, simulator=None):
     """
@@ -295,8 +285,15 @@ def estimate_mem_mb(config, combo, func, simulator=None):
     return 100
 
 
+# global cache
+size_all_csv = {}
+
+
 def estimate_mem_mb_classification(
     input_folder,
+    config,
+    group,
+    mode,
     dtype_bytes=4,          # float32
     pandas_factor=2.0,
     split_factor=1.5,
@@ -304,99 +301,111 @@ def estimate_mem_mb_classification(
     safety_factor=1.3,
     min_mem_mb=512
 ):
+    """
+    Schnelle Approximation des RAM-Bedarfs (MB) für Classification:
+    - scannt alle CSVs unter input_folder nur EINMAL (caching in size_all_csv)
+    - skaliert dann pro Job über group-Anteil + mode-Anteil + (milde) Größe von sample_size/seq_len
+
+    Erwartet, dass SIMULATORS, tree_modes_by_config, GROUPING_MODES_ALLEL,
+    sowie ALLEL_FEATURES_DIR / TREE_FEATURES_DIR global existieren.
+    """
+
     input_folder = Path(input_folder)
     if not input_folder.exists():
         raise FileNotFoundError(f"Input directory {input_folder} does not exist.")
-    csv_files = list(input_folder.rglob("*.csv"))
 
-    total_rows = 0
-    n_features = None
+    # --- 1) Basisschätzung für "alles unter input_folder" (einmalig, gecacht) ---
+    if input_folder not in size_all_csv:
+        csv_files = list(input_folder.rglob("*.csv"))
+        if not csv_files:
+            size_all_csv[input_folder] = min_mem_mb
+        else:
+            total_rows = 0
+            n_cols = None
 
-    for csv in csv_files:
-        csv = Path(csv)
+            for csv_file in csv_files:
+                # Zeilen zählen (ohne Header)
+                try:
+                    with csv_file.open("r") as f:
+                        rows = sum(1 for _ in f) - 1
+                except OSError:
+                    continue
 
-        # --- number of rows (cheap) ---
-        with csv.open("r") as f:
-            rows = sum(1 for _ in f) - 1
-        total_rows += max(rows, 0)
+                rows = max(rows, 0)
+                total_rows += rows
 
-        # --- number of columns (read only header) ---
-        if n_features is None:
-            df_head = pd.read_csv(csv, nrows=1)
-            n_features = len(df_head.columns) - 1  # minus 'simulator'
+                # Spalten nur einmal aus einem nicht-leeren File bestimmen
+                if n_cols is None and rows > 0:
+                    try:
+                        df_head = pd.read_csv(csv_file, nrows=1)
+                        n_cols = len(df_head.columns)  # dep var NICHT abziehen (wie gewünscht)
+                    except Exception:
+                        n_cols = 0
 
-    if total_rows <= 0 or n_features <= 0:
-        return min_mem_mb
+            if total_rows <= 0 or not n_cols or n_cols <= 0:
+                size_all_csv[input_folder] = min_mem_mb
+            else:
+                base_bytes = total_rows * n_cols * dtype_bytes
+                total_bytes = (
+                    base_bytes
+                    * pandas_factor
+                    * split_factor
+                    * model_factor
+                    * safety_factor
+                )
+                mem_mb = math.ceil(total_bytes / 1024**2)
+                size_all_csv[input_folder] = max(mem_mb, min_mem_mb)
 
-    # --- base data size ---
-    base_bytes = total_rows * n_features * dtype_bytes
+    base_mem_mb = size_all_csv[input_folder]
 
-    # --- apply overhead factors ---
-    total_bytes = (
-        base_bytes
-        * pandas_factor
-        * split_factor
-        * model_factor
-        * safety_factor
-    )
+    # --- 2) group_percentage: Anteil Simulatoren im aktuellen group-string ---
+    if isinstance(group, str):
+        group_list = [g for g in group.split("_") if g]
+    else:
+        group_list = list(group)
 
-    mem_mb = math.ceil(total_bytes / 1024**2)
+    group_percentage = len(group_list) / max(len(SIMULATORS), 1)
+    group_percentage = max(group_percentage, 1.0 / max(len(SIMULATORS), 1))  # niemals 0
 
-    return max(mem_mb, min_mem_mb)
+    # --- 3) mode_percentage: grob wie viele Modes partitionieren den Datensatz ---
+    mode_percentage = 1.0
+    mode_split = [t.strip() for t in (mode or "").split(",") if t.strip()]
 
+    for token in mode_split:
+        if "sample_size" in token:
+            denom = max(len(tree_modes_by_config.get(config, [])), 1)
+            mode_percentage *= 1.0 / denom
+        elif "seq_len" in token:
+            denom = max(len(GROUPING_MODES_ALLEL), 1)
+            mode_percentage *= 1.0 / denom
 
-def estimate_mem_mb_plot_features(
-    input_folder,
-    dtype_bytes=4,           # float32
-    pandas_factor=2.0,       # Overhead für DataFrame
-    plot_factor=1.2,         # Boxplots/Histogramme temporär im Speicher
-    safety_factor=1.3,       # Sicherheitspuffer
-    min_mem_mb=512
-):
-    """
-    Schätzt den Speicherbedarf (MB) für das Plot-Features-Skript.
-    Lädt keine CSVs, sondern nutzt Zeilen- und Spaltenzählung.
-    """
-    input_folder = Path(input_folder)
-    if not input_folder.exists():
-        raise FileNotFoundError(f"Input directory {input_folder} does not exist.")
-    
-    csv_files = list(input_folder.rglob("*.csv"))
-    total_rows = 0
-    n_features = None
+    # --- 4) extra Skalierung: größere sample size / seq len => etwas mehr RAM ---
+    # Regex lokal (wie gewünscht)
+    re_sample_size = re.compile(r"sample_size_(\d+)")
+    re_seq_len = re.compile(r"seq_len_(\d+)")
 
-    for csv_file in csv_files:
-        # --- Anzahl Zeilen (ohne Header) ---
-        with csv_file.open("r") as f:
-            rows = sum(1 for _ in f) - 1
-            total_rows += max(rows, 0)
+    scale = 1.0
 
-        # --- Anzahl Spalten (nur Header lesen) ---
-        if n_features is None and rows > 0:
-            df_head = pd.read_csv(csv_file, nrows=1)
-            n_features = len(df_head.columns)
+    m = re_sample_size.search(mode or "")
+    if m:
+        n_val = int(m.group(1))
+        # baseline bei 4; wächst mild mit log2(n/4)
+        scale *= (1.0 + 0.10 * max(math.log2(n_val / 4), 0.0))
 
-    if total_rows <= 0 or n_features <= 0:
-        return min_mem_mb
+    m = re_seq_len.search(mode or "")
+    if m:
+        L_val = int(m.group(1))
+        # baseline bei 1000; wächst mild mit log10(L/1000)
+        scale *= (1.0 + 0.08 * max(math.log10(L_val / 1000), 0.0))
 
-    # --- Basisspeicher in Bytes ---
-    base_bytes = total_rows * n_features * dtype_bytes
+    # --- 5) Final ---
+    est_mb = base_mem_mb * group_percentage * mode_percentage * scale
+    return max(min_mem_mb, int(math.ceil(est_mb)))
 
-    # --- Multiplikatoren für pandas, Plot-Overhead und Sicherheit ---
-    total_bytes = base_bytes * pandas_factor * plot_factor * safety_factor
-
-    mem_mb = math.ceil(total_bytes / 1024**2)
-    return max(mem_mb, min_mem_mb)
 
 
 # Generate all feature file names for each simulator group
 # and create a mapping from feature file to the corresponding simulator group
-VALID_GROUPING_MODES = [
-    "precision_applied", "precision_skipped",
-    "recombination_applied", "recombination_skipped",
-    "overall", "single"
-]
-GROUPING_MODES = ["recombination_applied", "recombination_skipped"]
 
 def format_feature_ranking_file(group):
     return f"feature_ranking_{'_'.join(group)}_with_summary.csv"
@@ -407,35 +416,16 @@ def format_feature_ranking_barplot(group):
 def format_classifier_importance_plot(classifier, group):
     return f"feature_importance_{'_'.join(group)}_{classifier}.png"
             
-simulator_groups = [combo for combo in combinations(SIMULATORS, 2) if "slim1" in combo]
+# simulator_groups = list(combinations(SIMULATORS, 2))
+simulator_groups = []
+simulator_groups.append(tuple(SIMULATORS))
+simulator_groups = list(dict.fromkeys(simulator_groups))
+# simulator_groups.append(("msms", "msprime", "ms"))
 
-filtered_groups_by_config = {}
-
-for config_name in scale_factor_by_config:
-    allowed_factors = scale_factor_by_config[config_name]
-    
-    # Filter simulator_groups: nur Tupel, die beide Zahlen in allowed_factors haben
-    filtered_groups = []
-    for sim1, sim2 in simulator_groups:
-        # Zahlen aus den slim-Namen extrahieren
-        num1 = int(sim1.replace("slim", "")) if "slim" in sim1 else None
-        num2 = int(sim2.replace("slim", "")) if "slim" in sim2 else None
-        
-        # Prüfen, ob beide Zahlen in allowed_factors sind
-        if (num1 in allowed_factors if num1 is not None else True) and \
-           (num2 in allowed_factors if num2 is not None else True):
-            filtered_groups.append((sim1, sim2))
-    
-    filtered_groups_by_config[config_name] = filtered_groups
-
-
-def get_topfeatures_input(config, mode, feature_type, group=None, combo=None):
+def get_topfeatures_input(config, group, mode, feature_type, combo=None):
     result = []
     if type(group) is str:
         group = group.split("_")
-
-    if group is None:
-        group = list({sim for tup in filtered_groups_by_config[config] for sim in tup})
 
     if mode not in VALID_GROUPING_MODES:
         raise ValueError(f"Invalid mode: {mode}")
@@ -463,6 +453,7 @@ def get_topfeatures_input(config, mode, feature_type, group=None, combo=None):
         combo_string = combo_folder_to_json[combo_folder]
         combo = json.loads(combo_string)
         rate = float(combo.get("recombination_rates"))
+        sample_size = int(combo.get("sample_sizes")) 
         has_recombination = rate is not None and rate > 0
 
         if mode == "precision_applied" and bool(combo["usePrecision"]):
@@ -475,6 +466,10 @@ def get_topfeatures_input(config, mode, feature_type, group=None, combo=None):
             result.append(combo_folder)
         elif mode == "overall":
             result.append(combo_folder)
+        elif "sample_size" in mode:
+            sample_size_group = int(re.search(r"\d+", mode).group())
+            if sample_size_group == sample_size:
+                result.append(combo_folder)
     
     return [
         f"{root_folder}/{config}/{combo}/rep{i+1}/{FILE_FORMATS[format_file].format(SIM=sim)}"
@@ -504,10 +499,9 @@ RAW_INPUTS = [
     f"{RAW_DATA_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
     for config in all_configs
     for combo in combinations_by_config[config]
-    for sim in ["ms", "msprime", "msms"] + ["slim" + str(factor) for factor in scale_factor_by_config[config]]
+    for sim in SIMULATORS
     for i in range(REPS)
 ]
-
 
 ALL_COMBO_YAML = [
     f"{RAW_DATA_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
@@ -519,7 +513,7 @@ CLEAN_INPUTS = [
     f"{CLEAN_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['cleaned'].format(SIM=sim)}"
     for config in all_configs
     for combo in combinations_by_config[config]
-    for sim in ["ms", "msprime", "msms"] + ["slim" + str(factor) for factor in scale_factor_by_config[config]]
+    for sim in SIMULATORS
     for i in range(REPS)
 ]
 
@@ -527,32 +521,81 @@ ALL_FEATURES = [
     f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
     for config in all_configs
     for combo in combinations_by_config[config]
-    for sim in ["slim" + str(factor) for factor in scale_factor_by_config[config]]
+    for sim in SIMULATORS
     for i in range(REPS)
 ] + [
     f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
     for config in all_configs
     for combo in combinations_by_config[config]
-    for sim in ["slim" + str(factor) for factor in scale_factor_by_config[config]]
+    for sim in SIMULATORS
     for i in range(REPS)
 ]
+
+ALL_SLIM_FEATURES = [
+    f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for sim in ["slim"]
+    for i in range(REPS)
+] + [
+    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for sim in ["slim"]
+    for i in range(REPS)
+]
+
+
+def get_topfeatures_by_config(config, sim_group, feature_type):
+    if feature_type == "tree":
+        root_folder = TREE_TOPFEATURES_DIR
+        modes = tree_modes_by_config[config]
+    elif feature_type == "allel":
+        root_folder = ALLEL_TOPFEATURES_DIR
+        modes = GROUPING_MODES_ALLEL
+    else:
+        raise ValueError(f"Invalid feature type: {feature_type}")
+
+    if type(sim_group) is str:
+        sim_group = sim_group.split("_")
+
+
+    return [
+        f"{root_folder}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
+        for mode in modes
+    ] + [
+        f"{root_folder}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
+        for mode in modes
+    ] + [
+        f"{root_folder}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
+        for mode in modes
+        for classifier in CLASSIFIERS
+    ]
+
+combinations_mode = {}
+for config in all_configs:
+    combinations_mode[config] = [
+        f"{tree_mode},{grouping_mode}"
+        for tree_mode in tree_modes_by_config[config]
+        for grouping_mode in GROUPING_MODES_ALLEL
+    ]
 
 
 ALL_TREE_TOPFEATURES = [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
     for config in all_configs
-    for mode in GROUPING_MODES
-    for sim_group in filtered_groups_by_config[config]
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
 ] + [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
     for config in all_configs
-    for mode in GROUPING_MODES
-    for sim_group in filtered_groups_by_config[config]
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
 ] + [
     f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
     for config in all_configs
-    for mode in GROUPING_MODES
-    for sim_group in filtered_groups_by_config[config]
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
     for classifier in CLASSIFIERS
 ]
 
@@ -560,180 +603,76 @@ ALL_TREE_TOPFEATURES = [
 ALL_ALLEL_TOPFEATURES = [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
     for config in all_configs
-    for mode in GROUPING_MODES
-    for sim_group in filtered_groups_by_config[config]
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
 ] + [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
     for config in all_configs
-    for mode in GROUPING_MODES
-    for sim_group in filtered_groups_by_config[config]
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
 ] + [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
     for config in all_configs
-    for mode in GROUPING_MODES
-    for sim_group in filtered_groups_by_config[config]
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
     for classifier in CLASSIFIERS
 ]
-
 
 ALL_PLOTS = [
     f"{TREEFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
     for config in all_configs
-    for mode in GROUPING_MODES
+    for mode in tree_modes_by_config[config]
 ] + [
     f"{ALLELFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
     for config in all_configs
-    for mode in GROUPING_MODES
-]
-
-COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES + ALL_PLOTS
-
-
-
-
-
-
-
-
-CLEAN_BROWNING = [
-    f"{CLEAN_DIR}/browning_america/{combo}/rep{i+1}/{FILE_FORMATS['cleaned'].format(SIM=sim)}"
-    for config in ["browning_america"]
-    for combo in combinations_by_config[config]
-    for sim in ["slim50"]
-    for i in range(REPS)
-]
-
-BIGGEST_SIMULATION = [
-    f"{RAW_DATA_DIR}/jacobs_papuans/{combo}/rep1/{FILE_FORMATS['raw'].format(SIM=sim)}"
-    for config in ["jacobs_papuans"]
-    for combo in combinations_by_config[config]
-    for sim in ["msms"]
+    for mode in GROUPING_MODES_ALLEL
 ]
 
 
-RAW_BROWNING = [
-    f"{RAW_DATA_DIR}/browning_america/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
-    for config in ["browning_america"]
-    for combo in combinations_by_config[config]
-    for sim in ["ms", "msprime", "msms"] #["slim" + str(factor) for factor in scale_factor_by_config[config]]
-    for i in range(REPS)
+COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES
+
+
+MEAN_SAMPLE_SIZE_OUTPUT_TREE = [
+    path
+    for config in all_configs
+    for group in simulator_groups
+    for path in [
+        f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/mean_aggregated_{'_'.join(group)}_with_summary.csv",
+        f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_by_sample_size.csv",
+        f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_vs_sample_size.png"
+    ]
+]
+
+MEAN_SAMPLE_SIZE_OUTPUT_ALLEL = [
+    path
+    for config in all_configs
+    for group in simulator_groups
+    for path in [
+        f"{ALLEL_TOPFEATURES_DIR}/{config}/aggregated/mean_aggregated_{'_'.join(group)}_with_summary.csv",
+        f"{ALLEL_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_by_seq_len.csv",
+        f"{ALLEL_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_vs_seq_len.png"
+    ]
 ]
 
 
-RAW_ZIGZAG_MSMS = [
+RAW_SINGLE = [
     f"{RAW_DATA_DIR}/zigzag/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
     for combo in combinations_by_config["zigzag"]
-    for sim in ["msms"]
-    for i in range(REPS)
-]
-
-
-ALLEL_FEATURES_ZIGZAG = [
-    f"{ALLEL_FEATURES_DIR}/zigzag/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
-    for combo in combinations_by_config["zigzag"]
     for sim in SIMULATORS
     for i in range(REPS)
 ]
 
-TREE_FEATURES_BROWNING = [
-    f"{TREE_FEATURES_DIR}/browning_america/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
-    for combo in combinations_by_config["browning_america"]
-    for sim in ["slim50"]
-    for i in range(REPS)
-]
+EXCLUDE_CONFIGS = {"zigzag", "one_population"}
 
-
-TREE_FEATURES_JACOBS = [
-    f"{TREE_FEATURES_DIR}/jacobs_papuans/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
-    for combo in combinations_by_config["jacobs_papuans"]
+EFF_CHECK_OUTPUT = [
+    f"{RESULTS_DIR}/{sim}/{typ}/{config}/{mode}/{fname}"
     for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-ALLEL_FEATURES_JACOBS = [
-    f"{ALLEL_FEATURES_DIR}/jacobs_papuans/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
-    for combo in combinations_by_config["jacobs_papuans"]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-ALLEL_FEATURES_BROWNING = [
-    f"{ALLEL_FEATURES_DIR}/browning_america/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
-    for combo in combinations_by_config["browning_america"]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-
-
-TOPFEATURES_TREE_BROWNING = [
-    f"{TREE_TOPFEATURES_DIR}/browning_america/{mode}/{format_feature_ranking_file(sim_group)}"
-    for mode in ["precision_applied", "precision_skipped", "recombination_applied", "recombination_skipped", "overall"]
-    for sim_group in simulator_groups
-] + [
-    f"{TREE_TOPFEATURES_DIR}/browning_america/{mode}/{format_feature_ranking_barplot(sim_group)}"
-    for mode in ["precision_applied", "precision_skipped", "recombination_applied", "recombination_skipped", "overall"]
-    for sim_group in simulator_groups
-] + [
-    f"{TREE_TOPFEATURES_DIR}/browning_america/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for mode in ["precision_applied", "precision_skipped", "recombination_applied", "recombination_skipped", "overall"]
-    for sim_group in simulator_groups
-    for classifier in CLASSIFIERS
-]
-
-
-TOPFEATURES_ALLEL_BROWNING = [
-    f"{ALLEL_TOPFEATURES_DIR}/browning_america/{mode}/{format_feature_ranking_file(sim_group)}"
-    for mode in ["precision_applied", "precision_skipped"]
-    for sim_group in simulator_groups
-] + [
-    f"{ALLEL_TOPFEATURES_DIR}/browning_america/{mode}/{format_feature_ranking_barplot(sim_group)}"
-    for mode in ["precision_applied", "precision_skipped"]
-    for sim_group in simulator_groups
-] + [
-    f"{ALLEL_TOPFEATURES_DIR}/browning_america/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for mode in ["precision_applied", "precision_skipped"]
-    for sim_group in simulator_groups
-    for classifier in CLASSIFIERS
-]
-
-TOPFEATURES_TREE_JACOBS = [
-    f"{TREE_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_feature_ranking_file(sim_group)}"
-    for mode in GROUPING_MODES
-    for sim_group in simulator_groups
-] + [
-    f"{TREE_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_feature_ranking_barplot(sim_group)}"
-    for mode in GROUPING_MODES
-    for sim_group in simulator_groups
-] + [
-    f"{TREE_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for mode in GROUPING_MODES
-    for sim_group in simulator_groups
-    for classifier in CLASSIFIERS
-]
-
-
-TOPFEATURES_ALLEL_JACOBS = [
-    f"{ALLEL_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_feature_ranking_file(sim_group)}"
-    for mode in GROUPING_MODES
-    for sim_group in simulator_groups
-] + [
-    f"{ALLEL_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_feature_ranking_barplot(sim_group)}"
-    for mode in GROUPING_MODES
-    for sim_group in simulator_groups
-] + [
-    f"{ALLEL_TOPFEATURES_DIR}/jacobs_papuans/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for mode in GROUPING_MODES
-    for sim_group in simulator_groups
-    for classifier in CLASSIFIERS
-]
-
-ALL_PLOTS_JACOBS = [
-    f"{TREEFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
-    for config in ["jacobs_papuans"]
-    for mode in GROUPING_MODES
-] + [
-    f"{ALLELFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
-    for config in ["jacobs_papuans"]
-    for mode in GROUPING_MODES
+    for typ in ("tree", "allele")
+    for config in all_configs
+    if config not in EXCLUDE_CONFIGS
+    for mode in combinations_mode[config]
+    for fname in (
+        f"check_eff_pop_size_{sim}_summary.csv",
+        f"check_eff_pop_size_{sim}_plot.png",
+    )
 ]
