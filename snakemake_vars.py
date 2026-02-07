@@ -16,8 +16,8 @@ CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
-DATA_DIR = Path("/hits/fast/cme/kuchve/run3/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/run3/eff_size_check/")
+DATA_DIR = Path("/hits/fast/cme/kuchve/run2/data")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/run2/eff_size_check/")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
