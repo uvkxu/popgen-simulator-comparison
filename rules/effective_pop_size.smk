@@ -15,7 +15,7 @@ rule compute_tree_check_Ne:
     shell:
         """
         scripts/run_with_errorlog.sh {params.err_file} \
-        python src/models/get_top_features.py \
+        python src/models/eff_pop_comparison.py \
         --input_folder {params.input_dir} \
         --output_folder {params.output_dir} \
         --simulator {wildcards.simulator} \
@@ -36,7 +36,7 @@ rule compute_allele_topfeatures_check_Ne:
     shell:
         """
         scripts/run_with_errorlog.sh {params.err_file} \
-        python src/models/get_top_features.py \
+        python src/models/eff_pop_comparison.py \
         --input_folder {params.input_dir} \
         --output_folder {params.output_dir} \
         --simulator {wildcards.simulator} \

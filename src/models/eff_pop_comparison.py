@@ -22,7 +22,7 @@ sys.path.append(PROJECT_ROOT)
 UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(UTILS_ROOT)
 
-from snakemake_vars import XGB_STR, RF_STR, LR_STR, CLASSIFIERS
+from snakemake_vars import VALID_GROUPING_MODES, XGB_STR, RF_STR, LR_STR, CLASSIFIERS
 from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
 
@@ -305,8 +305,14 @@ def parse_args():
     parser.add_argument("--simulator", type=str, default=None, help="Simulator name to filter on (required)")
     parser.add_argument(
         "--grouped_by",
-        type=str,
-        default="single",
+        type=csv_list,
+        default=["single"],
+        help=(
+            "Comma-separated list of grouping modes, e.g. "
+            "'precision_applied,recombination_skipped,sample_size500'. "
+            f"Base choices: {', '.join(VALID_GROUPING_MODES)} "
+            "(sample_sizeN / seq_lenN allowed)."
+        ),
     )
 
     return parser.parse_args()
@@ -319,7 +325,29 @@ def main():
     output_folder = args.output_folder
     acc_factor = args.acc_factor
     simulator = args.simulator
-    grouped_by = args.grouped_by
+    normalized_grouped_by = []
+    sample_size_group = None
+    seq_len_group = None
+
+    for mode in grouped_by:
+        if mode.startswith("sample_size"):
+            m = re.search(r"\d+", mode)
+            if not m:
+                raise ValueError("sample_size mode needs a number")
+            sample_size_group = int(m.group())
+            normalized_grouped_by.append("sample_size")
+
+        elif mode.startswith("seq_len"):
+            m = re.search(r"\d+", mode)
+            if not m:
+                raise ValueError("seq_len mode needs a number")
+            seq_len_group = int(m.group())
+            normalized_grouped_by.append("seq_len")
+
+        else:
+            normalized_grouped_by.append(mode)
+
+    grouped_by = set(normalized_grouped_by)
 
     if simulator is None:
         raise ValueError("--simulator must be provided to filter CSV files by simulator.")
@@ -347,13 +375,13 @@ def main():
         csv_files = collect_csv_files(root_path)
 
         # grouping filter
-        if (
-            (usePrecision and grouped_by == "precision_applied")
-            or ((not usePrecision) and grouped_by == "precision_skipped")
-            or (recombination_rate > 0 and grouped_by == "recombination_applied")
-            or (recombination_rate == 0 and grouped_by == "recombination_skipped")
-            or (usePrecision and grouped_by == "overall")
-            or (grouped_by == "single")
+         if (
+            (("precision_applied" not in grouped_by) or usePrecision) and
+            (("precision_skipped" not in grouped_by) or (not usePrecision)) and
+            (("recombination_applied" not in grouped_by) or (recombination_rate > 0)) and
+            (("recombination_skipped" not in grouped_by) or (recombination_rate == 0)) and
+            (("sample_size" not in grouped_by) or (sample_size == sample_size_group and usePrecision)) and
+            (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
         ):
             # simulator filter
             csv_files = [f for f in csv_files if detect_simulator_from_yaml(f) == simulator]
