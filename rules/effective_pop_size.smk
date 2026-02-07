@@ -2,7 +2,7 @@ include: "../snakemake_vars.py"
 
 
     
-rule compute_tree_topfeatures_grouped_by_mode:
+rule compute_tree_check_Ne:
     output:
         f"{RESULTS_DIR}/{{simulator}}/tree/{{config}}/{{mode}}/check_eff_pop_size_{{simulator}}_summary.csv",
         f"{RESULTS_DIR}/{{simulator}}/tree/{{config}}/{{mode}}/check_eff_pop_size_{{simulator}}_plot.png",
@@ -23,7 +23,7 @@ rule compute_tree_topfeatures_grouped_by_mode:
         """
 
 
-rule compute_allele_topfeatures_grouped_by_mode:
+rule compute_allele_topfeatures_check_Ne:
     output:
         f"{RESULTS_DIR}/{{simulator}}/allele/{{config}}/{{mode}}/check_eff_pop_size_{{simulator}}_summary.csv",
         f"{RESULTS_DIR}/{{simulator}}/allele/{{config}}/{{mode}}/check_eff_pop_size_{{simulator}}_plot.png",
