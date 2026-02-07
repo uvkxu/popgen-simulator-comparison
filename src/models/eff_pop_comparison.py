@@ -295,6 +295,8 @@ def run_feature_evaluation(simulator, csv_files_by_ne, output_dir, acc_factor=1.
 
     plot_feature_performance(csv_file, simulator_name=simulator, chance_baseline=majority_prop)
 
+def csv_list(s: str) -> list[str]:
+    return [x.strip() for x in s.split(",") if x.strip()]
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Extract top features from simulation results.")
