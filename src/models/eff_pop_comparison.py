@@ -22,7 +22,7 @@ sys.path.append(PROJECT_ROOT)
 UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(UTILS_ROOT)
 
-from snakemake_vars import VALID_GROUPING_MODES, XGB_STR, RF_STR, LR_STR, CLASSIFIERS
+from snakemake_vars import XGB_STR, RF_STR, LR_STR, CLASSIFIERS
 from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
 
@@ -306,9 +306,7 @@ def parse_args():
     parser.add_argument(
         "--grouped_by",
         type=str,
-        choices=VALID_GROUPING_MODES,
         default="single",
-        help=f"Grouping mode. Choices: {', '.join(VALID_GROUPING_MODES)} (default: single)",
     )
 
     return parser.parse_args()
