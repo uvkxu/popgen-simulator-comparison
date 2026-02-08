@@ -10,6 +10,11 @@ calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
     if (weighted) {
         stats <- list()
 
+        stats$pigot_rho <- tryCatch(
+                                as.numeric(calc_pigot_rho(phylo)),
+                                error = function(e) NA_real_
+                              )
+
         stats$zero_branch_count <- sum(phylo$edge.length == 0)
 
         stats$sackin             <- try_stat(phylo, treestats::sackin,
@@ -29,7 +34,6 @@ calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
 
         stats$crown_age          <- try_stat(phylo, treestats::crown_age)
         stats$tree_height        <- try_stat(phylo, treestats::tree_height)
-        stats$pigot_rho          <- try_stat(phylo, treestats::pigot_rho)
 
         stats$number_of_lineages <- try_stat(phylo, treestats::number_of_lineages)
         stats$phylogenetic_div   <- try_stat(phylo, treestats::phylogenetic_diversity)
@@ -239,7 +243,6 @@ calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
         stats <- list()
 
         stats$tree_height_uw        <- try_stat(phylo, treestats::tree_height)
-        stats$pigot_rho_uw          <- try_stat(phylo, treestats::pigot_rho)
 
         stats$num_branches   <- try_stat(phylo, treestats::phylogenetic_diversity)
 
@@ -316,23 +319,6 @@ calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
 
         stats$treeness_uw <- try_stat(phylo, treestats::treeness)
 
-        # --- Laplace-Features (unweighted) ---
-        lap_stats <- tryCatch(
-            stats_laplace(phylo, weighted = FALSE),
-            error = function(e) data.frame(
-                lap_max_uw = NA,
-                lap_fiedler_uw = NA,
-                lap_var_uw = NA,
-                lap_skew_uw = NA,
-                lap_mean_uw = NA,
-                lap_kurt_uw = NA,
-                lap_second_min_uw = NA,
-                lap_entropy_uw = NA,
-                lap_sum_uw = NA
-            )
-        )
-        stats <- c(stats, as.list(lap_stats))
-
         stats <- unlist(stats)
         stats <- stats[order(names(stats))]
 
@@ -389,12 +375,6 @@ if (!dir.exists(output_dir)) {
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 }
 
-# --- Copy logic (early exit) ---
-if (!is.na(copy_file) && file.exists(copy_file)) {
-  file.copy(from = copy_file, to = output_file, overwrite = TRUE)
-  message("Copied existing file ", copy_file, " -> ", output_file)
-  quit(save = "no", status = 0)
-}
 
 combo_params <- yaml::read_yaml(combo_yaml)
 required <- c("sequence_length")

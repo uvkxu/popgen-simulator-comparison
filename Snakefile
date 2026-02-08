@@ -8,4 +8,4 @@ include: "rules/effective_pop_size.smk"
 
 rule all:
     input:
-        EFF_CHECK_OUTPUT
+        COMPLETE_OUTPUTS
