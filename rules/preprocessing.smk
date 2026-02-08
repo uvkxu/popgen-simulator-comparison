@@ -58,14 +58,16 @@ rule compute_tree_features_single_file:
     output:
         treestats = f"{TREE_FEATURES_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_tree_features.csv"
     params:
-        err_file = lambda w: f"{TREE_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
+        err_file = lambda w: f"{TREE_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
+        copy_tree_file= lambda w: f"{COPY_TREE_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_tree_features.csv",
+        copy_clean_file= lambda w: f"{COPY_CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_cleaned_output.txt"
     conda:
         "../envs/treestats-env.yaml"
     shell:
         """
         scripts/run_with_errorlog.sh {params.err_file} \
         Rscript src/preprocessing/calc_treestatistics.R \
-            {input.cleaned} {output.treestats} {input.combo_yaml}
+            {input.cleaned} {output.treestats} {input.combo_yaml} {params.copy_tree_file} {params.copy_clean_file}
         """
 
 

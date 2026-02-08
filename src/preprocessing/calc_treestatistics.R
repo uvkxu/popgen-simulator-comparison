@@ -358,7 +358,8 @@ if (length(args) < 3) {
 input_file  <- args[1]
 output_file <- args[2]
 combo_yaml  <- args[3]
-copy_file   <- if (length(args) >= 4) args[4] else NA_character_
+copy_tree_file   <- if (length(args) >= 4) args[4] else NA_character_
+copy_clean_file   <- if (length(args) >= 5) args[5] else NA_character_
 
 # --- Checks ---
 if (!file.exists(input_file)) {
@@ -375,6 +376,77 @@ if (!dir.exists(output_dir)) {
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 }
 
+# ------------------------------------------------------------
+# FAST PATH: patch pigot_rho in an existing feature CSV
+# ------------------------------------------------------------
+if (!is.na(copy_tree_file) && !is.na(copy_clean_file) &&
+    file.exists(copy_tree_file) && file.exists(copy_clean_file)) {
+
+  message("🔁 Patch mode: replacing pigot_rho in existing CSV")
+  message("  copy_tree_file: ", copy_tree_file)
+  message("  copy_clean_file : ", copy_clean_file)
+
+  # 1) Load existing CSV
+  df_feat <- read.csv(copy_tree_file, stringsAsFactors = FALSE, check.names = FALSE)
+
+  if (!("pigot_rho" %in% colnames(df_feat))) {
+    stop("Column 'pigot_rho' not found in copy_tree_file: ", copy_tree_file)
+  }
+  # --- DROP pigot_rho_uw if present ---
+  if ("pigot_rho_uw" %in% colnames(df_feat)) {
+    df_feat$pigot_rho_uw <- NULL
+    message("🗑️ Removed column: pigot_rho_uw")
+  }
+  # 2) Recompute pigot_rho per tree from raw tree file in the SAME order
+  is_tree_line <- function(line) {
+    grepl("\\(", line) & grepl(";+", line) &
+      !grepl("^\\s*//", line) &
+      !grepl("^\\s*segsites", line, ignore.case = TRUE) &
+      !grepl("^\\s*positions", line, ignore.case = TRUE)
+  }
+
+  clean_tree_line <- function(line) {
+    trimws(sub(";+$", ";", line))
+  }
+
+  new_rho <- numeric(0)
+  skipped <- 0L
+
+  con2 <- file(copy_clean_file, open = "r")
+  on.exit(close(con2), add = TRUE)
+
+  i <- 0L
+  while (length(line <- readLines(con2, n = 1, warn = FALSE)) > 0) {
+    if (!is_tree_line(line)) next
+    line <- clean_tree_line(line)
+
+    tr <- tryCatch(ape::read.tree(text = line), error = function(e) NULL)
+    if (is.null(tr)) {
+      skipped <- skipped + 1L
+      next
+    }
+
+    rho_val <- tryCatch(as.numeric(calc_pigot_rho(tr)), error = function(e) NA_real_)
+    new_rho <- c(new_rho, rho_val)
+  }
+
+  # 3) Validate row counts
+  if (length(new_rho) != nrow(df_feat)) {
+    stop(
+      "Row mismatch: computed pigot_rho for ", length(new_rho),
+      " trees, but CSV has ", nrow(df_feat), " rows.\n",
+      "This usually means copy_clean_file is not the same tree stream used to create copy_tree_file,\n",
+      "or your tree-line filter differs."
+    )
+  }
+
+  # 4) Replace and write output
+  df_feat$pigot_rho <- new_rho
+  write.csv(df_feat, file = output_file, row.names = FALSE)
+  message("✅ Patched pigot_rho written to: ", output_file, " (", skipped, " trees skipped)")
+
+  quit(status = 0)
+}
 
 combo_params <- yaml::read_yaml(combo_yaml)
 required <- c("sequence_length")

@@ -6,6 +6,7 @@ import argparse
 import math
 import numpy as np
 import sys
+import shutil
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)

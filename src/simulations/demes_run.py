@@ -12,6 +12,7 @@ import stdpopsim
 import json
 import re
 import time
+import shutil
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
