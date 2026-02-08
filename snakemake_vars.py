@@ -17,8 +17,8 @@ CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
-DATA_DIR = Path("/hits/fast/cme/kuchve/run3/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/run3/results_aggregated_final")
+DATA_DIR = Path("/hits/fast/cme/kuchve/with_recombination/data")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/with_recombination/results")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -45,7 +45,7 @@ TREE_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "tree"
 TREEFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "tree"
 
 #-------COPY-FILE---------------
-COPY_DIR = Path("/hits/fast/cme/kuchve/run2/data")
+COPY_DIR = Path("/hits/fast/cme/kuchve/run3/data")
 COPY_RAW_DATA_DIR = COPY_DIR/ "raw"
 COPY_CLEAN_DIR = COPY_DIR/ "clean"
 COPY_ALLEL_FEATURES_DIR = COPY_DIR/ "allele"
@@ -531,8 +531,6 @@ def format_feature_ranking_barplot(group):
 def format_classifier_importance_plot(classifier, group):
     return f"feature_importance_{'_'.join(group)}_{classifier}.png"
             
-# simulator_groups = list(combinations(SIMULATORS, 2))
-simulator_groups = []
 # simulator_groups = list(combinations(SIMULATORS, 2))
 simulator_groups = []
 simulator_groups.append(tuple(SIMULATORS))
