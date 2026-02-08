@@ -827,8 +827,6 @@ MEAN_SAMPLE_SIZE_OUTPUT_ALLEL = [
     ]
 ]
 
-
-RAW_SINGLE = [
 RAW_SINGLE = [
     f"{RAW_DATA_DIR}/zigzag/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
     for combo in combinations_by_config["zigzag"]
