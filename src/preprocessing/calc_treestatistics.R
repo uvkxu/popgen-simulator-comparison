@@ -9,7 +9,7 @@ calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
 
   if (weighted) {
     stats <- list()
-
+    
     stats$pigot_rho <- tryCatch(
       as.numeric(calc_pigot_rho(phylo)),
       error = function(e) NA_real_
