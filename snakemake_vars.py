@@ -310,9 +310,6 @@ def estimate_mem_mb_classification(
     config,
     group,
     mode,
-    config,
-    group,
-    mode,
     dtype_bytes=4,          # float32
     pandas_factor=2.0,
     split_factor=1.5,
