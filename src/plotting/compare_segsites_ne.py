@@ -9,6 +9,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import yaml
 import pandas as pd
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 
 # ------------------------------------------------------------
@@ -333,8 +334,15 @@ def main():
     results = []
     with ProcessPoolExecutor(max_workers=args.nprocs) as ex:
         futs = [ex.submit(worker, j) for j in jobs]
-        for fut in as_completed(futs):
-            results.extend(fut.result())  # flatten
+
+        for fut in tqdm(
+            as_completed(futs),
+            total=len(futs),
+            desc="Parsing segsites",
+            unit="job"
+        ):
+            results.extend(fut.result())
+
 
     df = pd.DataFrame(results)
 
