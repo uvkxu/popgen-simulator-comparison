@@ -6,6 +6,7 @@ import argparse
 import math
 import numpy as np
 import sys
+import shutil
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
@@ -102,7 +103,7 @@ def clean_sim_output(input_file, output_file, sequence_length,
                             val = round(val, branch_decimals)
                         val *= factor
                         return f":{val:.{branch_decimals if branch_decimals else 6}f}"
-                scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, line)
+                scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, line) if factor != 1 else line
                 fout.write(scaled_line + "\n")
 
             else:
@@ -151,7 +152,22 @@ def main():
         help=f"Decimal precision for numerical outputs (default: {PRECISION})"
     )
 
+    parser.add_argument(
+        "--copy_file",
+        type=Path,
+        default=None,
+        help="If raw file is just wished to be copied, put it here"
+    )
+
     args = parser.parse_args()
+    output_file = args.output
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    copy_file = args.copy_file
+
+    if copy_file is not None and copy_file.exists():
+        shutil.copy(copy_file, output_file)
+        print(f"Copied existing file {copy_file} -> {output_file}")
+        sys.exit(0) 
 
     sim = args.sim
 
@@ -181,8 +197,8 @@ def main():
         sequence_length=combo_params["sequence_length"],
         branch_decimals=precision,
         position_decimals=precision,
-        factor= 4 * combo_params["population_size"],
-        branches_already_scaled=(sim == "msprime" or sim == "slim")
+        factor=factor,
+        branches_already_scaled=(sim == "msprime" or sim == "slim" or "slim" in sim)
     )
 
 if __name__ == "__main__":

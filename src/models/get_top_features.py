@@ -35,7 +35,7 @@ def evaluate_feature(X, y, feature, classifiers, repeats=1, test_size=0.2):
 
     for clf_name, clf in classifiers.items():
         for r in range(repeats):
-            X_train, X_valid, y_train, y_valid = train_test_split(X_feat, y, test_size=test_size)
+            X_train, X_valid, y_train, y_valid = train_test_split(X_feat, y, stratify=y, test_size=test_size, random_state=r)
             clf.fit(X_train, y_train)
             preds = clf.predict(X_valid)
             acc_dict[clf_name].append(accuracy_score(y_valid, preds))
@@ -51,8 +51,8 @@ def evaluate_classifiers(X, y, classifiers, repeats=1, test_size=0.2):
     feature_names = X.columns.tolist()
 
     for clf_name, clf in classifiers.items():
-        for _ in range(repeats):
-            X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=test_size)
+        for r in range(repeats):
+            X_train, X_valid, y_train, y_valid = train_test_split(X, y, stratify=y, test_size=test_size, random_state=r)
             clf.fit(X_train, y_train)
             preds = clf.predict(X_valid)
             acc_dict[clf_name].append(accuracy_score(y_valid, preds))
@@ -240,15 +240,20 @@ def run_feature_evaluation(
     # --- Classifiers ---
     classifiers = {
         XGB_STR: xgb.XGBClassifier(
-            n_estimators=100,
-            max_depth=3,
-            learning_rate=0.1,
-            objective='multi:softmax',
+            n_estimators=300,          # moderat, nicht maximal
+            max_depth=3,               # kleine, schwache Bäume
+            learning_rate=0.05,        # konservativ
+            subsample=0.8,             # Regularisierung (Zeilen)
+            colsample_bytree=0.8,      # Regularisierung (Features)
+            reg_lambda=1.0,            # L2-Regularisierung (Standard)
+            reg_alpha=0.0,             # keine aggressive Sparsity
+            objective="multi:softprob",
             num_class=len(simulator_group),
-            eval_metric='mlogloss'
-        ),
-        RF_STR: RandomForestClassifier(n_estimators=100, max_depth=5),
-        LR_STR: LogisticRegression(max_iter=500)
+            eval_metric="mlogloss",
+            tree_method="hist",
+            n_jobs=1,
+            random_state=0
+        )
     }
 
     # --- Feature evaluation ---
@@ -495,8 +500,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-

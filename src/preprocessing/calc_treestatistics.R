@@ -10,6 +10,11 @@ calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
     if (weighted) {
         stats <- list()
 
+        stats$pigot_rho <- tryCatch(
+                                as.numeric(calc_pigot_rho(phylo)),
+                                error = function(e) NA_real_
+                              )
+
         stats$zero_branch_count <- sum(phylo$edge.length == 0)
 
         stats$sackin             <- try_stat(phylo, treestats::sackin,
@@ -29,7 +34,6 @@ calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
 
         stats$crown_age          <- try_stat(phylo, treestats::crown_age)
         stats$tree_height        <- try_stat(phylo, treestats::tree_height)
-        stats$pigot_rho          <- try_stat(phylo, treestats::pigot_rho)
 
         stats$number_of_lineages <- try_stat(phylo, treestats::number_of_lineages)
         stats$phylogenetic_div   <- try_stat(phylo, treestats::phylogenetic_diversity)
@@ -225,15 +229,6 @@ calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
     
         stats <- c(stats, as.list(lap_stats))
 
-        # --- Adjacency-Features ---
-        adj_stats <- tryCatch(
-        compute_adjacency_features(phylo),
-            error = function(e) data.frame(
-                adj_sum = NA,
-                adj_var_degree = NA
-            )
-        )
-        stats <- c(stats, as.list(adj_stats))
         stats <- lapply(stats, function(x) {
           if (length(x) == 0) return(NA_real_)
           if (length(x) > 1) return(mean(x, na.rm = TRUE))  # oder NA
@@ -248,7 +243,6 @@ calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
         stats <- list()
 
         stats$tree_height_uw        <- try_stat(phylo, treestats::tree_height)
-        stats$pigot_rho_uw          <- try_stat(phylo, treestats::pigot_rho)
 
         stats$num_branches   <- try_stat(phylo, treestats::phylogenetic_diversity)
 
@@ -325,23 +319,6 @@ calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
 
         stats$treeness_uw <- try_stat(phylo, treestats::treeness)
 
-        # --- Laplace-Features (unweighted) ---
-        lap_stats <- tryCatch(
-            stats_laplace(phylo, weighted = FALSE),
-            error = function(e) data.frame(
-                lap_max_uw = NA,
-                lap_fiedler_uw = NA,
-                lap_var_uw = NA,
-                lap_skew_uw = NA,
-                lap_mean_uw = NA,
-                lap_kurt_uw = NA,
-                lap_second_min_uw = NA,
-                lap_entropy_uw = NA,
-                lap_sum_uw = NA
-            )
-        )
-        stats <- c(stats, as.list(lap_stats))
-
         stats <- unlist(stats)
         stats <- stats[order(names(stats))]
 
@@ -375,12 +352,14 @@ try_stat <- function(phylo,
 # --- Argument parsing ---
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 3) {
-  stop("Usage: Rscript run_treestats_clean.R <input_file> <output_file> <combo_yaml>")
+  stop("Usage: Rscript run_treestats_clean.R <input_file> <output_file> <combo_yaml> [copy_file]")
 }
 
 input_file  <- args[1]
 output_file <- args[2]
 combo_yaml  <- args[3]
+copy_tree_file   <- if (length(args) >= 4) args[4] else NA_character_
+copy_clean_file   <- if (length(args) >= 5) args[5] else NA_character_
 
 if (file.exists(output_file)) {
   cat(sprintf("Output file already exists, skipping: %s\n", output_file))
@@ -400,6 +379,78 @@ if (!file.exists(combo_yaml)) {
 output_dir <- dirname(output_file)
 if (!dir.exists(output_dir)) {
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+}
+
+# ------------------------------------------------------------
+# FAST PATH: patch pigot_rho in an existing feature CSV
+# ------------------------------------------------------------
+if (!is.na(copy_tree_file) && !is.na(copy_clean_file) &&
+    file.exists(copy_tree_file) && file.exists(copy_clean_file)) {
+
+  message("🔁 Patch mode: replacing pigot_rho in existing CSV")
+  message("  copy_tree_file: ", copy_tree_file)
+  message("  copy_clean_file : ", copy_clean_file)
+
+  # 1) Load existing CSV
+  df_feat <- read.csv(copy_tree_file, stringsAsFactors = FALSE, check.names = FALSE)
+
+  if (!("pigot_rho" %in% colnames(df_feat))) {
+    stop("Column 'pigot_rho' not found in copy_tree_file: ", copy_tree_file)
+  }
+  # --- DROP pigot_rho_uw if present ---
+  if ("pigot_rho_uw" %in% colnames(df_feat)) {
+    df_feat$pigot_rho_uw <- NULL
+    message("🗑️ Removed column: pigot_rho_uw")
+  }
+  # 2) Recompute pigot_rho per tree from raw tree file in the SAME order
+  is_tree_line <- function(line) {
+    grepl("\\(", line) & grepl(";+", line) &
+      !grepl("^\\s*//", line) &
+      !grepl("^\\s*segsites", line, ignore.case = TRUE) &
+      !grepl("^\\s*positions", line, ignore.case = TRUE)
+  }
+
+  clean_tree_line <- function(line) {
+    trimws(sub(";+$", ";", line))
+  }
+
+  new_rho <- numeric(0)
+  skipped <- 0L
+
+  con2 <- file(copy_clean_file, open = "r")
+  on.exit(close(con2), add = TRUE)
+
+  i <- 0L
+  while (length(line <- readLines(con2, n = 1, warn = FALSE)) > 0) {
+    if (!is_tree_line(line)) next
+    line <- clean_tree_line(line)
+
+    tr <- tryCatch(ape::read.tree(text = line), error = function(e) NULL)
+    if (is.null(tr)) {
+      skipped <- skipped + 1L
+      next
+    }
+
+    rho_val <- tryCatch(as.numeric(calc_pigot_rho(tr)), error = function(e) NA_real_)
+    new_rho <- c(new_rho, rho_val)
+  }
+
+  # 3) Validate row counts
+  if (length(new_rho) != nrow(df_feat)) {
+    stop(
+      "Row mismatch: computed pigot_rho for ", length(new_rho),
+      " trees, but CSV has ", nrow(df_feat), " rows.\n",
+      "This usually means copy_clean_file is not the same tree stream used to create copy_tree_file,\n",
+      "or your tree-line filter differs."
+    )
+  }
+
+  # 4) Replace and write output
+  df_feat$pigot_rho <- new_rho
+  write.csv(df_feat, file = output_file, row.names = FALSE)
+  message("✅ Patched pigot_rho written to: ", output_file, " (", skipped, " trees skipped)")
+
+  quit(status = 0)
 }
 
 combo_params <- yaml::read_yaml(combo_yaml)
@@ -432,7 +483,7 @@ header_written <- FALSE
 
 # Cache for avoiding duplicate computation
 # Cache only for tree topology → stats do NOT depend on segment length
-unique_tree_cache <- list()
+# unique_tree_cache <- list()
 
 con <- file(input_file, open = "r")
 while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
@@ -445,28 +496,19 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
     next
   }
 
-  # Canonical *topology only*
-  canon <- ape::write.tree(tr)
+  
+  tr_unweighted <- tr
+  tr_unweighted$edge.length <- rep(1, nrow(tr_unweighted$edge))
 
-  # ======================
-  #   CACHE LOOKUP
-  # ======================
-  if (canon %in% names(unique_tree_cache)) {
-    combined <- unique_tree_cache[[canon]]
-  } else {
-    tr_unweighted <- tr
-    tr_unweighted$edge.length <- rep(1, nrow(tr_unweighted$edge))
-
-    tree_stats <- calculate_all_treestats(tr, normalize = FALSE, weighted = TRUE)
-    tree_stats_unweighted <- calculate_all_treestats(tr_unweighted, normalize = FALSE, weighted = FALSE)
-    if (is.null(tree_stats) || is.null(tree_stats_unweighted)) {
-      skipped <- skipped + 1L
-      next
-    }
-
-    combined <- as.data.frame(as.list(c(tree_stats, tree_stats_unweighted)))
-    unique_tree_cache[[canon]] <- combined
+  tree_stats <- calculate_all_treestats(tr, normalize = FALSE, weighted = TRUE)
+  tree_stats_unweighted <- calculate_all_treestats(tr_unweighted, normalize = FALSE, weighted = FALSE)
+  if (is.null(tree_stats) || is.null(tree_stats_unweighted)) {
+    skipped <- skipped + 1L
+    next
   }
+
+  combined <- as.data.frame(as.list(c(tree_stats, tree_stats_unweighted)))
+    
 
   # Extract relative segment length (not part of caching key!)
   if (has_recomb) {

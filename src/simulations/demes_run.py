@@ -10,6 +10,9 @@ from pathlib import Path
 from msprime import BinaryMutationModel
 import stdpopsim
 import json
+import re
+import time
+import shutil
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
@@ -117,6 +120,7 @@ def run_slim_stdpopsim(graph, model_id, species_name, samples, nreps, output_fil
     lines = []
 
     for rep_index in range(1, nreps + 1):
+        start_time = time.time()
         ts = engine.simulate(
             demographic_model=model,
             contig=contig,
@@ -124,7 +128,13 @@ def run_slim_stdpopsim(graph, model_id, species_name, samples, nreps, output_fil
             slim_path=slim_path,
             slim_scaling_factor=scaling_factor
         ) 
+        end_time = time.time()
+        elapsed = end_time - start_time
+        hours = int(elapsed // 3600)
+        minutes = int((elapsed % 3600) // 60)
+        seconds = elapsed % 60
 
+        lines.extend([f"# SLiM simulation time: {hours}h {minutes}m {seconds:.2f}s"])
         lines.extend(to_ms_format(ts, rep_index))
     
     with open(output_file, "w") as f:
@@ -137,7 +147,6 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
     if output_file.exists():
         print(f"Output file already exists, skipping: {output_file}")
         return
-    output_file.parent.mkdir(parents=True, exist_ok=True)
 
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
@@ -186,9 +195,18 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
                 format_str = "0" + (("." + "0"*precision))
                 cmd += f' -oFP {format_str}'
 
+        start_time = time.time()
+
         result = subprocess.run(cmd.split(), capture_output=True, text=True)
 
+        end_time = time.time()
+        elapsed = end_time - start_time
+        hours = int(elapsed // 3600)
+        minutes = int((elapsed % 3600) // 60)
+        seconds = elapsed % 60
+
         with open(output_file, "w") as f:
+            f.write(f"# Simulation time: {hours}h {minutes}m {seconds:.2f}s\n")
             f.write(result.stdout)
 
         if result.returncode != 0 or result.stderr:
@@ -220,14 +238,22 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
             params["sequence_length"] = graph.sequence_length
 
         try:
+            start_time = time.time()
             replicates = msprime.sim_ancestry(**params)
             lines = []
 
             for rep_index, ts in enumerate(replicates, start=1):
                 mts = msprime.sim_mutations(ts, rate=graph.mutation_rate, model=BinaryMutationModel())
                 lines.extend(to_ms_format(mts, rep_index))
+            
+            end_time = time.time()
+            elapsed = end_time - start_time
+            hours = int(elapsed // 3600)
+            minutes = int((elapsed % 3600) // 60)
+            seconds = elapsed % 60
 
             with open(output_file, "w") as f:
+                f.write(f"# MSprime simulation time: {hours}h {minutes}m {seconds:.2f}s\n")
                 f.write("\n".join(lines))
 
             # Log success
@@ -316,14 +342,28 @@ parser.add_argument(
     help="Path to master log file to update (default: None)"
 )
 
+parser.add_argument(
+    "--copy_file",
+    type=Path,
+    default=None,
+    help="If raw file is just wished to be copied, put it here"
+)
+
 args = parser.parse_args()
 
 sim = args.simulator
 combo = json.loads(args.combo)
 output_file = args.output_file
+output_file.parent.mkdir(parents=True, exist_ok=True)
 config_path = args.config_path
 nreps = args.nreps
 log_file = args.log_file
+copy_file = args.copy_file
+
+if copy_file is not None and copy_file.exists():
+    shutil.copy(copy_file, output_file)
+    print(f"Copied existing file {copy_file} -> {output_file}")
+    sys.exit(0)  
 
 ms_path = args.ms_path
 ms_mod_path = args.ms_mod_path
@@ -339,7 +379,7 @@ if sim=="ms":
         sim_path = ms_path
 elif sim=="msms":
     sim_path = msms_path
-elif sim=="slim":
+elif sim=="slim" or sim.startswith("slim"):
     sim_path = slim_path
 
 run_command_demes(

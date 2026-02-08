@@ -289,7 +289,6 @@ def main():
         return
 
     plot_boxplots(csv_my_mode, output_folder, selected_simulators)
-    plot_histograms(csv_my_mode, output_folder, selected_simulators)
 
 
 if __name__ == "__main__":

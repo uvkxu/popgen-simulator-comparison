@@ -409,8 +409,6 @@ def main(input_file, output_file, combo_yaml, per_pop_stats=False):
     # Parse ms/msms/msprime-like simulator output
     all_positions, all_genotypes = parse_ms_like_output(input_content)
     rows = []
-
-    output_file.parent.mkdir(parents=True, exist_ok=True)
         
     # Compute statistics for each block in the file
     for block_idx, (positions, genotypes) in enumerate(zip(all_positions, all_genotypes)):
@@ -520,6 +518,21 @@ if __name__ == '__main__':
         help="Compute allele statistics separately for each population"
     )
 
+    parser.add_argument(
+        "--copy_file",
+        type=Path,
+        default=None,
+        help="If raw file is just wished to be copied, put it here"
+    )
+
     args = parser.parse_args()
+    output_file = args.output
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    copy_file = args.copy_file
+
+    if copy_file is not None and copy_file.exists():
+        shutil.copy(copy_file, output_file)
+        print(f"Copied existing file {copy_file} -> {output_file}")
+        sys.exit(0)
 
     main(args.input, args.output, args.combo_yaml, args.per_pop_stats)
