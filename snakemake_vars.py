@@ -47,7 +47,7 @@ TREEFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "tree"
 #-------COPY-FILE---------------
 COPY_DIR = Path("/hits/fast/cme/kuchve/run3/data")
 COPY_RAW_DATA_DIR = COPY_DIR/ "raw"
-COPY_CLEAN_DIR = COPY_DIR/ "clean"
+COPY_CLEAN_DIR = COPY_DIR/ "cleaned"
 COPY_ALLEL_FEATURES_DIR = COPY_DIR/ "allele"
 COPY_TREE_FEATURES_DIR = COPY_DIR/ "tree"
 #-------------------------------
