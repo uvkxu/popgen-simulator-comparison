@@ -16,8 +16,8 @@ CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
-DATA_DIR = Path("/hits/fast/cme/kuchve/run2/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/run2/eff_size_check/")
+DATA_DIR = Path("/hits/fast/cme/kuchve/without_recombination/data")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/without_recombination/results")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -43,7 +43,13 @@ ALLELFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "allele"
 TREE_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "tree"
 TREEFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "tree"
 
-
+#-------COPY-FILE---------------
+COPY_DIR = Path("/hits/fast/cme/kuchve/run2/data")
+COPY_RAW_DATA_DIR = COPY_DIR/ "raw"
+COPY_CLEAN_DIR = COPY_DIR/ "clean"
+COPY_ALLEL_FEATURES_DIR = COPY_DIR/ "allele"
+COPY_TREE_FEATURES_DIR = COPY_DIR/ "tree"
+#-------------------------------
 
 SANITY_RESULTS_DIR = RESULTS_DIR / "sanity_checks"
 TREEPLOTS_RESULTS_DIR = RESULTS_DIR/ "treeplots"
@@ -53,7 +59,7 @@ CMD_SUBDIR = "commands"
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
 SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
-REPS = 50
+REPS = 200
 NUM_REPLICATES = 2
 PRECISION = 17
 MAX_OVERALL_SAMPLES = 200
@@ -67,7 +73,7 @@ with open("file_formats.yaml") as f:
 XGB_STR = "xgboost"
 RF_STR = "random_forest"
 LR_STR = "logistic_regression"
-CLASSIFIERS = [XGB_STR, RF_STR, LR_STR]
+CLASSIFIERS = [XGB_STR]
 
 
 all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
@@ -621,11 +627,11 @@ ALL_ALLEL_TOPFEATURES = [
 ALL_PLOTS = [
     f"{TREEFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
     for config in all_configs
-    for mode in tree_modes_by_config[config]
+    for mode in combinations_mode[config]
 ] + [
     f"{ALLELFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
     for config in all_configs
-    for mode in GROUPING_MODES_ALLEL
+    for mode in combinations_mode[config]
 ]
 
 

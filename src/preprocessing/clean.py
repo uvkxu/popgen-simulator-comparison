@@ -151,7 +151,22 @@ def main():
         help=f"Decimal precision for numerical outputs (default: {PRECISION})"
     )
 
+    parser.add_argument(
+        "--copy_file",
+        type=Path,
+        default=None,
+        help="If raw file is just wished to be copied, put it here"
+    )
+
     args = parser.parse_args()
+    output_file = args.output
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    copy_file = args.copy_file
+
+    if copy_file is not None and copy_file.exists():
+        shutil.copy(copy_file, output_file)
+        print(f"Copied existing file {copy_file} -> {output_file}")
+        sys.exit(0) 
 
     sim = args.sim
 
@@ -168,8 +183,6 @@ def main():
 
     precision = args.precision if bool(combo_params["usePrecision"]) else None
     
-    output_file = args.output
-    output_file.parent.mkdir(parents=True, exist_ok=True)
     factor = combo_params.get("population_size", 0.25)
     factor = 4 * factor if factor else 1
 

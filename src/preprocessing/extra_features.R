@@ -244,20 +244,3 @@ compute_characteristic_features <- function(g,
     fiedler_sd = sd(fiedler_vector)
   ))
 }
-
-
-
-# --- Feature functions ---
-compute_adjacency_features <- function(tr) {
-  g <- ape::as.igraph.phylo(tr, directed = FALSE)
-  if (!is.null(tr$edge.length)) {
-    E(g)$weight <- tr$edge.length
-  } else {
-    E(g)$weight <- 1
-  }
-  degs <- degree(g)
-  data.frame(
-    adj_sum = sum(degs),
-    adj_var_degree = var(degs)
-  )
-}

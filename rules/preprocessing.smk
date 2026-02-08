@@ -8,7 +8,8 @@ rule clean_single_file:
     output:
         cleaned = f"{CLEAN_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_cleaned_output.txt"
     params:
-        err_file= lambda w: f"{CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
+        err_file= lambda w: f"{CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
+        copy_file= lamda w: f"{COPY_CLEAN_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_output.txt"
     conda:
         "../envs/allelstats-env.yaml"
     shell:
@@ -18,7 +19,8 @@ rule clean_single_file:
             --input {input.raw} \
             --output {output.cleaned} \
             --combo_yaml {input.combo_yaml} \
-            --sim {wildcards.simulator}
+            --sim {wildcards.simulator} \
+            --copy_file {params.copy_file}
         """
     
 rule compute_allel_features_single_file:
@@ -28,7 +30,8 @@ rule compute_allel_features_single_file:
     output:
         allelstats = f"{ALLEL_FEATURES_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_allel_features.csv"
     params:
-        err_file= lambda w: f"{ALLEL_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
+        err_file= lambda w: f"{ALLEL_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
+        copy_file= lamda w: f"{COPY_ALLEL_FEATURES_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_output.txt"
     resources:
         mem_mb = lambda wildcards, attempt: estimate_mem_mb(
             config=wildcards.config,
@@ -43,7 +46,8 @@ rule compute_allel_features_single_file:
         python src/preprocessing/calc_allelstatistics.py \
             --input {input.cleaned} \
             --output {output.allelstats} \
-            --combo_yaml {input.combo_yaml}
+            --combo_yaml {input.combo_yaml} \
+            --copy_file {params.copy_file}
         """
 
 
@@ -54,14 +58,15 @@ rule compute_tree_features_single_file:
     output:
         treestats = f"{TREE_FEATURES_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_tree_features.csv"
     params:
-        err_file = lambda w: f"{TREE_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
+        err_file = lambda w: f"{TREE_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
+        copy_file= lamda w: f"{COPY_TREE_FEATURES_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_output.txt"
     conda:
         "../envs/treestats-env.yaml"
     shell:
         """
         scripts/run_with_errorlog.sh {params.err_file} \
         Rscript src/preprocessing/calc_treestatistics.R \
-            {input.cleaned} {output.treestats} {input.combo_yaml}
+            {input.cleaned} {output.treestats} {input.combo_yaml} {params.copy_file}
         """
 
 

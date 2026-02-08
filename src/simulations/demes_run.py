@@ -145,7 +145,6 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
 
     if output_file.exists():
         return
-    output_file.parent.mkdir(parents=True, exist_ok=True)
 
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
@@ -383,14 +382,28 @@ parser.add_argument(
     help="Path to master log file to update (default: None)"
 )
 
+parser.add_argument(
+    "--copy_file",
+    type=Path,
+    default=None,
+    help="If raw file is just wished to be copied, put it here"
+)
+
 args = parser.parse_args()
 
 sim = args.simulator
 combo = json.loads(args.combo)
 output_file = args.output_file
+output_file.parent.mkdir(parents=True, exist_ok=True)
 config_path = args.config_path
 nreps = args.nreps
 log_file = args.log_file
+copy_file = args.copy_file
+
+if copy_file is not None and copy_file.exists():
+    shutil.copy(copy_file, output_file)
+    print(f"Copied existing file {copy_file} -> {output_file}")
+    sys.exit(0)  
 
 ms_path = args.ms_path
 ms_mod_path = args.ms_mod_path

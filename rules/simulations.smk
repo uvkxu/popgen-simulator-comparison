@@ -7,7 +7,8 @@ rule run_config_combo_rep_simulation_demes:
         output_file = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_output.txt"
     params:
         combo_json=lambda w: combo_folder_to_json[w.combo],
-        err_file=lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
+        err_file=lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
+        copy_file= lamda w: f"{COPY_RAW_DATA_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_output.txt"
     resources:
         mem_mb = lambda wildcards, attempt: estimate_mem_mb(
             config=wildcards.config,
@@ -25,7 +26,8 @@ rule run_config_combo_rep_simulation_demes:
             --simulator {wildcards.simulator} \
             --combo '{params.combo_json}' \
             --nreps {NUM_REPLICATES} \
-            --output_file {output.output_file}
+            --output_file {output.output_file} \
+            --copy_file {params.copy_file}
         """
 
 

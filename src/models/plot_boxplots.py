@@ -9,6 +9,7 @@ import sys
 import os
 import yaml
 import argparse
+import re
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
@@ -192,14 +193,27 @@ def plot_histograms(csv_files, output_folder, selected_simulators):
         plt.close()
 
 
+def csv_list(s: str) -> list[str]:
+    return [x.strip() for x in s.split(",") if x.strip()]
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Extract top features from simulation results.")
-    parser.add_argument("--input_folder", type=Path, required=True, help="Input folder containing result files")
-    parser.add_argument("--output_folder", type=Path, required=True, help="Output folder path")
-    parser.add_argument("--simulators", type=lambda s: s.split(","), default=SIMULATORS,
-                        help="Comma-separated list of simulators (e.g. sim1,sim2)")
-    parser.add_argument("--grouped_by", type=str, choices=VALID_GROUPING_MODES, default="single",
-                        help=f"Grouping mode. Choices: {', '.join(VALID_GROUPING_MODES)} (default: single)")
+    parser.add_argument("--input_folder", type=Path, required=True)
+    parser.add_argument("--output_folder", type=Path, required=True)
+    parser.add_argument("--simulators", type=lambda s: s.split(","), default=SIMULATORS)
+
+    parser.add_argument(
+        "--grouped_by",
+        type=csv_list,
+        default=["single"],
+        help=(
+            "Comma-separated list of grouping modes, e.g. "
+            "'precision_applied,recombination_skipped,sample_size500'. "
+            f"Base choices: {', '.join(VALID_GROUPING_MODES)} "
+            "(sample_sizeN / seq_lenN allowed)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -209,17 +223,34 @@ def main():
     output_folder = args.output_folder
     selected_simulators = args.simulators
     grouped_by = args.grouped_by
+    normalized_grouped_by = []
+    sample_size_group = None
+    seq_len_group = None
 
+    for mode in grouped_by:
+        if mode.startswith("sample_size"):
+            m = re.search(r"\d+", mode)
+            if not m:
+                raise ValueError("sample_size mode needs a number")
+            sample_size_group = int(m.group())
+            normalized_grouped_by.append("sample_size")
+
+        elif mode.startswith("seq_len"):
+            m = re.search(r"\d+", mode)
+            if not m:
+                raise ValueError("seq_len mode needs a number")
+            seq_len_group = int(m.group())
+            normalized_grouped_by.append("seq_len")
+
+        else:
+            normalized_grouped_by.append(mode)
+
+    grouped_by = set(normalized_grouped_by)
     output_folder.mkdir(parents=True, exist_ok=True)
 
-    csv_groups = {
-        "precision_applied": [],
-        "precision_skipped": [],
-        "recombination_applied": [],
-        "recombination_skipped": []
-    }
+    csv_my_mode = []
 
-    if grouped_by in ["single", "overall"]:
+    if "single" in grouped_by or "overall" in grouped_by:
         csv_files = collect_csv_files(input_folder)
         plot_boxplots(csv_files, output_folder, selected_simulators)
         plot_histograms(csv_files, output_folder, selected_simulators)
@@ -238,23 +269,26 @@ def main():
 
         usePrecision = bool(combo_params.get("usePrecision"))
         recombination_rate = float(combo_params.get("recombination_rate") or 0)
-        csv_files = collect_csv_files(root_path)
+        sample_size = int(combo_params["sample_structure"][0]) 
+        seq_len = int(combo_params["sequence_length"])
 
-        if usePrecision:
-            csv_groups["precision_applied"].extend(csv_files)
-            if recombination_rate:
-                csv_groups["recombination_applied"].extend(csv_files)
-            else:
-                csv_groups["recombination_skipped"].extend(csv_files)
-        else:
-            csv_groups["precision_skipped"].extend(csv_files)
+        if (
+            (("precision_applied" not in grouped_by) or usePrecision) and
+            (("precision_skipped" not in grouped_by) or (not usePrecision)) and
+            (("recombination_applied" not in grouped_by) or (recombination_rate > 0)) and
+            (("recombination_skipped" not in grouped_by) or (recombination_rate == 0)) and
+            (("sample_size" not in grouped_by) or (sample_size == sample_size_group and usePrecision)) and
+            (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
+        ):
+            csv_my_mode += collect_csv_files(root_path)
 
-    if grouped_by not in csv_groups or not csv_groups[grouped_by]:
+        
+
+    if not csv_my_mode:
         print(f"No CSV files found for mode {grouped_by}")
         return
 
-    plot_boxplots(csv_groups[grouped_by], output_folder, selected_simulators)
-    plot_histograms(csv_groups[grouped_by], output_folder, selected_simulators)
+    plot_boxplots(csv_my_mode, output_folder, selected_simulators)
 
 
 if __name__ == "__main__":

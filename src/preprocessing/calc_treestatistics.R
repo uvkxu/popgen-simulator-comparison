@@ -225,15 +225,6 @@ calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
     
         stats <- c(stats, as.list(lap_stats))
 
-        # --- Adjacency-Features ---
-        adj_stats <- tryCatch(
-        compute_adjacency_features(phylo),
-            error = function(e) data.frame(
-                adj_sum = NA,
-                adj_var_degree = NA
-            )
-        )
-        stats <- c(stats, as.list(adj_stats))
         stats <- lapply(stats, function(x) {
           if (length(x) == 0) return(NA_real_)
           if (length(x) > 1) return(mean(x, na.rm = TRUE))  # oder NA
@@ -375,12 +366,13 @@ try_stat <- function(phylo,
 # --- Argument parsing ---
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 3) {
-  stop("Usage: Rscript run_treestats_clean.R <input_file> <output_file> <combo_yaml>")
+  stop("Usage: Rscript run_treestats_clean.R <input_file> <output_file> <combo_yaml> [copy_file]")
 }
 
 input_file  <- args[1]
 output_file <- args[2]
 combo_yaml  <- args[3]
+copy_file   <- if (length(args) >= 4) args[4] else NA_character_
 
 # --- Checks ---
 if (!file.exists(input_file)) {
@@ -395,6 +387,13 @@ if (!file.exists(combo_yaml)) {
 output_dir <- dirname(output_file)
 if (!dir.exists(output_dir)) {
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+}
+
+# --- Copy logic (early exit) ---
+if (!is.na(copy_file) && file.exists(copy_file)) {
+  file.copy(from = copy_file, to = output_file, overwrite = TRUE)
+  message("Copied existing file ", copy_file, " -> ", output_file)
+  quit(save = "no", status = 0)
 }
 
 combo_params <- yaml::read_yaml(combo_yaml)
