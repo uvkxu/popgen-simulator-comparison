@@ -8,6 +8,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import yaml
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
@@ -67,7 +69,7 @@ def find_sim_output_files(rep_dir: Path, sim: str) -> list[Path]:
     - bevorzugt Dateien, die den Sim-Namen enthalten
     - priorisiert Textdateien; für msprime auch .trees möglich
     """
-    sim_lower = sim.lower()
+    sim_lower = sim.lower() + "_"
     candidates = []
 
     # 1) Name enthält simulator-token
@@ -225,6 +227,101 @@ def worker(job: dict) -> list[dict]:
 
     return rows
 
+def plot_segsites_vs_Ne(df: pd.DataFrame, outdir: Path, prefix: str = "segsites"):
+    """
+    Für jede (config, seq_len, sample_size) ein Plot:
+      x = Ne (numerisch)
+      y = mean segsites über Reps
+      Linien = Simulatoren
+    """
+    outdir.mkdir(parents=True, exist_ok=True)
+    d = df[df["ok"]].copy()
+    if d.empty:
+        return
+
+    # Aggregate über Reps (und subreps) innerhalb fixer Bedingungen
+    agg = (
+        d.groupby(["config", "seq_len", "sample_size", "Ne", "sim"], as_index=False)
+         .agg(mean_segsites=("segsites", "mean"),
+              std=("segsites", "std"),
+              n=("segsites", "size"))
+    )
+
+    # Pro (config, L, S) ein Plot
+    for (config, L, S), sub in agg.groupby(["config", "seq_len", "sample_size"]):
+        sub = sub.sort_values("Ne")
+
+        fig = plt.figure(figsize=(7, 5))
+        ax = plt.gca()
+
+        for sim in SIMULATORS:
+            ss = sub[sub["sim"] == sim]
+            if ss.empty:
+                continue
+            ax.plot(ss["Ne"], ss["mean_segsites"], marker="o", label=sim)
+
+        ax.set_xlabel("Ne")
+        ax.set_ylabel("Ø segsites (über Reps)")
+        ax.set_title(f"segsites vs Ne | {config} | L={int(L)} | S={int(S)}")
+        ax.set_xscale("log")  # meistens hübscher, weil Ne oft in Größenordnungen variiert
+        ax.legend()
+        plt.tight_layout()
+
+        fname = f"{prefix}_vs_Ne__{config}__L{int(L)}__S{int(S)}.png"
+        fig.savefig(outdir / fname, dpi=200)
+        plt.close(fig)
+
+def plot_segsites_vs_Ne_per_config_aggregated(df: pd.DataFrame, outdir: Path, prefix: str = "segsites"):
+    """
+    Pro config EIN Plot:
+      x = Ne (log)
+      y = segsites (über (seq_len, sample_size) aggregiert, aber korrekt zweistufig)
+      Linien = Simulatoren
+
+    Zweistufig:
+      1) pro (config, seq_len, sample_size, Ne, sim) Mittel über Reps
+      2) pro (config, Ne, sim) Mittel über (seq_len, sample_size)
+    """
+    outdir.mkdir(parents=True, exist_ok=True)
+    d = df[df["ok"]].copy()
+    if d.empty:
+        return
+
+    # Stufe 1: Rep-Aggregation pro fixe Bedingungen
+    lvl1 = (
+        d.groupby(["config", "seq_len", "sample_size", "Ne", "sim"], as_index=False)
+         .agg(mean_segsites=("segsites", "mean"))
+    )
+
+    # Stufe 2: über (seq_len, sample_size) aggregieren
+    lvl2 = (
+        lvl1.groupby(["config", "Ne", "sim"], as_index=False)
+            .agg(mean_segsites=("mean_segsites", "mean"))
+    )
+
+    for config, sub in lvl2.groupby("config"):
+        sub = sub.sort_values("Ne")
+
+        fig = plt.figure(figsize=(7, 5))
+        ax = plt.gca()
+
+        for sim in SIMULATORS:
+            ss = sub[sub["sim"] == sim]
+            if ss.empty:
+                continue
+            ax.plot(ss["Ne"], ss["mean_segsites"], marker="o", label=sim)
+
+        ax.set_xscale("log")
+        ax.set_xlabel("Ne")
+        ax.set_ylabel("Ø segsites (über L und Sample Size aggregiert)")
+        ax.set_title(f"Aggregiert: segsites vs Ne | {config}")
+        ax.legend()
+        plt.tight_layout()
+
+        fname = f"{prefix}_vs_Ne__{config}__AGG_over_L_and_S.png"
+        fig.savefig(outdir / fname, dpi=200)
+        plt.close(fig)
+
 
 # ------------------------------------------------------------
 # Plotting + aggregation
@@ -250,7 +347,8 @@ def make_plots(df: pd.DataFrame, outdir: Path, prefix: str = "segsites"):
     ax = plt.gca()
     for sim in SIMULATORS:
         sub = aggA[aggA["sim"] == sim].set_index("x_combo").reindex(x_order).reset_index()
-        ax.plot(sub["index"], sub["mean_segsites"], marker="o", label=sim)
+        ax.plot(sub["x_combo"], sub["mean_segsites"], marker="o", label=sim)
+
 
     ax.set_xlabel("Kombination (Ne, Sequenzlänge, Sample Size)")
     ax.set_ylabel("Ø segsites")
@@ -272,7 +370,7 @@ def make_plots(df: pd.DataFrame, outdir: Path, prefix: str = "segsites"):
     ax = plt.gca()
     for sim in SIMULATORS:
         sub = aggB[aggB["sim"] == sim].set_index("x_Ne_L").reindex(x_orderB).reset_index()
-        ax.plot(sub["index"], sub["mean_segsites"], marker="o", label=sim)
+        ax.plot(sub["x_Ne_L"], sub["mean_segsites"], marker="o", label=sim)
 
     ax.set_xlabel("Kombination (Ne, Sequenzlänge) – sample_size gemittelt")
     ax.set_ylabel("Ø segsites")
@@ -353,6 +451,8 @@ def main():
         missing.to_csv(outdir / f"{args.prefix}_missing.csv", index=False)
 
     make_plots(df, outdir, prefix=args.prefix)
+    plot_segsites_vs_Ne(df, outdir, prefix=args.prefix)
+    plot_segsites_vs_Ne_per_config_aggregated(df, outdir, prefix=args.prefix)
     make_msprime_diff_table(df, outdir, prefix=args.prefix)
 
     print("OK. Outputs:")
