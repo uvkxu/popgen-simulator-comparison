@@ -228,6 +228,80 @@ def plot_one_per_config(df: pd.DataFrame, outdir: Path, prefix: str = "segsites"
         fig.savefig(outdir / f"{prefix}_Snorm_vs_Ne__{config}.png", dpi=200)
         plt.close(fig)
 
+def plot_ratio_to_msprime_one_per_config(df: pd.DataFrame, outdir: Path, prefix: str = "segsites"):
+    """
+    Genau 1 Plot pro config:
+      x = Ne (Input)
+      y = mean segsites(sim) / mean segsites(msprime)
+
+    msprime wird als Referenz OHNE Ne verwendet:
+      msprime_mean(config, L, S)   (über alle msprime-Reps)
+    Für sim in {ms, msms, mspms}:
+      sim_mean(config, L, S, Ne)
+
+    Dann:
+      ratio(config, L, S, Ne, sim) = sim_mean / msprime_mean
+    Und am Ende:
+      mean_ratio(config, Ne, sim) = Mittel über (L,S).
+    """
+
+    outdir.mkdir(parents=True, exist_ok=True)
+    d = df[df["ok"]].copy()
+    if d.empty:
+        return
+
+    # --- 1) Rep-Aggregation pro (config, L, S, Ne, sim) ---
+    agg = (
+        d.groupby(["config", "seq_len", "sample_size", "Ne", "sim"], as_index=False)
+         .agg(mean_S=("segsites", "mean"))
+    )
+
+    # --- 2) msprime baseline pro (config, L, S), Ne wird IGNORIERT ---
+    msprime = (
+        agg[agg["sim"] == "msprime"]
+        .groupby(["config", "seq_len", "sample_size"], as_index=False)
+        .agg(msprime_S=("mean_S", "mean"))
+    )
+
+    # --- 3) andere Sims mit msprime joinen (OHNE Ne) ---
+    others = agg[agg["sim"].isin(["ms", "msms", "mspms"])].copy()
+    merged = others.merge(msprime, on=["config", "seq_len", "sample_size"], how="inner")
+
+    # ratio
+    merged["ratio"] = merged["mean_S"] / merged["msprime_S"]
+
+    # --- 4) über (L,S) mitteln => 1 Wert pro (config, Ne, sim) ---
+    lvl2 = (
+        merged.groupby(["config", "Ne", "sim"], as_index=False)
+              .agg(mean_ratio=("ratio", "mean"))
+    )
+
+    # --- 5) Plot pro config ---
+    for config, sub in lvl2.groupby("config"):
+        sub = sub.sort_values("Ne")
+
+        fig = plt.figure(figsize=(7.5, 5.5))
+        ax = plt.gca()
+
+        # Baseline-Linie: msprime entspricht ratio=1
+        ax.axhline(1.0, linestyle="--", linewidth=1, label="msprime baseline (1.0)")
+
+        for sim in ["ms", "msms", "mspms"]:
+            ss = sub[sub["sim"] == sim].sort_values("Ne")
+            if ss.empty:
+                continue
+            ax.plot(ss["Ne"], ss["mean_ratio"], marker="o", label=sim)
+
+        ax.set_xscale("log")
+        ax.set_xlabel("Ne")
+        ax.set_ylabel("mean segsites(sim) / mean segsites(msprime)")
+        ax.set_title(f"Relative segsites vs Ne | {config}")
+        ax.legend()
+        plt.tight_layout()
+
+        fig.savefig(outdir / f"{prefix}_ratio_vs_msprime__{config}.png", dpi=200)
+        plt.close(fig)
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -258,12 +332,12 @@ def main():
     if len(missing) > 0:
         missing.to_csv(outdir / f"{args.prefix}_missing.csv", index=False)
 
-    plot_one_per_config(df, outdir, prefix=args.prefix)
+    plot_ratio_to_msprime_one_per_config(df, outdir, prefix=args.prefix)
 
     print("OK:")
     print(f"- {outdir / (args.prefix + '_raw_table.csv')}")
     print(f"- {outdir / (args.prefix + '_missing.csv')} (falls vorhanden)")
-    print(f"- pro config: {args.prefix}_Snorm_vs_Ne__<config>.png")
+    print(f"- pro config: {args.prefix}_ratio_vs_msprime__<config>.png")
 
 
 if __name__ == "__main__":
