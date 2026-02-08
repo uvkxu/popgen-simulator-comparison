@@ -197,7 +197,7 @@ def main():
         sequence_length=combo_params["sequence_length"],
         branch_decimals=precision,
         position_decimals=precision,
-        factor=factor,
+        factor= 4 * combo_params["population_size"],
         branches_already_scaled=(sim == "msprime" or sim == "slim" or "slim" in sim)
     )
 
