@@ -40,6 +40,12 @@ def safe_load_yaml(p: Path) -> dict:
         return yaml.safe_load(f) or {}
 
 
+def harmonic_number(n: int) -> float:
+    if n <= 1:
+        return float("nan")
+    return sum(1.0 / i for i in range(1, n))
+
+
 def infer_sample_size_from_combo(combo: dict) -> int:
     """
     combo-yaml kann z.B. enthalten:
@@ -271,57 +277,77 @@ def plot_segsites_vs_Ne(df: pd.DataFrame, outdir: Path, prefix: str = "segsites"
         fig.savefig(outdir / fname, dpi=200)
         plt.close(fig)
 
-def plot_segsites_vs_Ne_per_config_aggregated(df: pd.DataFrame, outdir: Path, prefix: str = "segsites"):
+def plot_Ne_hat_vs_Ne_by_config(df: pd.DataFrame, outdir: Path, prefix: str = "segsites",
+                               sims=("ms", "msms", "mspms", "msprime"),
+                               max_configs: int | None = 20):
     """
-    Pro config EIN Plot:
-      x = Ne (log)
-      y = segsites (über (seq_len, sample_size) aggregiert, aber korrekt zweistufig)
-      Linien = Simulatoren
+    Erzeugt pro Simulator EIN Plot:
+      x = Ne_input
+      y = Ne_hat = S / (4 * mu * L * a_n)
+      Linien = config
 
-    Zweistufig:
-      1) pro (config, seq_len, sample_size, Ne, sim) Mittel über Reps
-      2) pro (config, Ne, sim) Mittel über (seq_len, sample_size)
+    Damit sind L und sample_size (n) normalisiert raus.
     """
     outdir.mkdir(parents=True, exist_ok=True)
     d = df[df["ok"]].copy()
     if d.empty:
         return
 
-    # Stufe 1: Rep-Aggregation pro fixe Bedingungen
+    # a_n aus overall sample size
+    d["a_n"] = d["sample_size"].astype(int).apply(harmonic_number)
+
+    # Ne_hat
+    # Achtung: mu kann NaN sein, dann wird Ne_hat NaN (ok)
+    d["Ne_hat"] = d["segsites"] / (4.0 * d["mu"] * d["seq_len"] * d["a_n"])
+
+    # Rep-Aggregation zuerst (sonst übergewichtest du configs mit mehr Reps/subreps)
     lvl1 = (
         d.groupby(["config", "seq_len", "sample_size", "Ne", "sim"], as_index=False)
-         .agg(mean_segsites=("segsites", "mean"))
+         .agg(mu=("mu", "first"),
+              a_n=("a_n", "first"),
+              mean_Ne_hat=("Ne_hat", "mean"))
     )
 
-    # Stufe 2: über (seq_len, sample_size) aggregieren
+    # Danach optional über L & sample_size mitteln => EIN Wert pro (config, Ne, sim)
     lvl2 = (
         lvl1.groupby(["config", "Ne", "sim"], as_index=False)
-            .agg(mean_segsites=("mean_segsites", "mean"))
+            .agg(mean_Ne_hat=("mean_Ne_hat", "mean"))
     )
 
-    for config, sub in lvl2.groupby("config"):
+    # Wenn sehr viele configs: nimm die “stärksten” (meiste Punkte), sonst ist Plot unlesbar
+    if max_configs is not None:
+        counts = lvl2.groupby("config")["Ne"].count().sort_values(ascending=False)
+        keep = set(counts.head(max_configs).index)
+        lvl2 = lvl2[lvl2["config"].isin(keep)]
+
+    for sim in sims:
+        sub = lvl2[lvl2["sim"] == sim].copy()
+        if sub.empty:
+            continue
         sub = sub.sort_values("Ne")
 
-        fig = plt.figure(figsize=(7, 5))
+        fig = plt.figure(figsize=(7.5, 5.5))
         ax = plt.gca()
 
-        for sim in SIMULATORS:
-            ss = sub[sub["sim"] == sim]
-            if ss.empty:
-                continue
-            ax.plot(ss["Ne"], ss["mean_segsites"], marker="o", label=sim)
+        for config, ss in sub.groupby("config"):
+            ss = ss.sort_values("Ne")
+            ax.plot(ss["Ne"], ss["mean_Ne_hat"], marker="o", linewidth=1, label=config)
+
+        # Identitätslinie y=x als Referenz
+        xmin = sub["Ne"].min()
+        xmax = sub["Ne"].max()
+        ax.plot([xmin, xmax], [xmin, xmax], linestyle="--", linewidth=1, label="y=x")
 
         ax.set_xscale("log")
-        ax.set_xlabel("Ne")
-        ax.set_ylabel("Ø segsites (über L und Sample Size aggregiert)")
-        ax.set_title(f"Aggregiert: segsites vs Ne | {config}")
-        ax.legend()
+        ax.set_yscale("log")
+        ax.set_xlabel("Ne (Input)")
+        ax.set_ylabel("Ne_hat aus segsites (normalisiert)")
+        ax.set_title(f"Ne_hat vs Ne (normalisiert) | sim={sim} | configs={sub['config'].nunique()}")
+        ax.legend(fontsize=7, ncols=2)
         plt.tight_layout()
 
-        fname = f"{prefix}_vs_Ne__{config}__AGG_over_L_and_S.png"
-        fig.savefig(outdir / fname, dpi=200)
+        fig.savefig(outdir / f"{prefix}_Ne_hat_vs_Ne__by_config__{sim}.png", dpi=200)
         plt.close(fig)
-
 
 # ------------------------------------------------------------
 # Plotting + aggregation
@@ -452,7 +478,7 @@ def main():
 
     make_plots(df, outdir, prefix=args.prefix)
     plot_segsites_vs_Ne(df, outdir, prefix=args.prefix)
-    plot_segsites_vs_Ne_per_config_aggregated(df, outdir, prefix=args.prefix)
+    plot_Ne_hat_vs_Ne_by_config(df, outdir, prefix=args.prefix)
     make_msprime_diff_table(df, outdir, prefix=args.prefix)
 
     print("OK. Outputs:")
