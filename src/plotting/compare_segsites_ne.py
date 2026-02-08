@@ -81,7 +81,7 @@ def find_sim_output_files(rep_dir: Path, sim: str) -> list[Path]:
 
     # 2) Fallback: wenn nichts gefunden, nimm alle Dateien im rep_dir
     if not candidates:
-        candidates = [p for p in rep_dir.iterdir() if p.is_file()]
+        return []
 
     # Priorisierung
     def score(p: Path):
@@ -90,7 +90,7 @@ def find_sim_output_files(rep_dir: Path, sim: str) -> list[Path]:
         if suf in (".txt", ".out", ".ms", ".log"):
             s += 10
         if suf == ".trees":
-            s += 9 if sim_lower == "msprime" else -5
+            s += 9 if sim_lower == "msprime_" else -5
         # leichte Präferenz für "nicht winzige" Dateien
         try:
             size = p.stat().st_size
