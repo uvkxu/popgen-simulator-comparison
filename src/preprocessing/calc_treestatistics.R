@@ -284,7 +284,7 @@ if (!is.na(copy_tree_file) && !is.na(copy_clean_file) &&
   }
 
   # drop pigot_rho_uw if present
-  if ("pigot_rho_uw" %in% colnames(df_feat))) {
+  if ("pigot_rho_uw" %in% colnames(df_feat)) {
     df_feat$pigot_rho_uw <- NULL
     message("🗑️ Removed column: pigot_rho_uw")
   }
