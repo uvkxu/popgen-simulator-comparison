@@ -8,8 +8,6 @@ rule compute_plots_tree_by_mode:
         dummy=f"{TREEFEATURES_PLOTS_DIR}/{{config}}/{{mode}}/.done"
     resources:
         mem_mb=lambda wildcards, input: estimate_mem_mb_plot_features(f"{TREE_FEATURES_DIR}/{wildcards.config}/")
-    wildcard_constraints:
-        mode = "|".join(VALID_GROUPING_MODES)
     conda:
         "../envs/plot-env.yaml"
     params:
@@ -33,8 +31,6 @@ rule compute_plots_allel_by_mode:
         dummy=f"{ALLELFEATURES_PLOTS_DIR}/{{config}}/{{mode}}/.done"
     resources:
         mem_mb=lambda wildcards, input: estimate_mem_mb_plot_features(f"{ALLEL_FEATURES_DIR}/{wildcards.config}/")
-    wildcard_constraints:
-        mode = "|".join(VALID_GROUPING_MODES)
     conda:
         "../envs/plot-env.yaml"
     params:

@@ -433,8 +433,30 @@ def get_topfeatures_input(config, group, mode, feature_type, combo=None):
     if type(group) is str:
         group = group.split("_")
 
-    if mode not in VALID_GROUPING_MODES:
-        raise ValueError(f"Invalid mode: {mode}")
+    group_by = mode.split(",")
+    normalized_grouped_by = []
+    sample_size_group = None
+    seq_len_group = None
+
+    for m in grouped_by:
+        if m.startswith("sample_size"):
+            para = re.search(r"\d+", m)
+            if not para:
+                raise ValueError("sample_size mode needs a number")
+            sample_size_group = int(para.group())
+            normalized_grouped_by.append("sample_size")
+
+        elif m.startswith("seq_len"):
+            para = re.search(r"\d+", m)
+            if not para:
+                raise ValueError("seq_len mode needs a number")
+            seq_len_group = int(para.group())
+            normalized_grouped_by.append("seq_len")
+
+        else:
+            normalized_grouped_by.append(m)
+
+    grouped_by = set(normalized_grouped_by)
     
     if feature_type == "tree":
         root_folder = TREE_FEATURES_DIR
@@ -445,7 +467,7 @@ def get_topfeatures_input(config, group, mode, feature_type, combo=None):
     else:
         raise ValueError(f"Invalid feature type: {feature_type}")
 
-    if mode == "single":
+    if "single" in group_by:
         if combo is None:
             raise ValueError("Mode 'single' is not supported for top features input generation without combo.")
 
@@ -460,22 +482,19 @@ def get_topfeatures_input(config, group, mode, feature_type, combo=None):
         combo = json.loads(combo_string)
         rate = float(combo.get("recombination_rates"))
         sample_size = int(combo.get("sample_sizes")) 
-        has_recombination = rate is not None and rate > 0
+        recombination_rate = int(combo.get("recombination_rates", 0)) 
+        seq_len = int(combo.get("sequence_lengths"))
+        usePrecision = bool(combo.get("usePrecision", True))
 
-        if mode == "precision_applied" and bool(combo["usePrecision"]):
+        if (
+            (("precision_applied" not in grouped_by) or usePrecision) and
+            (("precision_skipped" not in grouped_by) or (not usePrecision)) and
+            (("recombination_applied" not in grouped_by) or (recombination_rate > 0)) and
+            (("recombination_skipped" not in grouped_by) or (recombination_rate == 0)) and
+            (("sample_size" not in grouped_by) or (sample_size == sample_size_group and usePrecision)) and
+            (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
+        ):
             result.append(combo_folder)
-        elif mode == "precision_skipped" and not bool(combo["usePrecision"]):
-            result.append(combo_folder)
-        elif mode == "recombination_applied" and has_recombination:
-            result.append(combo_folder)
-        elif mode == "recombination_skipped" and not has_recombination:
-            result.append(combo_folder)
-        elif mode == "overall":
-            result.append(combo_folder)
-        elif "sample_size" in mode:
-            sample_size_group = int(re.search(r"\d+", mode).group())
-            if sample_size_group == sample_size:
-                result.append(combo_folder)
     
     return [
         f"{root_folder}/{config}/{combo}/rep{i+1}/{FILE_FORMATS[format_file].format(SIM=sim)}"
