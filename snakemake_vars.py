@@ -428,10 +428,12 @@ simulator_groups.append(tuple(SIMULATORS))
 simulator_groups = list(dict.fromkeys(simulator_groups))
 # simulator_groups.append(("msms", "msprime", "ms"))
 
-def get_topfeatures_input(config, group, mode, feature_type, combo=None):
+def get_topfeatures_input(config, mode, feature_type, group=None, combo=None):
     result = []
     if type(group) is str:
         group = group.split("_")
+    elif group is None:
+        group = SIMULATORS
 
     grouped_by = mode.split(",")
     normalized_grouped_by = []
