@@ -43,7 +43,7 @@ def evaluate_feature(X, y, feature, classifiers, repeats=1, test_size=0.2):
     return {clf_name: np.max(acc_list) for clf_name, acc_list in acc_dict.items()}
 
 
-def evaluate_classifiers(X, y, classifiers, repeats=2, test_size=0.2):
+def evaluate_classifiers(X, y, classifiers, repeats=1, test_size=0.2):
     """Evaluate classifiers on all features together."""
     acc_dict = {clf_name: [] for clf_name in classifiers}
     importance_dict = {}
@@ -83,7 +83,7 @@ def plot_feature_performance(feature_importance_dict, csv_path, group, chance_ba
     Reads the evaluation CSV and produces:
     - one accuracy bar plot
     - one combined feature importance plot
-    - one feature importance plot per classifier (new!)
+    - one feature importance plot per classifier
     """
 
     # --- Accuracy plot ---
@@ -96,9 +96,15 @@ def plot_feature_performance(feature_importance_dict, csv_path, group, chance_ba
     for col in df.columns[1:]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Keep only actual feature rows
-    df_features = df[~df["feature"].isin(["ALL_FEATURES", "PASSED_FEATURES", "OVERALL_MEAN"])]
+    # --- Select & order features for plotting ---
+    special = ["ALL_FEATURES", "PASSED_FEATURES"]
 
+    df_special = df[df["feature"].isin(special)]
+    df_regular = df[~df["feature"].isin(special + ["OVERALL_MEAN", "CHANCE_BASELINE"])]
+
+    df_features = pd.concat([df_special, df_regular], ignore_index=True)
+
+    # --- Plot ---
     features_acc = df_features["feature"]
     metrics = ["max_accuracy"] + CLASSIFIERS
     x = np.arange(len(features_acc))
@@ -115,23 +121,23 @@ def plot_feature_performance(feature_importance_dict, csv_path, group, chance_ba
         )
 
     for i, metric in enumerate(metrics):
-        plt.bar(x + i*width, df_features[metric], width=width, label=metric)
+        plt.bar(x + i * width, df_features[metric], width=width, label=metric)
 
-    plt.xticks(x + width*1.5, features_acc, rotation=90, fontsize=6)
+    plt.xticks(x + width * 1.5, features_acc, rotation=90, fontsize=6)
     plt.ylabel("Accuracy")
     plt.xlabel("Feature")
     plt.title("Model Performance per Feature")
     plt.legend()
     plt.tight_layout()
 
-    base = os.path.splitext(os.path.basename(csv_path))[0]
-    output_ranking_plot = format_feature_ranking_barplot(group)
-    out_path = os.path.join(os.path.dirname(csv_path), output_ranking_plot)
+    out_path = os.path.join(
+        os.path.dirname(csv_path),
+        format_feature_ranking_barplot(group)
+    )
     plt.savefig(out_path, dpi=300)
     plt.close()
-    # print(f"Accuracy plot saved at: {out_path}")
 
-    # --- One plot per classifier (NEW) ---
+    # --- One plot per classifier ---
     for clf_name, importance_dict_single in feature_importance_dict.items():
         features = list(importance_dict_single.keys())
         values = [importance_dict_single[f] for f in features]
@@ -151,8 +157,6 @@ def plot_feature_performance(feature_importance_dict, csv_path, group, chance_ba
 
         plt.savefig(out_path_single, dpi=300)
         plt.close()
-
-        # print(f"Feature importance plot for {clf_name} saved at: {out_path_single}")
 
 
 def clean_nan_data(
@@ -300,6 +304,14 @@ def run_feature_evaluation(
 
     # --- Summary output ---
     summary_records = []
+
+    summary_records.append({
+        "feature": "CHANCE_BASELINE",
+        "max_accuracy": majority_prop,
+        XGB_STR: np.nan,
+        RF_STR: np.nan,
+        LR_STR: np.nan
+    })
 
     # All feature row
     summary_records.append({
