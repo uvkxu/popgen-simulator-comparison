@@ -467,7 +467,7 @@ def get_topfeatures_input(config, group, mode, feature_type, combo=None):
     else:
         raise ValueError(f"Invalid feature type: {feature_type}")
 
-    if "single" in group_by:
+    if "single" in grouped_by:
         if combo is None:
             raise ValueError("Mode 'single' is not supported for top features input generation without combo.")
 
