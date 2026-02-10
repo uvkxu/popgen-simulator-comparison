@@ -703,3 +703,31 @@ EFF_CHECK_OUTPUT = [
         f"check_eff_pop_size_{sim}_plot.png",
     )
 ]
+
+
+
+TOPFEATURES_AGG_GLOBAL_DIR = TOPFEATURES_RESULTS_DIR / "aggregated_global"
+TOPFEATURES_AGG_GLOBAL_PLOTS_DIR = TOPFEATURES_AGG_GLOBAL_DIR / "plots"
+
+AGG_OVERALL = TOPFEATURES_AGG_GLOBAL_DIR / "agg_overall.csv"
+AGG_FEAT    = TOPFEATURES_AGG_GLOBAL_DIR / "agg_feature_accuracy.csv"
+AGG_PASSED  = TOPFEATURES_AGG_GLOBAL_DIR / "agg_passed_frequency.csv"
+AGG_INDEX   = TOPFEATURES_AGG_GLOBAL_DIR / "agg_files_index.csv"
+
+# These are "key plots" that your plot script writes (always)
+PLOT_BAR_OVERALL = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "bar_overall_by_config_tree_vs_allele.png"
+PLOT_LINE_SEQLEN = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "line_accuracy_vs_sequence_length.png"
+
+# These are only produced if you pass --demes-root
+PLOT_LINE_RATIO_MEAN = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "line_accuracy_vs_sample_over_meanNe.png"
+PLOT_LINE_RATIO_MIN  = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "line_accuracy_vs_sample_over_minNe.png"
+PLOT_BAR_MIG         = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "bar_accuracy_by_continuous_migration_tree_vs_allele.png"
+
+
+def list_all_topfeature_summary_csv():
+    """
+    Collect all feature_ranking_*_with_summary.csv under:
+      results/top_features/tree/{config}/{mode}/...
+      results/top_features/allele/{config}/{mode}/...
+    """
+    return [str(p) for p in TOPFEATURES_RESULTS_DIR.rglob("*with_summary.csv")]

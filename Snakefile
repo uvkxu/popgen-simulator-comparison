@@ -8,4 +8,12 @@ include: "rules/effective_pop_size.smk"
 
 rule all:
     input:
-        COMPLETE_OUTPUTS
+        str(AGG_OVERALL),
+        str(AGG_FEAT),
+        str(AGG_PASSED),
+        str(AGG_INDEX),
+        str(PLOT_BAR_OVERALL),
+        str(PLOT_LINE_SEQLEN),
+        str(PLOT_LINE_RATIO_MEAN),
+        str(PLOT_LINE_RATIO_MIN),
+        str(PLOT_BAR_MIG),
