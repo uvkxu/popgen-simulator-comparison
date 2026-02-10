@@ -433,7 +433,7 @@ def get_topfeatures_input(config, group, mode, feature_type, combo=None):
     if type(group) is str:
         group = group.split("_")
 
-    group_by = mode.split(",")
+    grouped_by = mode.split(",")
     normalized_grouped_by = []
     sample_size_group = None
     seq_len_group = None
