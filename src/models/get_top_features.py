@@ -240,20 +240,22 @@ def run_feature_evaluation(
     # --- Classifiers ---
     classifiers = {
         XGB_STR: xgb.XGBClassifier(
-            n_estimators=5000,          # moderat, nicht maximal
-            max_depth=3,               # kleine, schwache Bäume
-            learning_rate=0.05,        # konservativ
-            subsample=0.8,             # Regularisierung (Zeilen)
-            colsample_bytree=0.8,      # Regularisierung (Features)
-            reg_lambda=1.0,            # L2-Regularisierung (Standard)
-            reg_alpha=0.0,             # keine aggressive Sparsity
-            objective="multi:softprob",
-            num_class=len(simulator_group),
-            eval_metric="mlogloss",
-            tree_method="hist",
-            n_jobs=1,
-            random_state=0
-        )
+                n_estimators=5000,
+                max_depth=3,
+                learning_rate=0.05,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                min_child_weight=5,
+                gamma=0.1,
+                reg_lambda=3.0,
+                reg_alpha=0.1,
+                objective="multi:softprob",
+                num_class=len(simulator_group),
+                eval_metric="mlogloss",
+                tree_method="hist",
+                n_jobs=1,
+                random_state=0
+            )
     }
 
     # --- Feature evaluation ---
