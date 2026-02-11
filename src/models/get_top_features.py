@@ -36,7 +36,7 @@ def evaluate_feature(X, y, feature, classifiers, repeats=1, test_size=0.2):
     for clf_name, clf in classifiers.items():
         for r in range(repeats):
             X_train, X_valid, y_train, y_valid = train_test_split(X_feat, y, stratify=y, test_size=test_size, random_state=r)
-            clf.fit(X_train, y_train)
+            clf.fit(X_train, y_train, early_stopping_rounds=50, verbose=False)
             preds = clf.predict(X_valid)
             acc_dict[clf_name].append(accuracy_score(y_valid, preds))
 
@@ -240,7 +240,7 @@ def run_feature_evaluation(
     # --- Classifiers ---
     classifiers = {
         XGB_STR: xgb.XGBClassifier(
-            n_estimators=300,          # moderat, nicht maximal
+            n_estimators=5000,          # moderat, nicht maximal
             max_depth=3,               # kleine, schwache Bäume
             learning_rate=0.05,        # konservativ
             subsample=0.8,             # Regularisierung (Zeilen)
