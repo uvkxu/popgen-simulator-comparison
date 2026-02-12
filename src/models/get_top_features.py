@@ -36,7 +36,7 @@ from utils.io_helpers import collect_csv_files, assign_simulator_labels
 
 
 # -----------------------------
-# Helpers for XGBoost >= 2.0 Early Stopping
+# Helpers for XGBoost Early Stopping (works with xgboost >= 2.1)
 # -----------------------------
 def _fit_xgb_with_early_stopping(
     clf: xgb.XGBClassifier,
@@ -45,26 +45,23 @@ def _fit_xgb_with_early_stopping(
     X_val: pd.DataFrame,
     y_val: np.ndarray,
     early_stopping_rounds: int,
-    metric_name: str = "mlogloss",
     verbose: bool = False,
 ) -> int:
     """
-    Fits an XGBClassifier with early stopping using callbacks (works for xgboost >= 2.0),
-    and returns the best iteration index.
+    Fits an XGBClassifier with early stopping.
+    For xgboost >= 2.1.0, early_stopping_rounds is configured on the estimator (constructor/set_params),
+    NOT passed to fit().
+
+    Returns best iteration index (best_iteration).
     """
-    es_cb = xgb.callback.EarlyStopping(
-        rounds=int(early_stopping_rounds),
-        save_best=True,
-        metric_name=metric_name,
-        data_name="validation_0",
-    )
+    # set early stopping on the estimator (NOT in fit)
+    clf.set_params(early_stopping_rounds=int(early_stopping_rounds))
 
     clf.fit(
         X_train,
         y_train,
         eval_set=[(X_val, y_val)],
         verbose=verbose,
-        callbacks=[es_cb],
     )
 
     best_iter = getattr(clf, "best_iteration", None)
@@ -127,10 +124,10 @@ def tune_xgb_with_optuna(
             X_val=X_val,
             y_val=y_val,
             early_stopping_rounds=early_stopping_rounds,
-            metric_name="mlogloss",
             verbose=False,
         )
 
+        # Use best iteration for evaluation
         y_proba = clf.predict_proba(X_val, iteration_range=_iter_range(best_iter))
         return log_loss(y_val, y_proba, labels=list(range(num_class)))
 
@@ -443,7 +440,6 @@ def run_feature_evaluation(
         X_val=X_valid,
         y_val=y_valid,
         early_stopping_rounds=es_rounds,
-        metric_name="mlogloss",
         verbose=False,
     )
 
@@ -502,7 +498,6 @@ def run_feature_evaluation(
             X_val=Xp_valid,
             y_val=y_valid,
             early_stopping_rounds=es_rounds,
-            metric_name="mlogloss",
             verbose=False,
         )
 
@@ -611,10 +606,8 @@ def parse_args():
     )
     parser.add_argument("--optuna_trials", type=int, default=50, help="Number of Optuna trials (default: 50).")
 
-    # Single ES for non-optuna evaluation (or if you don't provide es_grid)
     parser.add_argument("--es_rounds", type=int, default=30, help="Early stopping rounds for XGB fits (default: 30).")
 
-    # ES grid for optuna in one run
     parser.add_argument(
         "--es_grid",
         type=csv_list,
