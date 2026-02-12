@@ -85,13 +85,6 @@ rule compute_allel_topfeatures_grouped_by_mode:
         """
 
 rule compute_tree_hyperparameter_optuna:
-    input:
-        lambda wildcards: get_topfeatures_input(
-            config=wildcards.config,
-            mode=wildcards.mode,
-            feature_type="tree",
-            group=wildcards.group_string,
-        )
     output:
         f"{TREE_TOPFEATURES_DIR}/{{config}}/{{mode}}/xgb_params_esgrid_{{group_string}}.yaml"
     resources:
@@ -126,13 +119,6 @@ rule compute_tree_hyperparameter_optuna:
 
 
 rule compute_allel_hyperparameter_optuna:
-    input:
-        lambda wildcards: get_topfeatures_input(
-            config=wildcards.config,
-            mode=wildcards.mode,
-            feature_type="allel",
-            group=wildcards.group_string,
-        )
     output:
         f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/xgb_params_esgrid_{{group_string}}.yaml"
     resources:
