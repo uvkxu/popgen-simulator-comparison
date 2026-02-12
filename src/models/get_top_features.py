@@ -36,6 +36,49 @@ from utils.io_helpers import collect_csv_files, assign_simulator_labels
 
 
 # -----------------------------
+# Helpers for XGBoost >= 2.0 Early Stopping
+# -----------------------------
+def _fit_xgb_with_early_stopping(
+    clf: xgb.XGBClassifier,
+    X_train: pd.DataFrame,
+    y_train: np.ndarray,
+    X_val: pd.DataFrame,
+    y_val: np.ndarray,
+    early_stopping_rounds: int,
+    metric_name: str = "mlogloss",
+    verbose: bool = False,
+) -> int:
+    """
+    Fits an XGBClassifier with early stopping using callbacks (works for xgboost >= 2.0),
+    and returns the best iteration index.
+    """
+    es_cb = xgb.callback.EarlyStopping(
+        rounds=int(early_stopping_rounds),
+        save_best=True,
+        metric_name=metric_name,
+        data_name="validation_0",
+    )
+
+    clf.fit(
+        X_train,
+        y_train,
+        eval_set=[(X_val, y_val)],
+        verbose=verbose,
+        callbacks=[es_cb],
+    )
+
+    best_iter = getattr(clf, "best_iteration", None)
+    if best_iter is None:
+        best_iter = clf.get_booster().best_iteration
+    return int(best_iter)
+
+
+def _iter_range(best_iter: int) -> tuple[int, int]:
+    # xgboost expects (start, end) with end exclusive
+    return (0, int(best_iter) + 1)
+
+
+# -----------------------------
 # Optuna tuning for XGBoost
 # -----------------------------
 def tune_xgb_with_optuna(
@@ -76,14 +119,19 @@ def tune_xgb_with_optuna(
         }
 
         clf = xgb.XGBClassifier(**params)
-        clf.fit(
-            X_train,
-            y_train,
-            eval_set=[(X_val, y_val)],
+
+        best_iter = _fit_xgb_with_early_stopping(
+            clf=clf,
+            X_train=X_train,
+            y_train=y_train,
+            X_val=X_val,
+            y_val=y_val,
             early_stopping_rounds=early_stopping_rounds,
+            metric_name="mlogloss",
             verbose=False,
         )
-        y_proba = clf.predict_proba(X_val)
+
+        y_proba = clf.predict_proba(X_val, iteration_range=_iter_range(best_iter))
         return log_loss(y_val, y_proba, labels=list(range(num_class)))
 
     sampler = optuna.samplers.TPESampler(seed=seed)
@@ -115,6 +163,7 @@ def permutation_importance_accuracy(
     feature_names: list[str],
     n_repeats: int = 1,
     seed: int = 0,
+    iteration_range: tuple[int, int] | None = None,
 ) -> tuple[dict[str, float], dict[str, float], float]:
     """
     Computes permutation importance w.r.t. accuracy on a *fixed* trained model.
@@ -126,7 +175,7 @@ def permutation_importance_accuracy(
     """
     rng = np.random.default_rng(seed)
 
-    baseline_preds = clf.predict(X_valid)
+    baseline_preds = clf.predict(X_valid, iteration_range=iteration_range)
     baseline_acc = accuracy_score(y_valid, baseline_preds)
 
     mean_drop: dict[str, float] = {}
@@ -143,7 +192,7 @@ def permutation_importance_accuracy(
             rng.shuffle(shuffled)
             Xv[f] = shuffled
 
-            preds_perm = clf.predict(Xv)
+            preds_perm = clf.predict(Xv, iteration_range=iteration_range)
             acc_perm = accuracy_score(y_valid, preds_perm)
             drops.append(baseline_acc - acc_perm)
 
@@ -386,23 +435,29 @@ def run_feature_evaluation(
     )
 
     clf = xgb.XGBClassifier(**xgb_params)
-    clf.fit(
-        X_train,
-        y_train,
-        eval_set=[(X_valid, y_valid)],
+
+    best_iter = _fit_xgb_with_early_stopping(
+        clf=clf,
+        X_train=X_train,
+        y_train=y_train,
+        X_val=X_valid,
+        y_val=y_valid,
         early_stopping_rounds=es_rounds,
+        metric_name="mlogloss",
         verbose=False,
     )
 
-    # overall accuracy on the same validation set
-    baseline_preds = clf.predict(X_valid)
+    ir = _iter_range(best_iter)
+
+    # overall accuracy on the same validation set (best iteration only)
+    baseline_preds = clf.predict(X_valid, iteration_range=ir)
     all_features_acc = accuracy_score(y_valid, baseline_preds)
 
     # chance baseline (majority class proportion)
     class_counts = np.bincount(y)
     majority_prop = class_counts.max() / class_counts.sum()
 
-    # permutation importance = drop in accuracy
+    # permutation importance = drop in accuracy (use best iteration only)
     mean_drop, std_drop, baseline_acc = permutation_importance_accuracy(
         clf=clf,
         X_valid=X_valid,
@@ -410,6 +465,7 @@ def run_feature_evaluation(
         feature_names=feature_names,
         n_repeats=perm_repeats,
         seed=0,
+        iteration_range=ir,
     )
 
     # Passed if (mean_drop - std_drop) > threshold
@@ -438,14 +494,22 @@ def run_feature_evaluation(
         Xp_valid = X_valid[passed_features]
 
         clf_passed = xgb.XGBClassifier(**xgb_params)
-        clf_passed.fit(
-            Xp_train,
-            y_train,
-            eval_set=[(Xp_valid, y_valid)],
+
+        best_iter_passed = _fit_xgb_with_early_stopping(
+            clf=clf_passed,
+            X_train=Xp_train,
+            y_train=y_train,
+            X_val=Xp_valid,
+            y_val=y_valid,
             early_stopping_rounds=es_rounds,
+            metric_name="mlogloss",
             verbose=False,
         )
-        passed_acc = accuracy_score(y_valid, clf_passed.predict(Xp_valid))
+
+        passed_acc = accuracy_score(
+            y_valid,
+            clf_passed.predict(Xp_valid, iteration_range=_iter_range(best_iter_passed)),
+        )
     else:
         passed_acc = np.nan
 
