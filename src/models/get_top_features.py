@@ -408,24 +408,44 @@ def run_feature_evaluation(
         print(f"[INFO] Optuna ES-grid complete. Wrote combined parameter report to: {params_out}")
         return
 
-    # --- Normal evaluation mode: train once, then permutation-evaluate features ---
-    xgb_params = {
-        "n_estimators": 5000,
-        "max_depth": 3,
-        "learning_rate": 0.05,
-        "subsample": 0.8,
-        "colsample_bytree": 0.8,
-        "min_child_weight": 5,
-        "gamma": 0.1,
-        "reg_lambda": 3.0,
-        "reg_alpha": 0.1,
-        "objective": "multi:softprob",
-        "num_class": num_class,
-        "eval_metric": "mlogloss",
-        "tree_method": "hist",
-        "n_jobs": 1,
-        "random_state": 0,
-    }
+    if "tree" in str(output_dir):
+        xgb_params = {
+            "n_estimators": 300,
+            "learning_rate": 0.08,
+            "max_depth": 5,  # muss int sein (4.56 -> sinnvoll runden)
+            "min_child_weight": 8.68,
+            "gamma": 2.21,
+            "subsample": 0.79,
+            "colsample_bytree": 0.8,
+            "reg_lambda": 2.12,
+            "reg_alpha": 0.22,
+            "objective": "multi:softprob",
+            "num_class": num_class,
+            "eval_metric": "mlogloss",
+            "tree_method": "hist",
+            "n_jobs": 1,
+            "random_state": 0
+        }
+    elif "allele" in str(output_dir):
+        xgb_params = {
+            "n_estimators": 300,
+            "learning_rate": 0.10,
+            "max_depth": 5,  
+            "min_child_weight": 8.92,
+            "gamma": 1.62,
+            "subsample": 0.71,
+            "colsample_bytree": 0.75,
+            "reg_lambda": 3.87,
+            "reg_alpha": 0.08,
+            "objective": "multi:softprob",
+            "num_class": num_class,
+            "eval_metric": "mlogloss",
+            "tree_method": "hist",
+            "n_jobs": 1,
+            "random_state": 0
+        }
+    else:
+        raise ValueError(f"Neither tree nor allel in outputdir name: {output_dir}")
 
     X_train, X_valid, y_train, y_valid = train_test_split(
         X, y, stratify=y, test_size=0.2, random_state=0

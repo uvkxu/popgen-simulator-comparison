@@ -17,7 +17,7 @@ CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
 DATA_DIR = Path("/hits/fast/cme/kuchve/without_recombination/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/without_recombination/optuna")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/without_recombination/results_early_stopping")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
