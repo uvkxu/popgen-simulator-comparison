@@ -143,6 +143,7 @@ dependencies:
   - opencl-headers=2025.06.13=h5888daf_0
   - openjpeg=2.5.4=h55fea9a_0
   - openssl=3.5.3=h26f9b46_1
+  - optuna=4.*
   - packaging=25.0=pyh29332c3_1
   - pandas=2.3.2=py311hed34c8f_0
   - pillow=11.3.0=py311h98278a2_3

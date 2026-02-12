@@ -17,7 +17,7 @@ CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
 DATA_DIR = Path("/hits/fast/cme/kuchve/without_recombination/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/without_recombination/results_early_stopping")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/without_recombination/optuna")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -731,3 +731,22 @@ def list_all_topfeature_summary_csv():
       results/top_features/allele/{config}/{mode}/...
     """
     return [str(p) for p in TOPFEATURES_RESULTS_DIR.rglob("*with_summary.csv")]
+
+
+def format_optuna_report_file(group):
+    return f"xgb_params_esgrid_{'_'.join(group)}.yaml"
+
+
+ALL_TREE_OPTUNA = [
+    f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_optuna_report_file(sim_group)}"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
+]
+
+ALL_ALLEL_OPTUNA = [
+    f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_optuna_report_file(sim_group)}"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
+]
