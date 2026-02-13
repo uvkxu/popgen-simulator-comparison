@@ -502,7 +502,7 @@ def run_feature_evaluation(
             }
         )
 
-    feature_records_sorted = sorted(feature_records, key=lambda d: d["max_accuracy"], reverse=True)
+    feature_records_sorted = sorted(feature_records, key=lambda d: d["max_accuracy"], reverse=False)
 
     # Evaluate with passed features: retrain once
     if passed_features:
@@ -639,14 +639,14 @@ def parse_args():
     parser.add_argument(
         "--perm_repeats",
         type=int,
-        default=20,
+        default=50,
         help="Permutation repeats per feature (default: 20). Increase to reduce noise.",
     )
 
     parser.add_argument(
         "--drop_threshold",
         type=float,
-        default=0.0,
+        default=0.01,
         help="Permutation importance pass threshold applied to (mean_drop - std_drop) > threshold. (default: 0.0)",
     )
 
