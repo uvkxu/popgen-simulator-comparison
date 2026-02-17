@@ -16,8 +16,8 @@ CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
-DATA_DIR = Path("/hits/fast/cme/kuchve/without_recombination/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/without_recombination/results_early_stopping")
+DATA_DIR = Path("/hits/fast/cme/kuchve/demes_vs_own/ms/data")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/demes_vs_own/ms/results")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -44,7 +44,7 @@ TREE_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "tree"
 TREEFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "tree"
 
 #-------COPY-FILE---------------
-COPY_DIR = Path("/hits/fast/cme/kuchve/run2/data")
+COPY_DIR = Path("/hits/fast/cme/kuchve/without_recombination/data")
 COPY_RAW_DATA_DIR = COPY_DIR/ "raw"
 COPY_CLEAN_DIR = COPY_DIR/ "cleaned"
 COPY_FEATURES_DIR = COPY_DIR / "features"
@@ -59,7 +59,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
+SIMULATORS = ["ms"] #msms_ms behaves the same as just msms
 REPS = 200
 NUM_REPLICATES = 2
 PRECISION = 17
@@ -159,7 +159,7 @@ for config_name in all_configs:
         if not bool(combo.get("usePrecision")) and float(combo.get("recombination_rates", 0)) > 0.0:
             continue
 
-        if num_populations * combo.get("sample_sizes") > MAX_OVERALL_SAMPLES:
+        if not (num_populations * combo.get("sample_sizes") * 2 > MAX_OVERALL_SAMPLES and num_populations * combo.get("sample_sizes") =< MAX_OVERALL_SAMPLES):
             continue
 
         possible_mode = f"sample_size_{int(combo.get('sample_sizes'))}"
@@ -749,4 +749,19 @@ ALL_ALLEL_OPTUNA = [
     for config in all_configs
     for mode in combinations_mode[config]
     for sim_group in simulator_groups
+]
+
+
+ALL_OWN_FEATURES = [
+    f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{sim}_own_tree_features.csv"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for sim in SIMULATORS
+    for i in range(REPS)
+] + [
+    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{sim}_own_allel_features.csv"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for sim in SIMULATORS
+    for i in range(REPS)
 ]
