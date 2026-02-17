@@ -5,7 +5,7 @@ from ms_runner import build_ms_command, get_rate_multiplier
 
 def build_msms_command(config, run_msms_ms=False):
     ms_cmd = build_ms_command(config)
-    parts = ms_cmd.removeprefix("ms").split()
+    parts = ms_cmd.removeprefix("ms-mod").split()
 
     if "-p" in parts:
         index = parts.index("-p")
@@ -19,7 +19,7 @@ def build_msms_command(config, run_msms_ms=False):
     return msms_cmd
 
 def run_msms_simulation(config=None, command=None, output_file=None, run_msms_ms=False):
-    msms_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../bin/msms.exe"))
+    msms_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../bin/msms"))
 
     if config is not None:
         msms_path = config.get("msms_path", msms_path)

@@ -1,0 +1,39 @@
+mutation_rate: 2e-8
+num_replicates: 2
+sequence_length: 1000000
+population_size: 10000
+
+populations:
+  - name: Bornean
+    initial_size: 8805
+    sample_size: 64
+    growth_rate: -0.00003713365857
+  - name: Sumatran
+    initial_size: 37661
+    sample_size: 64
+    growth_rate: 0.00008128085786
+
+migration_rates:
+- source: Bornean
+  dest: Sumatran
+  rate: 1.1012601762016282e-05
+- source: Sumatran
+  dest: Bornean
+  rate: 6.66332106613137e-06
+
+demography_events:
+- type: population_pulse_migration
+  proportion: 1.0
+  time: 20157.45
+  source: Sumatran
+  dest: Bornean
+
+- type: growth_rate_change
+  time: 20157.45
+  population: Bornean
+  rate: 0
+
+- type: size_change
+  time: 20157.45
+  population: Bornean
+  size: 7317

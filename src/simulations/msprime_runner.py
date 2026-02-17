@@ -338,7 +338,7 @@ def run_msprime_simulation(config, output_file=None):
 
 def build_msprime_command(config):
     ms_cmd = build_ms_command(config)
-    parts = ms_cmd.removeprefix("ms").split()
+    parts = ms_cmd.removeprefix("ms-mod").split()
 
     msms_cmd = "mspms " + " ".join(parts)
     return msms_cmd

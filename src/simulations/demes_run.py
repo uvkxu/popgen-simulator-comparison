@@ -13,6 +13,9 @@ import json
 import re
 import time
 import shutil
+from ms_runner import run_ms_simulation
+from msms_runner import run_msms_simulation
+from msprime_runner import run_mspms_simulation
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
@@ -313,6 +316,20 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
         raise ValueError(f"Unsupported simulator: {sim}")
 
 
+def run_command_own(config_path, sim, output_file):
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
+
+    if sim == "ms":
+        run_ms_simulation(config=config, output_file=output_file)
+    elif sim == "msms":
+        run_msms_simulation(config=config, output_file=output_file)
+    elif sim == "mspms" or sim == "msprime":
+        run_mspms_simulation(config=config, output_file=output_file)
+    else:
+        raise ValueError(f"Unsupported simulator: {sim}")
+
+
 parser = argparse.ArgumentParser(
     description="Run simulations with one or more config files."
 )
@@ -423,13 +440,20 @@ elif sim=="msms":
 elif sim=="slim" or sim.startswith("slim"):
     sim_path = slim_path
 
-run_command_demes(
-    config_path=config_path, 
-    combo=combo, 
-    sim=sim, 
-    output_file=output_file, 
-    nreps=nreps, 
-    sim_path=sim_path,
-    log_file=log_file
-)
+if "own" in str(config_path):
+    run_command_own(
+        config_path=config_path,
+        sim=sim,
+        output_file=output_file
+        )
+else:
+    run_command_demes(
+        config_path=config_path, 
+        combo=combo, 
+        sim=sim, 
+        output_file=output_file, 
+        nreps=nreps, 
+        sim_path=sim_path,
+        log_file=log_file
+    )
 
