@@ -618,7 +618,7 @@ def build_ms_command(config):
 
     # Set decimal places for site positions based on sequence length
     # n_digits = int(np.ceil(np.log10(seq_length)))
-    cmd += f" -p {5}"
+    cmd += f" -p {17}"
 
     # Recombination
     cmd += set_recombination(config)
