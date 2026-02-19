@@ -78,7 +78,8 @@ CLASSIFIERS = [XGB_STR]
 
 
 all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
-
+all_configs.remove("lavretsky_ducks")
+all_configs.remove("li_african3epoch")
 
 VALID_GROUPING_MODES = [
     "precision_applied", "precision_skipped",
@@ -159,7 +160,7 @@ for config_name in all_configs:
         if not bool(combo.get("usePrecision")) and float(combo.get("recombination_rates", 0)) > 0.0:
             continue
 
-        if not (num_populations * combo.get("sample_sizes") * 2 > MAX_OVERALL_SAMPLES and num_populations * combo.get("sample_sizes") =< MAX_OVERALL_SAMPLES):
+        if not (num_populations * combo.get("sample_sizes") * 2 > MAX_OVERALL_SAMPLES and num_populations * combo.get("sample_sizes") <= MAX_OVERALL_SAMPLES):
             continue
 
         possible_mode = f"sample_size_{int(combo.get('sample_sizes'))}"
