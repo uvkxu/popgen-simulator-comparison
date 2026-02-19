@@ -44,7 +44,7 @@ TREE_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "tree"
 TREEFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "tree"
 
 #-------COPY-FILE---------------
-COPY_DIR = Path("/hits/fast/cme/kuchve/without_recombination/data")
+COPY_DIR = Path("/hits/fast/cme/kuchve/run3/data")
 COPY_RAW_DATA_DIR = COPY_DIR/ "raw"
 COPY_CLEAN_DIR = COPY_DIR/ "cleaned"
 COPY_FEATURES_DIR = COPY_DIR / "features"
