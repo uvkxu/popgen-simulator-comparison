@@ -95,6 +95,10 @@ def tune_xgb_with_optuna(
     X_train, X_val, y_train, y_val = train_test_split(
         X, y, stratify=y, test_size=test_size, random_state=seed
     )
+    if "difficulty" in X_train.columns:
+        median_diff = X_train["difficulty"].median(skipna=True)
+        X_train["difficulty"] = X_train["difficulty"].fillna(median_diff)
+        X_val["difficulty"] = X_val["difficulty"].fillna(median_diff)
 
     def objective(trial: optuna.Trial) -> float:
         params = {
@@ -298,7 +302,7 @@ def clean_nan_data(
         return data
 
     for col in data.columns:
-        if col == "simulator":
+        if col == "simulator" or col == "difficulty":
             continue
 
         if data[col].isna().any():
@@ -339,6 +343,13 @@ def run_feature_evaluation(
     all_dfs = assign_simulator_labels(csv_files, simulator_group)
     data = pd.concat(all_dfs, ignore_index=True)
     del all_dfs
+
+    # -----------------------------
+    # Treat difficulty == -1 as missing (without touching CSV)
+    # -----------------------------
+    if "difficulty" in data.columns:
+        data["difficulty_missing"] = (data["difficulty"] == -1).astype(np.int8)
+        data.loc[data["difficulty"] == -1, "difficulty"] = np.nan
 
     csv_file = output_dir / format_feature_ranking_file(simulator_group)
 
@@ -450,6 +461,10 @@ def run_feature_evaluation(
     X_train, X_valid, y_train, y_valid = train_test_split(
         X, y, stratify=y, test_size=0.2, random_state=0
     )
+    if "difficulty" in X_train.columns:
+        median_diff = X_train["difficulty"].median(skipna=True)
+        X_train["difficulty"] = X_train["difficulty"].fillna(median_diff)
+        X_valid["difficulty"] = X_valid["difficulty"].fillna(median_diff)
 
     clf = xgb.XGBClassifier(**xgb_params)
 
