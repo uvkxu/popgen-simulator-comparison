@@ -16,8 +16,8 @@ CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
-DATA_DIR = Path("/hits/fast/cme/kuchve/demes_vs_own/ms/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/demes_vs_own/ms/results")
+DATA_DIR = Path("/hits/fast/cme/kuchve/with_recombination/data")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/with_recombination/results")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -59,7 +59,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["ms"] #msms_ms behaves the same as just msms
+SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
 REPS = 200
 NUM_REPLICATES = 2
 PRECISION = 17
