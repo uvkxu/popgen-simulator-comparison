@@ -269,11 +269,9 @@ if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE, showWarnin
 # ------------------------------------------------------------
 # FAST PATH: patch pigot_rho in an existing feature CSV
 # ------------------------------------------------------------
-blocked <- function(p) grepl("zigzag|one_population", p) 
 
 if (!is.na(copy_tree_file) && !is.na(copy_clean_file) &&
-    file.exists(copy_tree_file) && file.exists(copy_clean_file) &&
-    !blocked(copy_tree_file)) {
+    file.exists(copy_tree_file) && file.exists(copy_clean_file)) {
 
   message("🔁 Patch mode: replacing pigot_rho in existing CSV")
   message("  copy_tree_file : ", copy_tree_file)

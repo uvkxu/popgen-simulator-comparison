@@ -165,10 +165,9 @@ def main():
     copy_file = args.copy_file
 
     if copy_file is not None and copy_file.exists():
-        if not "zigzag" in str(output_file) and not "one_population" in str(output_file):
-            shutil.copy(copy_file, output_file)
-            print(f"Copied existing file {copy_file} -> {output_file}")
-            sys.exit(0) 
+        shutil.copy(copy_file, output_file)
+        print(f"Copied existing file {copy_file} -> {output_file}")
+        sys.exit(0) 
 
     sim = args.sim
 
