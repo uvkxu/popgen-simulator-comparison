@@ -18,7 +18,7 @@ CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
 DATA_DIR = Path("/hits/fast/cme/kuchve/without_recombination/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/without_recombination/results")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/without_recombination/results_fixed_scaling")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -926,4 +926,14 @@ ALL_OWN_FEATURES = [
     for combo in combinations_by_config[config]
     for sim in SIMULATORS
     for i in range(REPS)
+]
+
+CREATE_COMBO_PARAMETERS_YAML = [
+    f"{TREE_FEATURES_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+] + [
+    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
 ]
