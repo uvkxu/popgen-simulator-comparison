@@ -2,8 +2,6 @@ include: "../snakemake_vars.py"
 
 
 rule compute_plots_tree_by_mode:
-    input:
-        lambda wildcards: get_topfeatures_input(config = wildcards.config, mode =  wildcards.mode, feature_type = "tree")
     output:
         dummy=f"{TREEFEATURES_PLOTS_DIR}/{{config}}/{{mode}}/.done"
     resources:
@@ -25,8 +23,6 @@ rule compute_plots_tree_by_mode:
         """
 
 rule compute_plots_allel_by_mode:
-    input:
-        lambda wildcards: get_topfeatures_input(config = wildcards.config, mode = wildcards.mode, feature_type = "allel")
     output:
         dummy=f"{ALLELFEATURES_PLOTS_DIR}/{{config}}/{{mode}}/.done"
     resources:

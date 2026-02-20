@@ -1,7 +1,0 @@
-mutation_rate: 3.5e-09
-population_size: 10000
-time_units: generations
-demes:
-  - name: AedesAegypti
-    epochs:
-    - start_size: 10000

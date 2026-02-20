@@ -1,0 +1,13 @@
+simulators:
+- ms
+sequence_length: 1000000
+population_size: 10000
+num_replicates: 2
+overall_samples: 128
+sample_structure: []
+mutation_rate: 3.5e-09
+recombination_rate: null
+config: one_population.yaml
+reps: 1
+simulator_outputs:
+  ms: ms_output.txt

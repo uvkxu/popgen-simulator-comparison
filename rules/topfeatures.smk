@@ -33,7 +33,7 @@ rule compute_tree_topfeatures_grouped_by_mode:
         f"{TREE_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_barplot.png",
         f"{TREE_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{XGB_STR}.png"
     resources:
-        mem_mb=lambda wildcards, input: estimate_mem_mb_classification(f"{TREE_FEATURES_DIR}/{wildcards.config}/", wildcards.config, wildcards.group_string, wildcards.mode)
+        mem_mb=lambda wildcards, input: estimate_mem_mb_classification(input_folder=f"{TREE_FEATURES_DIR}/{wildcards.config}/", config=wildcards.config, group=wildcards.group_string, mode=wildcards.mode)
     params:
         args_group=lambda wildcards: ",".join(
             wildcards.group_string.split("_")
@@ -60,7 +60,7 @@ rule compute_allel_topfeatures_grouped_by_mode:
         f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_barplot.png",
         f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{XGB_STR}.png"
     resources:
-        mem_mb=lambda wildcards, input: estimate_mem_mb_classification(f"{ALLEL_FEATURES_DIR}/{wildcards.config}/", wildcards.config, wildcards.group_string, wildcards.mode)
+        mem_mb=lambda wildcards, input: estimate_mem_mb_classification(input_folder=f"{ALLEL_FEATURES_DIR}/{wildcards.config}/", config=wildcards.config, group=wildcards.group_string, mode=wildcards.mode)
     params:
         args_group=lambda wildcards: ",".join(
             wildcards.group_string.split("_")

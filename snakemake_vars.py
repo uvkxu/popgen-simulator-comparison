@@ -161,7 +161,7 @@ for config_name in all_configs:
         if not bool(combo.get("usePrecision")) and float(combo.get("recombination_rates", 0)) > 0.0:
             continue
 
-        if num_populations * combo.get("sample_sizes") > MAX_OVERALL_SAMPLES:
+        if not (num_populations * combo.get("sample_sizes") * 2 > MAX_OVERALL_SAMPLES and num_populations * combo.get("sample_sizes") <= MAX_OVERALL_SAMPLES):
             continue
 
         possible_mode = f"sample_size_{int(combo.get('sample_sizes'))}"
@@ -535,13 +535,37 @@ simulator_groups.append(tuple(SIMULATORS))
 simulator_groups = list(dict.fromkeys(simulator_groups))
 # simulator_groups.append(("msms", "msprime", "ms"))
 
-def get_topfeatures_input(config, group, mode, feature_type, combo=None):
+def get_topfeatures_input(config, mode, feature_type, group=None, combo=None):
     result = []
     if type(group) is str:
         group = group.split("_")
+    elif group is None:
+        group = SIMULATORS
 
-    if mode not in VALID_GROUPING_MODES:
-        raise ValueError(f"Invalid mode: {mode}")
+    grouped_by = mode.split(",")
+    normalized_grouped_by = []
+    sample_size_group = None
+    seq_len_group = None
+
+    for m in grouped_by:
+        if m.startswith("sample_size"):
+            para = re.search(r"\d+", m)
+            if not para:
+                raise ValueError("sample_size mode needs a number")
+            sample_size_group = int(para.group())
+            normalized_grouped_by.append("sample_size")
+
+        elif m.startswith("seq_len"):
+            para = re.search(r"\d+", m)
+            if not para:
+                raise ValueError("seq_len mode needs a number")
+            seq_len_group = int(para.group())
+            normalized_grouped_by.append("seq_len")
+
+        else:
+            normalized_grouped_by.append(m)
+
+    grouped_by = set(normalized_grouped_by)
     
     if feature_type == "tree":
         root_folder = TREE_FEATURES_DIR
@@ -552,7 +576,7 @@ def get_topfeatures_input(config, group, mode, feature_type, combo=None):
     else:
         raise ValueError(f"Invalid feature type: {feature_type}")
 
-    if mode == "single":
+    if "single" in grouped_by:
         if combo is None:
             raise ValueError("Mode 'single' is not supported for top features input generation without combo.")
 
@@ -568,26 +592,19 @@ def get_topfeatures_input(config, group, mode, feature_type, combo=None):
         rate = float(combo.get("recombination_rates"))
         sample_size = int(combo.get("sample_sizes")) 
         sample_size = int(combo.get("sample_sizes")) 
-        has_recombination = rate is not None and rate > 0
+        recombination_rate = int(combo.get("recombination_rates", 0)) 
+        seq_len = int(combo.get("sequence_lengths"))
+        usePrecision = bool(combo.get("usePrecision", True))
 
-        if mode == "precision_applied" and bool(combo["usePrecision"]):
+        if (
+            (("precision_applied" not in grouped_by) or usePrecision) and
+            (("precision_skipped" not in grouped_by) or (not usePrecision)) and
+            (("recombination_applied" not in grouped_by) or (recombination_rate > 0)) and
+            (("recombination_skipped" not in grouped_by) or (recombination_rate == 0)) and
+            (("sample_size" not in grouped_by) or (sample_size == sample_size_group and usePrecision)) and
+            (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
+        ):
             result.append(combo_folder)
-        elif mode == "precision_skipped" and not bool(combo["usePrecision"]):
-            result.append(combo_folder)
-        elif mode == "recombination_applied" and has_recombination:
-            result.append(combo_folder)
-        elif mode == "recombination_skipped" and not has_recombination:
-            result.append(combo_folder)
-        elif mode == "overall":
-            result.append(combo_folder)
-        elif "sample_size" in mode:
-            sample_size_group = int(re.search(r"\d+", mode).group())
-            if sample_size_group == sample_size:
-                result.append(combo_folder)
-        elif "sample_size" in mode:
-            sample_size_group = int(re.search(r"\d+", mode).group())
-            if sample_size_group == sample_size:
-                result.append(combo_folder)
     
     return [
         f"{root_folder}/{config}/{combo}/rep{i+1}/{FILE_FORMATS[format_file].format(SIM=sim)}"
@@ -831,3 +848,79 @@ RAW_SINGLE = [
     for i in range(REPS)
 ]
 
+EXCLUDE_CONFIGS = {"zigzag", "one_population"}
+
+EFF_CHECK_OUTPUT = [
+    f"{RESULTS_DIR}/{sim}/{typ}/{config}/{mode}/{fname}"
+    for sim in SIMULATORS
+    for typ in ("tree", "allele")
+    for config in all_configs
+    if config not in EXCLUDE_CONFIGS
+    for mode in combinations_mode[config]
+    for fname in (
+        f"check_eff_pop_size_{sim}_summary.csv",
+        f"check_eff_pop_size_{sim}_plot.png",
+    )
+]
+
+
+
+TOPFEATURES_AGG_GLOBAL_DIR = TOPFEATURES_RESULTS_DIR / "aggregated_global"
+TOPFEATURES_AGG_GLOBAL_PLOTS_DIR = TOPFEATURES_AGG_GLOBAL_DIR / "plots"
+
+AGG_OVERALL = TOPFEATURES_AGG_GLOBAL_DIR / "agg_overall.csv"
+AGG_FEAT    = TOPFEATURES_AGG_GLOBAL_DIR / "agg_feature_accuracy.csv"
+AGG_PASSED  = TOPFEATURES_AGG_GLOBAL_DIR / "agg_passed_frequency.csv"
+AGG_INDEX   = TOPFEATURES_AGG_GLOBAL_DIR / "agg_files_index.csv"
+
+# These are "key plots" that your plot script writes (always)
+PLOT_BAR_OVERALL = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "bar_overall_by_config_tree_vs_allele.png"
+PLOT_LINE_SEQLEN = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "line_accuracy_vs_sequence_length.png"
+
+# These are only produced if you pass --demes-root
+PLOT_LINE_RATIO_MEAN = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "line_accuracy_vs_sample_over_meanNe.png"
+PLOT_LINE_RATIO_MIN  = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "line_accuracy_vs_sample_over_minNe.png"
+PLOT_BAR_MIG         = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "bar_accuracy_by_continuous_migration_tree_vs_allele.png"
+
+
+def list_all_topfeature_summary_csv():
+    """
+    Collect all feature_ranking_*_with_summary.csv under:
+      results/top_features/tree/{config}/{mode}/...
+      results/top_features/allele/{config}/{mode}/...
+    """
+    return [str(p) for p in TOPFEATURES_RESULTS_DIR.rglob("*with_summary.csv")]
+
+
+def format_optuna_report_file(group):
+    return f"xgb_params_esgrid_{'_'.join(group)}.yaml"
+
+
+ALL_TREE_OPTUNA = [
+    f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_optuna_report_file(sim_group)}"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
+]
+
+ALL_ALLEL_OPTUNA = [
+    f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_optuna_report_file(sim_group)}"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
+]
+
+
+ALL_OWN_FEATURES = [
+    f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{sim}_own_tree_features.csv"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for sim in SIMULATORS
+    for i in range(REPS)
+] + [
+    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{sim}_own_allel_features.csv"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for sim in SIMULATORS
+    for i in range(REPS)
+]

@@ -60,7 +60,7 @@ with open(config_path, "r") as f:
 
 samples = get_sample_sizes(config, combo["sample_sizes"])
 
-population_size = combo.get("population_sizes", None)
+population_size = combo.get("population_sizes", config.get("population_size"))
 
 metadata = {
     "sequence_length": combo["sequence_lengths"],

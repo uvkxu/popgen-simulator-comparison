@@ -1,0 +1,17 @@
+simulators:
+- ms
+sequence_length: 1000000
+population_size: 10000
+num_replicates: 2
+overall_samples: 128
+sample_structure:
+- 32
+- 32
+- 32
+- 32
+mutation_rate: 1.235e-08
+recombination_rate: null
+config: pawar_gorilla.yaml
+reps: 1
+simulator_outputs:
+  ms: ms_output.txt

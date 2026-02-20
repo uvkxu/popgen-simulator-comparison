@@ -1,0 +1,15 @@
+simulators:
+- ms
+sequence_length: 1000000
+population_size: 10000
+num_replicates: 2
+overall_samples: 128
+sample_structure:
+- 64
+- 64
+mutation_rate: 1.45e-09
+recombination_rate: null
+config: li_african3epoch.yaml
+reps: 2
+simulator_outputs:
+  ms: ms_output.txt

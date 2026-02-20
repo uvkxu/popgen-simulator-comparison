@@ -3,17 +3,20 @@ import pandas as pd
 import numpy as np
 import xgboost as xgb
 import matplotlib
-matplotlib.use('Agg')
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import accuracy_score
-from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
-from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, log_loss
+
+import optuna
+import optuna.logging
+
 import sys
 import os
 import yaml
-from itertools import combinations
 import argparse
 import re
 
@@ -22,27 +25,52 @@ sys.path.append(PROJECT_ROOT)
 UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(UTILS_ROOT)
 
-from snakemake_vars import VALID_GROUPING_MODES, format_feature_ranking_file, \
-                        format_feature_ranking_barplot, format_classifier_importance_plot, \
-                        XGB_STR, RF_STR, LR_STR, CLASSIFIERS
+from snakemake_vars import (
+    VALID_GROUPING_MODES,
+    format_feature_ranking_file,
+    format_feature_ranking_barplot,
+    format_classifier_importance_plot,
+    XGB_STR,
+)
 from utils.io_helpers import collect_csv_files, assign_simulator_labels
 
 
-def evaluate_feature(X, y, feature, classifiers, repeats=1, test_size=0.2):
-    """Train each classifier on a single feature multiple times and return max accuracy per classifier."""
-    acc_dict = {clf_name: [] for clf_name in classifiers}
-    X_feat = X[[feature]].values
+# -----------------------------
+# Helpers for XGBoost Early Stopping (works with xgboost >= 2.1)
+# -----------------------------
+def _fit_xgb_with_early_stopping(
+    clf: xgb.XGBClassifier,
+    X_train: pd.DataFrame,
+    y_train: np.ndarray,
+    X_val: pd.DataFrame,
+    y_val: np.ndarray,
+    early_stopping_rounds: int,
+    verbose: bool = False,
+) -> int:
+    """
+    Fits an XGBClassifier with early stopping.
+    For xgboost >= 2.1.0, early_stopping_rounds is configured on the estimator (constructor/set_params),
+    NOT passed to fit().
 
-    for clf_name, clf in classifiers.items():
-        for r in range(repeats):
-            X_train, X_valid, y_train, y_valid = train_test_split(X_feat, y, stratify=y, test_size=test_size, random_state=r)
-            clf.fit(X_train, y_train)
-            preds = clf.predict(X_valid)
-            acc_dict[clf_name].append(accuracy_score(y_valid, preds))
+    Returns best iteration index (best_iteration).
+    """
+    # set early stopping on the estimator (NOT in fit)
+    clf.set_params(early_stopping_rounds=int(early_stopping_rounds))
 
-    return {clf_name: np.max(acc_list) for clf_name, acc_list in acc_dict.items()}
+    clf.fit(
+        X_train,
+        y_train,
+        eval_set=[(X_val, y_val)],
+        verbose=verbose,
+    )
+
+    best_iter = getattr(clf, "best_iteration", None)
+    if best_iter is None:
+        best_iter = clf.get_booster().best_iteration
+    return int(best_iter)
 
 
+<<<<<<< HEAD
 def evaluate_classifiers(X, y, classifiers, repeats=1, test_size=0.2):
     """Evaluate classifiers on all features together."""
     acc_dict = {clf_name: [] for clf_name in classifiers}
@@ -62,40 +90,172 @@ def evaluate_classifiers(X, y, classifiers, repeats=1, test_size=0.2):
     acc_dict_mean = {clf_name: np.mean(acc_list) for clf_name, acc_list in acc_dict.items()}
 
     return acc_dict_mean, importance_dict
+=======
+def _iter_range(best_iter: int) -> tuple[int, int]:
+    # xgboost expects (start, end) with end exclusive
+    return (0, int(best_iter) + 1)
+>>>>>>> translater_script
 
 
-def get_feature_importance(model, feature_names):
-    if hasattr(model, "feature_importances_"):  # RF, XGB
-        importance = model.feature_importances_
-    elif isinstance(model, LogisticRegression):
-        if model.coef_.ndim == 1 or model.coef_.shape[0] == 1:
-            importance = np.abs(model.coef_).flatten()
-        else:
-            importance = np.mean(np.abs(model.coef_), axis=0)
-    else:
-        raise ValueError(f"Unsupported model type {type(model)}")
+# -----------------------------
+# Optuna tuning for XGBoost
+# -----------------------------
+def tune_xgb_with_optuna(
+    X: pd.DataFrame,
+    y: np.ndarray,
+    num_class: int,
+    n_trials: int = 50,
+    test_size: float = 0.2,
+    seed: int = 0,
+    early_stopping_rounds: int = 30,
+) -> tuple[dict, float]:
+    """
+    Tune XGBClassifier hyperparameters using Optuna.
+    Uses a single stratified train/val split and minimizes validation mlogloss.
+    Returns (best_params, best_val_mlogloss).
+    """
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y, stratify=y, test_size=test_size, random_state=seed
+    )
+    if "difficulty" in X_train.columns:
+        median_diff = X_train["difficulty"].median(skipna=True)
+        X_train["difficulty"] = X_train["difficulty"].fillna(median_diff)
+        X_val["difficulty"] = X_val["difficulty"].fillna(median_diff)
 
+    def objective(trial: optuna.Trial) -> float:
+        params = {
+            "n_estimators": 5000,
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
+            "max_depth": trial.suggest_int("max_depth", 2, 6),
+            "min_child_weight": trial.suggest_float("min_child_weight", 1, 20),
+            "gamma": trial.suggest_float("gamma", 0.0, 5.0),
+            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 100.0, log=True),
+            "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+            "objective": "multi:softprob",
+            "num_class": num_class,
+            "eval_metric": "mlogloss",
+            "tree_method": "hist",
+            "n_jobs": 1,
+            "random_state": 0,
+        }
+
+        clf = xgb.XGBClassifier(**params)
+
+        best_iter = _fit_xgb_with_early_stopping(
+            clf=clf,
+            X_train=X_train,
+            y_train=y_train,
+            X_val=X_val,
+            y_val=y_val,
+            early_stopping_rounds=early_stopping_rounds,
+            verbose=False,
+        )
+
+        # Use best iteration for evaluation
+        y_proba = clf.predict_proba(X_val, iteration_range=_iter_range(best_iter))
+        return log_loss(y_val, y_proba, labels=list(range(num_class)))
+
+    sampler = optuna.samplers.TPESampler(seed=seed)
+    study = optuna.create_study(direction="minimize", sampler=sampler)
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+
+    best = dict(study.best_params)
+    best.update(
+        {
+            "n_estimators": 5000,
+            "objective": "multi:softprob",
+            "num_class": num_class,
+            "eval_metric": "mlogloss",
+            "tree_method": "hist",
+            "n_jobs": 1,
+            "random_state": 0,
+        }
+    )
+    return best, float(study.best_value)
+
+
+# -----------------------------
+# Permutation-importance helpers
+# -----------------------------
+def permutation_importance_accuracy(
+    clf: xgb.XGBClassifier,
+    X_valid: pd.DataFrame,
+    y_valid: np.ndarray,
+    feature_names: list[str],
+    n_repeats: int = 1,
+    seed: int = 0,
+    iteration_range: tuple[int, int] | None = None,
+) -> tuple[dict[str, float], dict[str, float], float]:
+    """
+    Computes permutation importance w.r.t. accuracy on a *fixed* trained model.
+
+    Returns:
+      mean_drop: dict feature -> mean(baseline_acc - permuted_acc)
+      std_drop:  dict feature -> std(baseline_acc - permuted_acc)
+      baseline_acc: accuracy on unpermuted X_valid
+    """
+    rng = np.random.default_rng(seed)
+
+    baseline_preds = clf.predict(X_valid, iteration_range=iteration_range)
+    baseline_acc = accuracy_score(y_valid, baseline_preds)
+
+    mean_drop: dict[str, float] = {}
+    std_drop: dict[str, float] = {}
+
+    Xv = X_valid.copy()
+
+    for f in feature_names:
+        drops = []
+        original = Xv[f].to_numpy(copy=True)
+
+        for _ in range(n_repeats):
+            shuffled = original.copy()
+            rng.shuffle(shuffled)
+            Xv[f] = shuffled
+
+            preds_perm = clf.predict(Xv, iteration_range=iteration_range)
+            acc_perm = accuracy_score(y_valid, preds_perm)
+            drops.append(baseline_acc - acc_perm)
+
+        # restore
+        Xv[f] = original
+
+        mean_drop[f] = float(np.mean(drops))
+        std_drop[f] = float(np.std(drops, ddof=0))
+
+    return mean_drop, std_drop, float(baseline_acc)
+
+
+def get_feature_importance_xgb(model: xgb.XGBClassifier, feature_names: list[str]) -> dict:
+    importance = model.feature_importances_
     return dict(zip(feature_names, importance))
 
 
-def plot_feature_performance(feature_importance_dict, csv_path, group, chance_baseline=None):
+def plot_feature_performance(
+    feature_importance_dict: dict,
+    csv_path: Path,
+    group,
+    chance_baseline: float | None = None,
+):
     """
     Reads the evaluation CSV and produces:
     - one accuracy bar plot
+<<<<<<< HEAD
     - one combined feature importance plot
     - one feature importance plot per classifier
+=======
+    - one feature importance plot for XGB
+>>>>>>> translater_script
     """
-
-    # --- Accuracy plot ---
     df = pd.read_csv(csv_path)
 
-    # Remove empty rows and columns
     df = df.dropna(how="all").dropna(axis=1, how="all")
-
-    # Convert numeric columns to float
     for col in df.columns[1:]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
+<<<<<<< HEAD
     # --- Select & order features for plotting ---
     special = ["ALL_FEATURES", "PASSED_FEATURES"]
 
@@ -107,8 +267,17 @@ def plot_feature_performance(feature_importance_dict, csv_path, group, chance_ba
     # --- Plot ---
     features_acc = df_features["feature"]
     metrics = ["max_accuracy"] + CLASSIFIERS
+=======
+    special = ["CHANCE_BASELINE", "ALL_FEATURES", "PASSED_FEATURES"]
+    df_special = df[df["feature"].isin(special)]
+    df_regular = df[~df["feature"].isin(special + ["OVERALL_MEAN"])]
+    df_features = pd.concat([df_special, df_regular], ignore_index=True)
+
+    features_acc = df_features["feature"].astype(str)
+    metrics = ["max_accuracy", XGB_STR]
+>>>>>>> translater_script
     x = np.arange(len(features_acc))
-    width = 0.2
+    width = 0.35
 
     plt.figure(figsize=(12, 8))
 
@@ -117,44 +286,63 @@ def plot_feature_performance(feature_importance_dict, csv_path, group, chance_ba
             y=chance_baseline,
             linestyle="--",
             linewidth=1.2,
-            label=f"Chance baseline: {chance_baseline:.2f}"
+            label=f"Chance baseline: {chance_baseline:.2f}",
         )
 
     for i, metric in enumerate(metrics):
+<<<<<<< HEAD
         plt.bar(x + i * width, df_features[metric], width=width, label=metric)
 
     plt.xticks(x + width * 1.5, features_acc, rotation=90, fontsize=6)
     plt.ylabel("Accuracy")
+=======
+        if metric in df_features.columns:
+            plt.bar(x + i * width, df_features[metric], width=width, label=metric)
+
+    plt.xticks(x + width * 0.5, features_acc, rotation=90, fontsize=6)
+    plt.ylabel("Accuracy / Accuracy drop proxy")
+>>>>>>> translater_script
     plt.xlabel("Feature")
     plt.title("Model Performance per Feature")
     plt.legend()
     plt.tight_layout()
 
     out_path = os.path.join(
+<<<<<<< HEAD
         os.path.dirname(csv_path),
         format_feature_ranking_barplot(group)
+=======
+        os.path.dirname(str(csv_path)),
+        format_feature_ranking_barplot(group),
+>>>>>>> translater_script
     )
     plt.savefig(out_path, dpi=300)
     plt.close()
 
+<<<<<<< HEAD
     # --- One plot per classifier ---
     for clf_name, importance_dict_single in feature_importance_dict.items():
         features = list(importance_dict_single.keys())
         values = [importance_dict_single[f] for f in features]
+=======
+    if XGB_STR in feature_importance_dict:
+        imp = feature_importance_dict[XGB_STR]
+        features = list(imp.keys())
+        values = [imp[f] for f in features]
+>>>>>>> translater_script
 
         plt.figure(figsize=(10, 6))
         plt.bar(features, values)
         plt.xticks(rotation=90, fontsize=7)
         plt.ylabel("Feature Importance")
         plt.xlabel("Feature")
-        plt.title(f"Feature Importance – {clf_name}")
+        plt.title(f"Feature Importance – {XGB_STR}")
         plt.tight_layout()
 
         out_path_single = os.path.join(
-            os.path.dirname(csv_path),
-            format_classifier_importance_plot(clf_name, group)
+            os.path.dirname(str(csv_path)),
+            format_classifier_importance_plot(XGB_STR, group),
         )
-
         plt.savefig(out_path_single, dpi=300)
         plt.close()
 
@@ -165,37 +353,33 @@ def clean_nan_data(
     max_row_loss_frac: float = 0.05,
 ):
     log_path = output_csv.parent / f"nan_cleanup_{output_csv.stem}.log"
-    log_lines = []
+    log_lines: list[str] = []
 
-    # Replace inf with NaN
     data = data.replace([np.inf, -np.inf], np.nan)
 
     n_rows_initial = len(data)
     if n_rows_initial == 0:
-        return data  # leeres DataFrame
+        return data
 
     for col in data.columns:
-        if col == "simulator":
+        if col == "simulator" or col == "difficulty":
             continue
 
         if data[col].isna().any():
-            n_nan = data[col].isna().sum()
+            n_nan = int(data[col].isna().sum())
             frac_nan = n_nan / n_rows_initial
 
             if frac_nan < max_row_loss_frac:
-                # Lösche nur die betroffenen Zeilen
                 data = data[~data[col].isna()]
                 log_lines.append(
                     f"Dropped {n_nan} rows ({frac_nan:.2%}) due to NaNs in column '{col}'."
                 )
             else:
-                # Lösche die ganze Spalte
                 data = data.drop(columns=[col])
                 log_lines.append(
                     f"Dropped column '{col}' ({frac_nan:.2%} NaNs >= {max_row_loss_frac:.2%})."
                 )
 
-    # --- Write log only if something happened ---
     if log_lines:
         with open(log_path, "w") as f:
             for line in log_lines:
@@ -205,26 +389,32 @@ def clean_nan_data(
 
 
 def run_feature_evaluation(
-        simulator_group,
-        csv_files,
-        output_dir,
-        acc_factor=1.0
-    ):
-    # print(f"\n=== Evaluating simulator group: {simulator_group} ===")
-
-    # --- 2. Load and label data ---
+    simulator_group,
+    csv_files,
+    output_dir,
+    use_optuna: bool = False,
+    optuna_trials: int = 50,
+    es_rounds: int = 30,
+    es_grid: list[int] | None = None,
+    perm_repeats: int = 1,
+    drop_threshold: float = 0.0,
+):
+    # --- Load and label data ---
     all_dfs = assign_simulator_labels(csv_files, simulator_group)
     data = pd.concat(all_dfs, ignore_index=True)
     del all_dfs
 
-    
-    csv_file = output_dir / format_feature_ranking_file(simulator_group)
-    # --- Handle inf / NaN ---
-    data = clean_nan_data(
-        data,
-        output_csv=csv_file,
-    )
+    # -----------------------------
+    # Treat difficulty == -1 as missing (without touching CSV)
+    # -----------------------------
+    if "difficulty" in data.columns:
+        data["difficulty_missing"] = (data["difficulty"] == -1).astype(np.int8)
+        data.loc[data["difficulty"] == -1, "difficulty"] = np.nan
 
+    csv_file = output_dir / format_feature_ranking_file(simulator_group)
+
+    # --- Handle inf / NaN ---
+    data = clean_nan_data(data, output_csv=csv_file)
 
     num_cols = data.select_dtypes(include=["float64"]).columns
     data[num_cols] = data[num_cols].astype(np.float32)
@@ -232,79 +422,196 @@ def run_feature_evaluation(
     # --- Prepare features ---
     dep_var = "simulator"
     data = data[data[dep_var].isin(simulator_group)].copy()
-    features = [col for col in data.columns if col != dep_var]
+    feature_names = [col for col in data.columns if col != dep_var]
     y = LabelEncoder().fit_transform(data[dep_var])
     X = data.drop(columns=[dep_var])
     del data
 
-    # --- Classifiers ---
-    classifiers = {
-        XGB_STR: xgb.XGBClassifier(
-            n_estimators=300,          # moderat, nicht maximal
-            max_depth=3,               # kleine, schwache Bäume
-            learning_rate=0.05,        # konservativ
-            subsample=0.8,             # Regularisierung (Zeilen)
-            colsample_bytree=0.8,      # Regularisierung (Features)
-            reg_lambda=1.0,            # L2-Regularisierung (Standard)
-            reg_alpha=0.0,             # keine aggressive Sparsity
-            objective="multi:softprob",
-            num_class=len(simulator_group),
-            eval_metric="mlogloss",
-            tree_method="hist",
-            n_jobs=1,
-            random_state=0
-        )
-    }
+    num_class = len(simulator_group)
 
-    # --- Feature evaluation ---
+    # --- Optuna mode: run ES grid in ONE invocation and write ONE YAML ---
+    if use_optuna:
+        optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+        # default grid if not specified
+        if es_grid is None:
+            es_values = [10, 30, 50]
+        else:
+            es_values = [int(v) for v in es_grid]
+
+        results: list[dict] = []
+        best_overall: dict | None = None
+
+        for es in es_values:
+            best_xgb_params, best_val_mlogloss = tune_xgb_with_optuna(
+                X=X,
+                y=y,
+                num_class=num_class,
+                n_trials=optuna_trials,
+                test_size=0.2,
+                seed=0,
+                early_stopping_rounds=es,
+            )
+
+            entry = {
+                "early_stopping_rounds": int(es),
+                "optuna_trials": int(optuna_trials),
+                "best_val_mlogloss": float(best_val_mlogloss),
+                "best_params": best_xgb_params,
+            }
+            results.append(entry)
+
+            if best_overall is None or entry["best_val_mlogloss"] < best_overall["best_val_mlogloss"]:
+                best_overall = entry
+
+        params_out = output_dir / f"xgb_params_esgrid_{'_'.join(simulator_group)}.yaml"
+        report = {
+            "use_optuna": True,
+            "selection_metric": "val_mlogloss",
+            "es_grid": [int(e) for e in es_values],
+            "num_class": int(num_class),
+            "results": results,
+            "best_overall": best_overall,
+        }
+        with open(params_out, "w") as f:
+            yaml.safe_dump(report, f, sort_keys=False)
+
+        print(f"[INFO] Optuna ES-grid complete. Wrote combined parameter report to: {params_out}")
+        return
+
+    if "tree" in str(output_dir):
+        xgb_params = {
+            "n_estimators": 300,
+            "learning_rate": 0.08,
+            "max_depth": 5,  # muss int sein (4.56 -> sinnvoll runden)
+            "min_child_weight": 8.68,
+            "gamma": 2.21,
+            "subsample": 0.79,
+            "colsample_bytree": 0.8,
+            "reg_lambda": 2.12,
+            "reg_alpha": 0.22,
+            "objective": "multi:softprob",
+            "num_class": num_class,
+            "eval_metric": "mlogloss",
+            "tree_method": "hist",
+            "n_jobs": 1,
+            "random_state": 0
+        }
+    elif "allele" in str(output_dir):
+        xgb_params = {
+            "n_estimators": 300,
+            "learning_rate": 0.10,
+            "max_depth": 5,  
+            "min_child_weight": 8.92,
+            "gamma": 1.62,
+            "subsample": 0.71,
+            "colsample_bytree": 0.75,
+            "reg_lambda": 3.87,
+            "reg_alpha": 0.08,
+            "objective": "multi:softprob",
+            "num_class": num_class,
+            "eval_metric": "mlogloss",
+            "tree_method": "hist",
+            "n_jobs": 1,
+            "random_state": 0
+        }
+    else:
+        raise ValueError(f"Neither tree nor allel in outputdir name: {output_dir}")
+
+    X_train, X_valid, y_train, y_valid = train_test_split(
+        X, y, stratify=y, test_size=0.2, random_state=0
+    )
+    if "difficulty" in X_train.columns:
+        median_diff = X_train["difficulty"].median(skipna=True)
+        X_train["difficulty"] = X_train["difficulty"].fillna(median_diff)
+        X_valid["difficulty"] = X_valid["difficulty"].fillna(median_diff)
+
+    clf = xgb.XGBClassifier(**xgb_params)
+
+    best_iter = _fit_xgb_with_early_stopping(
+        clf=clf,
+        X_train=X_train,
+        y_train=y_train,
+        X_val=X_valid,
+        y_val=y_valid,
+        early_stopping_rounds=es_rounds,
+        verbose=False,
+    )
+
+    ir = _iter_range(best_iter)
+
+    # overall accuracy on the same validation set (best iteration only)
+    baseline_preds = clf.predict(X_valid, iteration_range=ir)
+    all_features_acc = accuracy_score(y_valid, baseline_preds)
+
+    # chance baseline (majority class proportion)
     class_counts = np.bincount(y)
     majority_prop = class_counts.max() / class_counts.sum()
 
-    min_accuracy = majority_prop * acc_factor
-    feature_records = []
-    passed_features = []
-
-    for feature in features:
-        try:
-            acc_per_clf = evaluate_feature(X, y, feature, classifiers)
-            max_acc = np.nanmax(list(acc_per_clf.values()))
-        except ValueError as e:
-            if "only one class" in str(e):
-                # print(f"⚠️ Skipping feature '{feature}' – only one class.")
-                acc_per_clf = {clf: np.nan for clf in classifiers}
-                max_acc = np.nan
-            else:
-                raise
-
-        if not np.isnan(max_acc) and max_acc >= min_accuracy:
-            passed_features.append(feature)
-
-        record = {"feature": feature, "max_accuracy": max_acc}
-        record.update(acc_per_clf)
-        feature_records.append(record)
-
-    feature_records_sorted = sorted(
-        feature_records,
-        key=lambda x: x["max_accuracy"],
-        reverse=True
+    # permutation importance = drop in accuracy (use best iteration only)
+    mean_drop, std_drop, baseline_acc = permutation_importance_accuracy(
+        clf=clf,
+        X_valid=X_valid,
+        y_valid=y_valid,
+        feature_names=feature_names,
+        n_repeats=perm_repeats,
+        seed=0,
+        iteration_range=ir,
     )
 
-    # --- Evaluate classifiers with all features ---
-    all_features_acc, importance_dict = evaluate_classifiers(X, y, classifiers)
+    # Passed if (mean_drop - std_drop) > threshold
+    threshold = float(drop_threshold)
+    passed_features = [
+        f for f in feature_names
+        if (mean_drop[f] - std_drop[f]) > threshold
+    ]
 
-    # --- Evaluate with passed features ---
+    feature_records = []
+    for f in feature_names:
+        perm_acc = baseline_acc - mean_drop[f]
+        feature_records.append(
+            {
+                "feature": f,
+                "max_accuracy": float(perm_acc),
+                XGB_STR: float(perm_acc),
+            }
+        )
+
+    feature_records_sorted = sorted(feature_records, key=lambda d: d["max_accuracy"], reverse=False)
+
+    # Evaluate with passed features: retrain once
     if passed_features:
-        X_passed = X[passed_features]
-        passed_acc, _ = evaluate_classifiers(X_passed, y, classifiers)
-    else:
-        passed_acc = {clf_name: None for clf_name in classifiers}
+        Xp_train = X_train[passed_features]
+        Xp_valid = X_valid[passed_features]
 
-    # --- Compute mean accuracy ---
-    overall_mean_acc = np.mean(list(all_features_acc.values()))
+        clf_passed = xgb.XGBClassifier(**xgb_params)
+
+        best_iter_passed = _fit_xgb_with_early_stopping(
+            clf=clf_passed,
+            X_train=Xp_train,
+            y_train=y_train,
+            X_val=Xp_valid,
+            y_val=y_valid,
+            early_stopping_rounds=es_rounds,
+            verbose=False,
+        )
+
+        passed_acc = accuracy_score(
+            y_valid,
+            clf_passed.predict(Xp_valid, iteration_range=_iter_range(best_iter_passed)),
+        )
+    else:
+        passed_acc = np.nan
+
+    overall_mean_acc = float(all_features_acc)
+
+    # feature importances from the trained overall model
+    importance_dict = {XGB_STR: get_feature_importance_xgb(clf, feature_names)}
 
     # --- Summary output ---
     summary_records = []
 
+<<<<<<< HEAD
     summary_records.append({
         "feature": "CHANCE_BASELINE",
         "max_accuracy": majority_prop,
@@ -319,39 +626,57 @@ def run_feature_evaluation(
         "max_accuracy": np.max(list(all_features_acc.values())),
         **all_features_acc
     })
+=======
+    summary_records.append(
+        {
+            "feature": "CHANCE_BASELINE",
+            "max_accuracy": float(majority_prop),
+            XGB_STR: np.nan,
+        }
+    )
+>>>>>>> translater_script
 
-    # Passed features
-    valid_values = [v for v in passed_acc.values() if v is not None]
-    max_acc_passed = np.max(valid_values) if valid_values else None
+    summary_records.append(
+        {
+            "feature": "ALL_FEATURES",
+            "max_accuracy": float(all_features_acc),
+            XGB_STR: float(all_features_acc),
+        }
+    )
 
-    summary_records.append({
-        "feature": "PASSED_FEATURES",
-        "max_accuracy": max_acc_passed,
-        **passed_acc
-    })
+    summary_records.append(
+        {
+            "feature": "PASSED_FEATURES",
+            "max_accuracy": float(passed_acc) if not np.isnan(passed_acc) else np.nan,
+            XGB_STR: float(passed_acc) if not np.isnan(passed_acc) else np.nan,
+        }
+    )
 
-    # Blank row
-    summary_records.append({col: np.nan for col in feature_records_sorted[0].keys()})
+    if feature_records_sorted:
+        summary_records.append({k: np.nan for k in feature_records_sorted[0].keys()})
 
     passed_records = [r for r in feature_records_sorted if r["feature"] in passed_features]
     failed_records = [r for r in feature_records_sorted if r["feature"] not in passed_features]
 
     summary_records.extend(passed_records)
-    summary_records.append({col: np.nan for col in feature_records_sorted[0].keys()})
-    summary_records.append({col: np.nan for col in feature_records_sorted[0].keys()})
+
+    if feature_records_sorted:
+        summary_records.append({k: np.nan for k in feature_records_sorted[0].keys()})
+        summary_records.append({k: np.nan for k in feature_records_sorted[0].keys()})
+
     summary_records.extend(failed_records)
 
-    summary_records.append({
-        "feature": "OVERALL_MEAN",
-        "mean_accuracy": overall_mean_acc,
-        **all_features_acc
-    })
+    summary_records.append(
+        {
+            "feature": "OVERALL_MEAN",
+            "max_accuracy": overall_mean_acc,
+            XGB_STR: overall_mean_acc,
+        }
+    )
 
     df_summary = pd.DataFrame(summary_records)
-
-    cols = ["feature", "max_accuracy"] + [c for c in classifiers.keys()]
+    cols = ["feature", "max_accuracy", XGB_STR]
     df_summary = df_summary[cols]
-
     df_summary.to_csv(csv_file, index=False)
 
     plot_feature_performance(importance_dict, csv_file, simulator_group, chance_baseline=majority_prop)
@@ -362,30 +687,10 @@ def csv_list(s: str) -> list[str]:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Extract top features from simulation results."
-    )
+    parser = argparse.ArgumentParser(description="Extract top features from simulation results.")
 
-    parser.add_argument(
-        "--input_folder",
-        type=Path,
-        required=True,
-        help="Input folder containing result files",
-    )
-
-    parser.add_argument(
-        "--output_folder",
-        type=Path,
-        required=True,
-        help="Output folder path",
-    )
-
-    parser.add_argument(
-        "--acc_factor",
-        type=float,
-        default=1.2,
-        help="Accuracy factor (default: 1.2)",
-    )
+    parser.add_argument("--input_folder", type=Path, required=True, help="Input folder containing result files")
+    parser.add_argument("--output_folder", type=Path, required=True, help="Output folder path")
 
     parser.add_argument(
         "--simulators",
@@ -393,7 +698,6 @@ def parse_args():
         default=None,
         help="Comma-separated list of simulators (e.g. sim1,sim2)",
     )
-
     parser.add_argument(
         "--grouped_by",
         type=csv_list,
@@ -404,6 +708,38 @@ def parse_args():
             f"Base choices: {', '.join(VALID_GROUPING_MODES)} "
             "(sample_sizeN / seq_lenN allowed)."
         ),
+    )
+
+    parser.add_argument(
+        "--use_optuna",
+        default=False,
+        action="store_true",
+        help="If set: tune XGB hyperparameters with Optuna and write a parameter report.",
+    )
+    parser.add_argument("--optuna_trials", type=int, default=50, help="Number of Optuna trials (default: 50).")
+
+    parser.add_argument("--es_rounds", type=int, default=30, help="Early stopping rounds for XGB fits (default: 30).")
+
+    parser.add_argument(
+        "--es_grid",
+        type=csv_list,
+        default=None,
+        help="Comma-separated list of early stopping rounds for Optuna grid, e.g. '10,30,50'. "
+             "If set with --use_optuna: runs Optuna for each ES and stores all results in one YAML.",
+    )
+
+    parser.add_argument(
+        "--perm_repeats",
+        type=int,
+        default=50,
+        help="Permutation repeats per feature (default: 20). Increase to reduce noise.",
+    )
+
+    parser.add_argument(
+        "--drop_threshold",
+        type=float,
+        default=0.01,
+        help="Permutation importance pass threshold applied to (mean_drop - std_drop) > threshold. (default: 0.0)",
     )
 
     return parser.parse_args()
@@ -422,9 +758,15 @@ def main():
 
     input_folder = args.input_folder
     output_folder = args.output_folder
-    acc_factor = args.acc_factor
     simulator_group = args.simulators
     grouped_by = args.grouped_by
+    use_optuna = args.use_optuna
+    optuna_trials = args.optuna_trials
+    es_rounds = args.es_rounds
+    es_grid = args.es_grid
+    perm_repeats = args.perm_repeats
+    drop_threshold = args.drop_threshold
+
     normalized_grouped_by = []
     sample_size_group = None
     seq_len_group = None
@@ -448,7 +790,7 @@ def main():
             normalized_grouped_by.append(mode)
 
     grouped_by = set(normalized_grouped_by)
-    
+
     output_folder.mkdir(parents=True, exist_ok=True)
     csv_my_mode = []
 
@@ -458,7 +800,12 @@ def main():
             simulator_group=simulator_group,
             csv_files=csv_files,
             output_dir=output_folder,
-            acc_factor=acc_factor
+            use_optuna=use_optuna,
+            optuna_trials=optuna_trials,
+            es_rounds=es_rounds,
+            es_grid=es_grid,
+            perm_repeats=perm_repeats,
+            drop_threshold=drop_threshold,
         )
         return
 
@@ -468,7 +815,7 @@ def main():
         combo_yamls = [f for f in files if f.endswith(".yaml") or f.endswith(".yml")]
         if not combo_yamls:
             continue
-        
+
         combo_yaml_path = root_path / combo_yamls[0]
         with open(combo_yaml_path, "r") as f:
             combo_params = yaml.safe_load(f)
@@ -479,23 +826,28 @@ def main():
         seq_len = int(combo_params["sequence_length"])
 
         if (
-            (("precision_applied" not in grouped_by) or usePrecision) and
-            (("precision_skipped" not in grouped_by) or (not usePrecision)) and
-            (("recombination_applied" not in grouped_by) or (recombination_rate > 0)) and
-            (("recombination_skipped" not in grouped_by) or (recombination_rate == 0)) and
-            (("sample_size" not in grouped_by) or (sample_size == sample_size_group and usePrecision)) and
-            (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
+            (("precision_applied" not in grouped_by) or usePrecision)
+            and (("precision_skipped" not in grouped_by) or (not usePrecision))
+            and (("recombination_applied" not in grouped_by) or (recombination_rate > 0))
+            and (("recombination_skipped" not in grouped_by) or (recombination_rate == 0))
+            and (("sample_size" not in grouped_by) or (sample_size == sample_size_group and usePrecision))
+            and (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
         ):
             csv_my_mode += collect_csv_files(root_path)
 
-    
     assert_non_empty(csv_files=csv_my_mode, mode=grouped_by)
+
     run_feature_evaluation(
-            simulator_group=simulator_group,
-            csv_files=csv_my_mode,
-            output_dir=output_folder,
-            acc_factor=acc_factor,
-        )
+        simulator_group=simulator_group,
+        csv_files=csv_my_mode,
+        output_dir=output_folder,
+        use_optuna=use_optuna,
+        optuna_trials=optuna_trials,
+        es_rounds=es_rounds,
+        es_grid=es_grid,
+        perm_repeats=perm_repeats,
+        drop_threshold=drop_threshold,
+    )
 
 
 if __name__ == "__main__":

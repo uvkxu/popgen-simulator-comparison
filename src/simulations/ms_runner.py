@@ -610,7 +610,7 @@ def build_ms_command(config):
 
     # Mutation
     theta = get_rate_multiplier(config) * mut_rate * seq_length
-    cmd = f"ms {total_sample_size} {num_replicates} -t {theta:.8g}"
+    cmd = f"ms-mod {total_sample_size} {num_replicates} -t {theta:.8g}"
 
     # Tree output
     if config.get("save_trees", True):
@@ -618,7 +618,7 @@ def build_ms_command(config):
 
     # Set decimal places for site positions based on sequence length
     # n_digits = int(np.ceil(np.log10(seq_length)))
-    cmd += f" -p {5}"
+    cmd += f" -p {17}"
 
     # Recombination
     cmd += set_recombination(config)
@@ -682,7 +682,7 @@ def run_ms_simulation(config=None, command=None, output_file=None):
     str
         Path to the output file containing the ms results.
     """
-    default_ms_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../bin/ms.exe"))
+    default_ms_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../bin/ms-mod"))
     
     if config is not None:
         ms_path = config.get("ms_path", default_ms_path)
