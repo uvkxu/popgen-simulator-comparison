@@ -17,8 +17,8 @@ CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
-DATA_DIR = Path("/hits/fast/cme/kuchve/with_recombination/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/with_recombination/results")
+DATA_DIR = Path("/hits/fast/cme/kuchve/without_recombination/data")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/without_recombination/results")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -45,7 +45,7 @@ TREE_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "tree"
 TREEFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "tree"
 
 #-------COPY-FILE---------------
-COPY_DIR = Path("/hits/fast/cme/kuchve/run3/data")
+COPY_DIR = Path("/hits/fast/cme/kuchve/run2/data")
 COPY_RAW_DATA_DIR = COPY_DIR/ "raw"
 COPY_CLEAN_DIR = COPY_DIR/ "cleaned"
 COPY_FEATURES_DIR = COPY_DIR / "features"
@@ -166,7 +166,7 @@ for config_name in all_configs:
             continue
         '''
 
-        if num_populations * combo.get("sample_sizes") >MAX_OVERALL_SAMPLES:
+        if num_populations * combo.get("sample_sizes") > MAX_OVERALL_SAMPLES:
             continue
 
         possible_mode = f"sample_size_{int(combo.get('sample_sizes'))}"
