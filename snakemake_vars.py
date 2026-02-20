@@ -160,8 +160,13 @@ for config_name in all_configs:
         # --- Filter: remove combos with usePrecision=True AND recombination_rate != 0 ---
         if not bool(combo.get("usePrecision")) and float(combo.get("recombination_rates", 0)) > 0.0:
             continue
-
+        
+        '''
         if not (num_populations * combo.get("sample_sizes") * 2 > MAX_OVERALL_SAMPLES and num_populations * combo.get("sample_sizes") <= MAX_OVERALL_SAMPLES):
+            continue
+        '''
+
+        if num_populations * combo.get("sample_sizes") >MAX_OVERALL_SAMPLES:
             continue
 
         possible_mode = f"sample_size_{int(combo.get('sample_sizes'))}"

@@ -70,31 +70,9 @@ def _fit_xgb_with_early_stopping(
     return int(best_iter)
 
 
-<<<<<<< HEAD
-def evaluate_classifiers(X, y, classifiers, repeats=1, test_size=0.2):
-    """Evaluate classifiers on all features together."""
-    acc_dict = {clf_name: [] for clf_name in classifiers}
-    importance_dict = {}
-
-    feature_names = X.columns.tolist()
-
-    for clf_name, clf in classifiers.items():
-        for r in range(repeats):
-            X_train, X_valid, y_train, y_valid = train_test_split(X, y, stratify=y, test_size=test_size, random_state=r)
-            clf.fit(X_train, y_train)
-            preds = clf.predict(X_valid)
-            acc_dict[clf_name].append(accuracy_score(y_valid, preds))
-        
-        importance_dict[clf_name] = get_feature_importance(clf, feature_names)
-    
-    acc_dict_mean = {clf_name: np.mean(acc_list) for clf_name, acc_list in acc_dict.items()}
-
-    return acc_dict_mean, importance_dict
-=======
 def _iter_range(best_iter: int) -> tuple[int, int]:
     # xgboost expects (start, end) with end exclusive
     return (0, int(best_iter) + 1)
->>>>>>> translater_script
 
 
 # -----------------------------
@@ -242,12 +220,7 @@ def plot_feature_performance(
     """
     Reads the evaluation CSV and produces:
     - one accuracy bar plot
-<<<<<<< HEAD
-    - one combined feature importance plot
-    - one feature importance plot per classifier
-=======
     - one feature importance plot for XGB
->>>>>>> translater_script
     """
     df = pd.read_csv(csv_path)
 
@@ -255,19 +228,6 @@ def plot_feature_performance(
     for col in df.columns[1:]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-<<<<<<< HEAD
-    # --- Select & order features for plotting ---
-    special = ["ALL_FEATURES", "PASSED_FEATURES"]
-
-    df_special = df[df["feature"].isin(special)]
-    df_regular = df[~df["feature"].isin(special + ["OVERALL_MEAN", "CHANCE_BASELINE"])]
-
-    df_features = pd.concat([df_special, df_regular], ignore_index=True)
-
-    # --- Plot ---
-    features_acc = df_features["feature"]
-    metrics = ["max_accuracy"] + CLASSIFIERS
-=======
     special = ["CHANCE_BASELINE", "ALL_FEATURES", "PASSED_FEATURES"]
     df_special = df[df["feature"].isin(special)]
     df_regular = df[~df["feature"].isin(special + ["OVERALL_MEAN"])]
@@ -275,7 +235,6 @@ def plot_feature_performance(
 
     features_acc = df_features["feature"].astype(str)
     metrics = ["max_accuracy", XGB_STR]
->>>>>>> translater_script
     x = np.arange(len(features_acc))
     width = 0.35
 
@@ -290,46 +249,27 @@ def plot_feature_performance(
         )
 
     for i, metric in enumerate(metrics):
-<<<<<<< HEAD
-        plt.bar(x + i * width, df_features[metric], width=width, label=metric)
-
-    plt.xticks(x + width * 1.5, features_acc, rotation=90, fontsize=6)
-    plt.ylabel("Accuracy")
-=======
         if metric in df_features.columns:
             plt.bar(x + i * width, df_features[metric], width=width, label=metric)
 
     plt.xticks(x + width * 0.5, features_acc, rotation=90, fontsize=6)
     plt.ylabel("Accuracy / Accuracy drop proxy")
->>>>>>> translater_script
     plt.xlabel("Feature")
     plt.title("Model Performance per Feature")
     plt.legend()
     plt.tight_layout()
 
     out_path = os.path.join(
-<<<<<<< HEAD
-        os.path.dirname(csv_path),
-        format_feature_ranking_barplot(group)
-=======
         os.path.dirname(str(csv_path)),
         format_feature_ranking_barplot(group),
->>>>>>> translater_script
     )
     plt.savefig(out_path, dpi=300)
     plt.close()
 
-<<<<<<< HEAD
-    # --- One plot per classifier ---
-    for clf_name, importance_dict_single in feature_importance_dict.items():
-        features = list(importance_dict_single.keys())
-        values = [importance_dict_single[f] for f in features]
-=======
     if XGB_STR in feature_importance_dict:
         imp = feature_importance_dict[XGB_STR]
         features = list(imp.keys())
         values = [imp[f] for f in features]
->>>>>>> translater_script
 
         plt.figure(figsize=(10, 6))
         plt.bar(features, values)
@@ -611,7 +551,6 @@ def run_feature_evaluation(
     # --- Summary output ---
     summary_records = []
 
-<<<<<<< HEAD
     summary_records.append({
         "feature": "CHANCE_BASELINE",
         "max_accuracy": majority_prop,
@@ -620,13 +559,6 @@ def run_feature_evaluation(
         LR_STR: np.nan
     })
 
-    # All feature row
-    summary_records.append({
-        "feature": "ALL_FEATURES",
-        "max_accuracy": np.max(list(all_features_acc.values())),
-        **all_features_acc
-    })
-=======
     summary_records.append(
         {
             "feature": "CHANCE_BASELINE",
@@ -634,7 +566,6 @@ def run_feature_evaluation(
             XGB_STR: np.nan,
         }
     )
->>>>>>> translater_script
 
     summary_records.append(
         {
