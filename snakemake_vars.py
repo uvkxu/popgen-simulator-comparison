@@ -165,7 +165,7 @@ for config_name in all_configs:
             continue
         '''
 
-        if num_populations * combo.get("sample_sizes") >MAX_OVERALL_SAMPLES:
+        if num_populations * combo.get("sample_sizes") > MAX_OVERALL_SAMPLES:
             continue
 
         possible_mode = f"sample_size_{int(combo.get('sample_sizes'))}"
