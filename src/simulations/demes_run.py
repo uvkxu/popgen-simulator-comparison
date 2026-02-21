@@ -276,7 +276,7 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
 
         model_id = config.get("metadata", {}).get("model_id")
         species_name = config.get("metadata", {}).get("species")
-        scaling_factor = iconfig.get("metadata", {}).get("scaling_factor")
+        scaling_factor = config.get("metadata", {}).get("scaling_factor")
 
         run_slim_stdpopsim(
             graph=graph,
