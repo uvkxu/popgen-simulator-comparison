@@ -435,7 +435,7 @@ elif copy_file is not None:
             new_pop_size = 100000
 
         if new_pop_size is not None:
-            new_rep = rep % 50
+            new_rep = (rep % 50) + 1
 
             copy_file = re.sub(
                 r"population_sizes-\d+",
