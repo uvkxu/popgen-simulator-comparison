@@ -171,29 +171,32 @@ def main():
     elif copy_file is not None:
         copy_file = str(copy_file)
         rep = int(re.search(r"rep(\d+)", str(output_file)).group(1))
+        new_pop_size = None
+
         if rep <= 50:
             raise ValueError(f"The copy_file should exist! {copy_file}")
         elif rep <= 100:
             new_pop_size = 1000
         elif rep <= 150:
             new_pop_size = 100000
-        
-        new_rep = rep % 50
 
-        copy_file = re.sub(
-            r"population_sizes-\d+",
-            f"population_sizes-{new_pop_size}",
-            copy_file
-        )
-        copy_file = re.sub(
-            r"rep\d+",
-            f"rep{new_rep}",
-            copy_file
-        )
+        if new_pop_size is not None:
+            new_rep = rep % 50
 
-        shutil.copy(Path(copy_file), output_file)
-        print(f"Copied existing file {copy_file} -> {output_file}")
-        sys.exit(0) 
+            copy_file = re.sub(
+                r"population_sizes-\d+",
+                f"population_sizes-{new_pop_size}",
+                copy_file
+            )
+            copy_file = re.sub(
+                r"rep\d+",
+                f"rep{new_rep}",
+                copy_file
+            )
+
+            shutil.copy(Path(copy_file), output_file)
+            print(f"Copied existing file {copy_file} -> {output_file}")
+            sys.exit(0) 
 
     sim = args.sim
 
