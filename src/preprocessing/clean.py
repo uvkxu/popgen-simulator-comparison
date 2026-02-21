@@ -92,7 +92,14 @@ def clean_sim_output(input_file, output_file, sequence_length,
             elif "(" in line and ":" in line:
                 def scale_branch(m):
                     val = float(m.group(1))
-                    if not branches_already_scaled:
+                    if branches_already_scaled:
+                        if branch_decimals is not None:
+                            val = (val / factor)
+                            val = round(val, branch_decimals)
+                            val *= factor
+                    else:
+                        if branch_decimals is not None:
+                            val = round(val, branch_decimals)
                         val *= factor
                     val = int(round(val))
                     return f":{val}"
@@ -157,6 +164,40 @@ def main():
     output_file.parent.mkdir(parents=True, exist_ok=True)
     copy_file = args.copy_file
 
+    if copy_file is not None and copy_file.exists():
+        shutil.copy(copy_file, output_file)
+        print(f"Copied existing file {copy_file} -> {output_file}")
+        sys.exit(0)
+    elif copy_file is not None:
+        copy_file = str(copy_file)
+        rep = int(re.search(r"rep(\d+)", str(output_file)).group(1))
+        new_pop_size = None
+
+        if rep <= 50:
+            raise ValueError(f"The copy_file should exist! {copy_file}")
+        elif rep <= 100:
+            new_pop_size = 1000
+        elif rep <= 150:
+            new_pop_size = 100000
+
+        if new_pop_size is not None:
+            new_rep = (rep % 50) + 1
+
+            copy_file = re.sub(
+                r"population_sizes-\d+",
+                f"population_sizes-{new_pop_size}",
+                copy_file
+            )
+            copy_file = re.sub(
+                r"rep\d+",
+                f"rep{new_rep}",
+                copy_file
+            )
+
+            shutil.copy(Path(copy_file), output_file)
+            print(f"Copied existing file {copy_file} -> {output_file}")
+            sys.exit(0) 
+
     sim = args.sim
 
     input_file = args.input
@@ -179,16 +220,14 @@ def main():
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
-    scaling_factor = combo_params.get("slim_scaling_factor") if sim == "slim" else 4 * combo_params["population_size"]
-
     clean_sim_output(
         input_file=input_file,
         output_file=output_file,
         sequence_length=combo_params["sequence_length"],
         branch_decimals=precision,
         position_decimals=precision,
-        factor= scaling_factor,
-        branches_already_scaled=(sim == "msprime" or scaling_factor == 1.0)
+        factor= 4 * combo_params["population_size"],
+        branches_already_scaled=(sim == "msprime" or sim == "slim" or "slim" in sim)
     )
 
 if __name__ == "__main__":
