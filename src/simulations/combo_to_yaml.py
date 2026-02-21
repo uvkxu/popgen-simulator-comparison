@@ -71,7 +71,8 @@ metadata = {
     "mutation_rate": config["mutation_rate"],
     "recombination_rate": float(combo.get("recombination_rates", 0)),
     "config": str(config_path.name),
-    "usePrecision": bool(combo["usePrecision"])
+    "usePrecision": bool(combo["usePrecision"]),
+    "slim_scaling_factor": config.get("metadata", {}).get("scaling_factor", None)
 }
 
 output_file.parent.mkdir(parents=True, exist_ok=True)
