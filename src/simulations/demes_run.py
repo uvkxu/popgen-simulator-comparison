@@ -382,6 +382,7 @@ if copy_file is not None and copy_file.exists():
     print(f"Copied existing file {copy_file} -> {output_file}")
     sys.exit(0)  
 elif copy_file is not None:
+    copy_file = str(copy_file)
     rep = int(re.search(r"rep(\d+)", output_file).group(1))
     if rep <= 50:
         raise ValueError(f"The copy_file should exist! {copy_file}")
@@ -403,7 +404,7 @@ elif copy_file is not None:
         copy_file
     )
 
-    shutil.copy(copy_file, output_file)
+    shutil.copy(Path(copy_file), output_file)
     print(f"Copied existing file {copy_file} -> {output_file}")
     sys.exit(0) 
 
