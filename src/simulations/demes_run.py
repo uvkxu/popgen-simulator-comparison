@@ -383,7 +383,7 @@ if copy_file is not None and copy_file.exists():
     sys.exit(0)  
 elif copy_file is not None:
     copy_file = str(copy_file)
-    rep = int(re.search(r"rep(\d+)", output_file).group(1))
+    rep = int(re.search(r"rep(\d+)", str(output_file)).group(1))
     if rep <= 50:
         raise ValueError(f"The copy_file should exist! {copy_file}")
     elif rep <= 100:
