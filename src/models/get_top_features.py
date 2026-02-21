@@ -551,14 +551,6 @@ def run_feature_evaluation(
     # --- Summary output ---
     summary_records = []
 
-    summary_records.append({
-        "feature": "CHANCE_BASELINE",
-        "max_accuracy": majority_prop,
-        XGB_STR: np.nan,
-        RF_STR: np.nan,
-        LR_STR: np.nan
-    })
-
     summary_records.append(
         {
             "feature": "CHANCE_BASELINE",
