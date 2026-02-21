@@ -534,5 +534,30 @@ if __name__ == '__main__':
         shutil.copy(copy_file, output_file)
         print(f"Copied existing file {copy_file} -> {output_file}")
         sys.exit(0)
+    elif copy_file is not None:
+        rep = int(re.search(r"rep(\d+)", output_file).group(1))
+        if rep <= 50:
+            raise ValueError(f"The copy_file should exist! {copy_file}")
+        elif rep <= 100:
+            new_pop_size = 1000
+        elif rep <= 150:
+            new_pop_size = 100000
+        
+        new_rep = rep % 50
+
+        copy_file = re.sub(
+            r"population_sizes-\d+",
+            f"population_sizes-{new_pop_size}",
+            copy_file
+        )
+        copy_file = re.sub(
+            r"rep\d+",
+            f"rep{new_rep}",
+            copy_file
+        )
+
+        shutil.copy(copy_file, output_file)
+        print(f"Copied existing file {copy_file} -> {output_file}")
+        sys.exit(0) 
 
     main(args.input, args.output, args.combo_yaml, args.per_pop_stats)

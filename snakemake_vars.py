@@ -45,7 +45,7 @@ TREE_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "tree"
 TREEFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "tree"
 
 #-------COPY-FILE---------------
-COPY_DIR = Path("/hits/fast/cme/kuchve/without_recombination/data")
+COPY_DIR = Path("/hits/fast/cme/kuchve/run2/data")
 COPY_RAW_DATA_DIR = COPY_DIR/ "raw"
 COPY_CLEAN_DIR = COPY_DIR/ "cleaned"
 COPY_FEATURES_DIR = COPY_DIR / "features"
@@ -60,7 +60,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["msms", "msprime", "ms"] #msms_ms behaves the same as just msms
+SIMULATORS = ["slim"] #msms_ms behaves the same as just msms
 REPS = 200
 NUM_REPLICATES = 2
 PRECISION = 17
