@@ -85,7 +85,7 @@ def to_ms_format(ts, rep_index):
     return lines
     
 
-def run_slim_stdpopsim(graph, model_id, species_name, samples, nreps, output_file, slim_path, scaling_factor=1):
+def run_slim_stdpopsim(graph, model_id, species_name, samples, nreps, output_file, slim_path, scaling_factor=10):
     if species_name and model_id:
         species = stdpopsim.get_species(species_name)
         model = species.get_demographic_model(model_id)
@@ -148,7 +148,6 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
     """Run a single simulator and write its raw output to a .txt file."""
 
     if output_file.exists():
-        print(f"Output file already exists, skipping: {output_file}")
         return
 
     with open(config_path, "r") as f:
@@ -270,7 +269,49 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
                         info=str(e))
             raise
 
+    # slim with stdpopsim
+    elif sim == "slim" or sim.startswith("slim"):
+        if not sim_path or not os.path.exists(sim_path):
+                raise FileNotFoundError(f"{sim} executable not found at {sim_path}.")
 
+        model_id = config.get("metadata", {}).get("model_id")
+        species_name = config.get("metadata", {}).get("species")
+        scaling_factor = int(re.search(r'\d+', sim).group())
+
+        run_slim_stdpopsim(
+            graph=graph,
+            model_id=model_id,
+            species_name=species_name,
+            samples=samples,
+            nreps=nreps,
+            output_file=output_file,
+            slim_path=sim_path,
+            scaling_factor=scaling_factor
+        )
+
+        if log_file:
+            log_step(log_file, "simulation", json.dumps(combo), sim, success_inc=1, failed_inc=0)
+
+        
+
+        '''
+        for factor in [10, 20, 50, 100, 200, 500, 1000]:
+            try:
+                run_slim_stdpopsim(
+                    graph=graph,
+                    model_id=model_id,
+                    species_name=species_name,
+                    samples=samples,
+                    nreps=nreps,
+                    output_file=output_file,
+                    slim_path=sim_path,
+                    scaling_factor=factor
+                )
+                print("Scaling factor", factor, "succeeded.")
+            except RuntimeError:
+                print(f"Scaling factor {factor} too large.")
+                break
+        '''
     else:
         raise ValueError(f"Unsupported simulator: {sim}")
 
