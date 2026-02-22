@@ -16,7 +16,7 @@ from snakemake_vars import FILE_FORMATS, PRECISION, SIMULATORS
 
 def clean_sim_output(input_file, output_file, sequence_length,
                             branch_decimals=None, position_decimals=None,
-                            factor=1.0, branches_already_scaled=False):
+                            factor=1.0, slim_scaling_factor=None, branches_already_scaled=False):
 
     with open(input_file, "r") as fin, open(output_file, "w") as fout:
         lines_buffer = []
@@ -101,6 +101,8 @@ def clean_sim_output(input_file, output_file, sequence_length,
                         if branch_decimals is not None:
                             val = round(val, branch_decimals)
                         val *= factor
+                    if slim_scaling_factor is not None:
+                        val = round(val / slim_scaling_factor) * slim_scaling_factor
                     val = int(round(val))
                     return f":{val}"
                 scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, line) if factor != 1 else line
@@ -164,6 +166,7 @@ def main():
     output_file.parent.mkdir(parents=True, exist_ok=True)
     copy_file = args.copy_file
 
+    '''
     if copy_file is not None and copy_file.exists():
         shutil.copy(copy_file, output_file)
         print(f"Copied existing file {copy_file} -> {output_file}")
@@ -197,6 +200,7 @@ def main():
             shutil.copy(Path(copy_file), output_file)
             print(f"Copied existing file {copy_file} -> {output_file}")
             sys.exit(0) 
+    '''
 
     sim = args.sim
 
@@ -227,6 +231,7 @@ def main():
         branch_decimals=precision,
         position_decimals=precision,
         factor= 4 * combo_params["population_size"],
+        slim_scaling_factor=combo_params.get("slim_scaling_factor", None) if sim != "slim" else None,
         branches_already_scaled=(sim == "msprime" or sim == "slim" or "slim" in sim)
     )
 
