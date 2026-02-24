@@ -58,7 +58,7 @@ rule compute_tree_topfeatures_grouped_by_mode:
 
 rule compute_allel_topfeatures_grouped_by_mode:
     input:
-        llambda wildcards: combo_yamls_allel(wildcards.config)
+        lambda wildcards: combo_yamls_allel(wildcards.config)
     output:
         f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_with_summary.csv",
         f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_barplot.png",
