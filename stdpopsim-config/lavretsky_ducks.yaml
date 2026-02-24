@@ -13,21 +13,21 @@ demes:
   description: Ancestral population
   epochs:
   - end_time: 158076.25
-    start_size: 819535
+    start_size: 8195.35
 - name: Mallard
   description: Wild North American mallards
   ancestors:
   - Ancestral
   epochs:
   - end_time: 0
-    start_size: 1370000.0
+    start_size: 13700.000
 - name: Black_duck
   description: Wild black ducks
   ancestors:
   - Ancestral
   epochs:
   - end_time: 0
-    start_size: 1570000.0
+    start_size: 15700.000
 migrations:
 - demes:
   - Mallard

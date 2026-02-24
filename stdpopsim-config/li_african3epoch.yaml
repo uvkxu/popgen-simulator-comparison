@@ -14,9 +14,9 @@ demes:
   description: African D. melanogaster population
   epochs:
   - end_time: 600000
-    start_size: 1720600.0
+    start_size: 17206.000
   - end_time: 0
-    start_size: 8603000.0
+    start_size: 86030.000
 - name: EUR
   description: European D. melanogaster population
   start_time: 158000
@@ -26,4 +26,4 @@ demes:
   - end_time: 154600
     start_size: 2200
   - end_time: 0
-    start_size: 1075000.0
+    start_size: 10750.000
