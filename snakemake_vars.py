@@ -78,9 +78,9 @@ LR_STR = "logistic_regression"
 CLASSIFIERS = [XGB_STR]
 
 
-all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
-all_configs.remove("freedman_wolf")
-all_configs.remove("kamm_westerneurasia")
+# all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
+# all_configs.remove("freedman_wolf")
+all_configs = ["browning_america"]
 
 VALID_GROUPING_MODES = [
     "precision_applied", "precision_skipped",
@@ -855,28 +855,6 @@ MEAN_SAMPLE_SIZE_OUTPUT_ALLEL = [
         f"{ALLEL_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_by_seq_len.csv",
         f"{ALLEL_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_vs_seq_len.png"
     ]
-]
-
-RAW_SINGLE = [
-    f"{RAW_DATA_DIR}/zigzag/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
-    for combo in combinations_by_config["zigzag"]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-EXCLUDE_CONFIGS = {"zigzag", "one_population"}
-
-EFF_CHECK_OUTPUT = [
-    f"{RESULTS_DIR}/{sim}/{typ}/{config}/{mode}/{fname}"
-    for sim in SIMULATORS
-    for typ in ("tree", "allele")
-    for config in all_configs
-    if config not in EXCLUDE_CONFIGS
-    for mode in combinations_mode[config]
-    for fname in (
-        f"check_eff_pop_size_{sim}_summary.csv",
-        f"check_eff_pop_size_{sim}_plot.png",
-    )
 ]
 
 
