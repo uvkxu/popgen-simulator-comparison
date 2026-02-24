@@ -44,7 +44,7 @@ TREE_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "tree"
 TREEFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "tree"
 
 #-------COPY-FILE---------------
-COPY_DIR = Path("/hits/fast/cme/kuchve/run3/data")
+COPY_DIR = Path("/hits/fast/cme/kuchve/nichts/data")
 COPY_RAW_DATA_DIR = COPY_DIR/ "raw"
 COPY_CLEAN_DIR = COPY_DIR/ "cleaned"
 COPY_FEATURES_DIR = COPY_DIR / "features"
@@ -77,7 +77,8 @@ LR_STR = "logistic_regression"
 CLASSIFIERS = [XGB_STR]
 
 
-all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
+# all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
+all_configs = ["lavretsky_ducks", "li_african3epoch"]
 
 VALID_GROUPING_MODES = [
     "precision_applied", "precision_skipped",
