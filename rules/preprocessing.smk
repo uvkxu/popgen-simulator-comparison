@@ -53,21 +53,22 @@ rule compute_allel_features_single_file:
 
 rule compute_tree_features_single_file:
     input:
-        cleaned = f"{CLEAN_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_cleaned_output.txt",
-        combo_yaml = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+        
     output:
         treestats = protected(f"{TREE_FEATURES_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_tree_features.csv")
     params:
         err_file = lambda w: f"{TREE_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
         copy_tree_file= lambda w: f"{COPY_TREE_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_tree_features.csv",
-        copy_clean_file= lambda w: f"{COPY_CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_cleaned_output.txt"
+        copy_clean_file= lambda w: f"{COPY_CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_cleaned_output.txt",
+        cleaned = lambda w: f"{CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_cleaned_output.txt",
+        combo_yaml = lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/{COMBO_PARAMETERS_YAML}"
     conda:
         "../envs/treestats-env.yaml"
     shell:
         """
         scripts/run_with_errorlog.sh {params.err_file} \
         Rscript src/preprocessing/calc_treestatistics.R \
-            {input.cleaned} {output.treestats} {input.combo_yaml} {params.copy_tree_file} {params.copy_clean_file}
+            {params.cleaned} {output.treestats} {params.combo_yaml} {params.copy_tree_file} {params.copy_clean_file}
         """
 
 
