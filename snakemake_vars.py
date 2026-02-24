@@ -80,6 +80,7 @@ CLASSIFIERS = [XGB_STR]
 
 all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
 all_configs.remove("freedman_wolf")
+all_configs.remove("kamm_westerneurasia")
 
 VALID_GROUPING_MODES = [
     "precision_applied", "precision_skipped",
