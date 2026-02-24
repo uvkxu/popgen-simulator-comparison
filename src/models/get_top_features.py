@@ -35,6 +35,21 @@ from snakemake_vars import (
 from utils.io_helpers import collect_csv_files, assign_simulator_labels
 
 
+TOP_TREE_FEATURES = [
+    "tree_height_uw",
+    "phylogenetic_div",
+    "num_branches",
+    "min_adj_uw",
+]
+
+TOP_ALLEL_FEATURES = [
+    "difficulty",
+    "bollback_multinomial",
+    "mean_ld",
+    "sfs_skewness",
+    "alignment_entropy",
+]
+
 # -----------------------------
 # Helpers for XGBoost Early Stopping (works with xgboost >= 2.1)
 # -----------------------------
@@ -228,7 +243,7 @@ def plot_feature_performance(
     for col in df.columns[1:]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    special = ["CHANCE_BASELINE", "ALL_FEATURES", "PASSED_FEATURES"]
+    special = ["CHANCE_BASELINE", "ALL_FEATURES", "PASSED_FEATURES", "TOP_FEATURES"]
     df_special = df[df["feature"].isin(special)]
     df_regular = df[~df["feature"].isin(special + ["OVERALL_MEAN"])]
     df_features = pd.concat([df_special, df_regular], ignore_index=True)
@@ -543,6 +558,41 @@ def run_feature_evaluation(
     else:
         passed_acc = np.nan
 
+    # ---------------------------------------------------------
+    # Evaluate with fixed TOP_FEATURES: retrain once
+    # ---------------------------------------------------------
+    if "tree" in str(output_dir):
+        top_feature_candidates = TOP_TREE_FEATURES
+    elif "allele" in str(output_dir):
+        top_feature_candidates = TOP_ALLEL_FEATURES
+    else:
+        top_feature_candidates = []
+
+    top_features = [f for f in top_feature_candidates if f in X_train.columns]
+
+    if top_features:
+        Xt_train = X_train[top_features]
+        Xt_valid = X_valid[top_features]
+
+        clf_top = xgb.XGBClassifier(**xgb_params)
+
+        best_iter_top = _fit_xgb_with_early_stopping(
+            clf=clf_top,
+            X_train=Xt_train,
+            y_train=y_train,
+            X_val=Xt_valid,
+            y_val=y_valid,
+            early_stopping_rounds=es_rounds,
+            verbose=False,
+        )
+
+        top_acc = accuracy_score(
+            y_valid,
+            clf_top.predict(Xt_valid, iteration_range=_iter_range(best_iter_top)),
+        )
+    else:
+        top_acc = np.nan
+
     overall_mean_acc = float(all_features_acc)
 
     # feature importances from the trained overall model
@@ -572,6 +622,14 @@ def run_feature_evaluation(
             "feature": "PASSED_FEATURES",
             "max_accuracy": float(passed_acc) if not np.isnan(passed_acc) else np.nan,
             XGB_STR: float(passed_acc) if not np.isnan(passed_acc) else np.nan,
+        }
+    )
+
+    summary_records.append(
+        {
+            "feature": "TOP_FEATURES",
+            "max_accuracy": float(top_acc) if not np.isnan(top_acc) else np.nan,
+            XGB_STR: float(top_acc) if not np.isnan(top_acc) else np.nan,
         }
     )
 
