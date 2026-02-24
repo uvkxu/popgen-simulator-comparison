@@ -54,7 +54,6 @@ def _fit_xgb_with_early_stopping(
 
     Returns best iteration index (best_iteration).
     """
-    # set early stopping on the estimator (NOT in fit)
     clf.set_params(early_stopping_rounds=int(early_stopping_rounds))
 
     clf.fit(
@@ -71,8 +70,20 @@ def _fit_xgb_with_early_stopping(
 
 
 def _iter_range(best_iter: int) -> tuple[int, int]:
-    # xgboost expects (start, end) with end exclusive
     return (0, int(best_iter) + 1)
+
+
+def _pred_labels_from_proba(proba: np.ndarray) -> np.ndarray:
+    """
+    Convert predict_proba output into 1D class labels robustly.
+    - multiclass: proba shape (n, K) -> argmax
+    - some binary setups might return shape (n,) -> threshold 0.5
+    """
+    proba = np.asarray(proba)
+    if proba.ndim == 2:
+        return np.argmax(proba, axis=1)
+    # fallback: 1D probabilities of class 1
+    return (proba >= 0.5).astype(int)
 
 
 # -----------------------------
@@ -111,6 +122,7 @@ def tune_xgb_with_optuna(
             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
             "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 100.0, log=True),
             "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+            # keep as-is for your pipeline; we use predict_proba everywhere anyway
             "objective": "multi:softprob",
             "num_class": num_class,
             "eval_metric": "mlogloss",
@@ -131,7 +143,6 @@ def tune_xgb_with_optuna(
             verbose=False,
         )
 
-        # Use best iteration for evaluation
         y_proba = clf.predict_proba(X_val, iteration_range=_iter_range(best_iter))
         return log_loss(y_val, y_proba, labels=list(range(num_class)))
 
@@ -176,7 +187,9 @@ def permutation_importance_accuracy(
     """
     rng = np.random.default_rng(seed)
 
-    baseline_preds = clf.predict(X_valid, iteration_range=iteration_range)
+    # FIX 1: always go via predict_proba -> labels
+    base_proba = clf.predict_proba(X_valid, iteration_range=iteration_range)
+    baseline_preds = _pred_labels_from_proba(base_proba)
     baseline_acc = accuracy_score(y_valid, baseline_preds)
 
     mean_drop: dict[str, float] = {}
@@ -193,11 +206,11 @@ def permutation_importance_accuracy(
             rng.shuffle(shuffled)
             Xv[f] = shuffled
 
-            preds_perm = clf.predict(Xv, iteration_range=iteration_range)
+            proba_perm = clf.predict_proba(Xv, iteration_range=iteration_range)
+            preds_perm = _pred_labels_from_proba(proba_perm)
             acc_perm = accuracy_score(y_valid, preds_perm)
             drops.append(baseline_acc - acc_perm)
 
-        # restore
         Xv[f] = original
 
         mean_drop[f] = float(np.mean(drops))
@@ -217,11 +230,6 @@ def plot_feature_performance(
     group,
     chance_baseline: float | None = None,
 ):
-    """
-    Reads the evaluation CSV and produces:
-    - one accuracy bar plot
-    - one feature importance plot for XGB
-    """
     df = pd.read_csv(csv_path)
 
     df = df.dropna(how="all").dropna(axis=1, how="all")
@@ -344,22 +352,17 @@ def run_feature_evaluation(
     data = pd.concat(all_dfs, ignore_index=True)
     del all_dfs
 
-    # -----------------------------
-    # Treat difficulty == -1 as missing (without touching CSV)
-    # -----------------------------
     if "difficulty" in data.columns:
         data["difficulty_missing"] = (data["difficulty"] == -1).astype(np.int8)
         data.loc[data["difficulty"] == -1, "difficulty"] = np.nan
 
     csv_file = output_dir / format_feature_ranking_file(simulator_group)
 
-    # --- Handle inf / NaN ---
     data = clean_nan_data(data, output_csv=csv_file)
 
     num_cols = data.select_dtypes(include=["float64"]).columns
     data[num_cols] = data[num_cols].astype(np.float32)
 
-    # --- Prepare features ---
     dep_var = "simulator"
     data = data[data[dep_var].isin(simulator_group)].copy()
     feature_names = [col for col in data.columns if col != dep_var]
@@ -369,11 +372,10 @@ def run_feature_evaluation(
 
     num_class = len(simulator_group)
 
-    # --- Optuna mode: run ES grid in ONE invocation and write ONE YAML ---
+    # --- Optuna mode (unchanged) ---
     if use_optuna:
         optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-        # default grid if not specified
         if es_grid is None:
             es_values = [10, 30, 50]
         else:
@@ -419,11 +421,12 @@ def run_feature_evaluation(
         print(f"[INFO] Optuna ES-grid complete. Wrote combined parameter report to: {params_out}")
         return
 
+    # --- fixed params (unchanged) ---
     if "tree" in str(output_dir):
         xgb_params = {
             "n_estimators": 300,
             "learning_rate": 0.08,
-            "max_depth": 5,  # muss int sein (4.56 -> sinnvoll runden)
+            "max_depth": 5,
             "min_child_weight": 8.68,
             "gamma": 2.21,
             "subsample": 0.79,
@@ -435,13 +438,13 @@ def run_feature_evaluation(
             "eval_metric": "mlogloss",
             "tree_method": "hist",
             "n_jobs": 1,
-            "random_state": 0
+            "random_state": 0,
         }
     elif "allele" in str(output_dir):
         xgb_params = {
             "n_estimators": 300,
             "learning_rate": 0.10,
-            "max_depth": 5,  
+            "max_depth": 5,
             "min_child_weight": 8.92,
             "gamma": 1.62,
             "subsample": 0.71,
@@ -453,7 +456,7 @@ def run_feature_evaluation(
             "eval_metric": "mlogloss",
             "tree_method": "hist",
             "n_jobs": 1,
-            "random_state": 0
+            "random_state": 0,
         }
     else:
         raise ValueError(f"Neither tree nor allel in outputdir name: {output_dir}")
@@ -480,15 +483,14 @@ def run_feature_evaluation(
 
     ir = _iter_range(best_iter)
 
-    # overall accuracy on the same validation set (best iteration only)
-    baseline_preds = clf.predict(X_valid, iteration_range=ir)
+    # ✅ FIX 1: overall accuracy via predict_proba -> argmax labels
+    baseline_proba = clf.predict_proba(X_valid, iteration_range=ir)
+    baseline_preds = _pred_labels_from_proba(baseline_proba)
     all_features_acc = accuracy_score(y_valid, baseline_preds)
 
-    # chance baseline (majority class proportion)
     class_counts = np.bincount(y)
     majority_prop = class_counts.max() / class_counts.sum()
 
-    # permutation importance = drop in accuracy (use best iteration only)
     mean_drop, std_drop, baseline_acc = permutation_importance_accuracy(
         clf=clf,
         X_valid=X_valid,
@@ -499,7 +501,6 @@ def run_feature_evaluation(
         iteration_range=ir,
     )
 
-    # Passed if (mean_drop - std_drop) > threshold
     threshold = float(drop_threshold)
     passed_features = [
         f for f in feature_names
@@ -536,19 +537,19 @@ def run_feature_evaluation(
             verbose=False,
         )
 
-        passed_acc = accuracy_score(
-            y_valid,
-            clf_passed.predict(Xp_valid, iteration_range=_iter_range(best_iter_passed)),
+        # ✅ FIX 1 here too
+        proba_passed = clf_passed.predict_proba(
+            Xp_valid, iteration_range=_iter_range(best_iter_passed)
         )
+        preds_passed = _pred_labels_from_proba(proba_passed)
+        passed_acc = accuracy_score(y_valid, preds_passed)
     else:
         passed_acc = np.nan
 
     overall_mean_acc = float(all_features_acc)
 
-    # feature importances from the trained overall model
     importance_dict = {XGB_STR: get_feature_importance_xgb(clf, feature_names)}
 
-    # --- Summary output ---
     summary_records = []
 
     summary_records.append(
