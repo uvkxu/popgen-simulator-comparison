@@ -60,7 +60,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["slim"] #msms_ms behaves the same as just msms "msms", "msprime", "ms", 
+SIMULATORS = ["msms", "msprime", "ms", "slim"] #msms_ms behaves the same as just msms
 REPS = 200
 NUM_REPLICATES = 2
 PRECISION = 17
