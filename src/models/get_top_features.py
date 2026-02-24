@@ -34,6 +34,7 @@ from snakemake_vars import (
 )
 from utils.io_helpers import collect_csv_files, assign_simulator_labels
 
+EXCLUDE_FEATURES = {"non_binary_nodes", "non_binary_nodes_frac"}
 
 # -----------------------------
 # Helpers for XGBoost Early Stopping (works with xgboost >= 2.1)
@@ -350,6 +351,9 @@ def run_feature_evaluation(
     # --- Load and label data ---
     all_dfs = assign_simulator_labels(csv_files, simulator_group)
     data = pd.concat(all_dfs, ignore_index=True)
+    drop_cols = [c for c in EXCLUDE_FEATURES if c in data.columns]
+    if drop_cols:
+        data = data.drop(columns=drop_cols)
     del all_dfs
 
     if "difficulty" in data.columns:
@@ -365,7 +369,7 @@ def run_feature_evaluation(
 
     dep_var = "simulator"
     data = data[data[dep_var].isin(simulator_group)].copy()
-    feature_names = [col for col in data.columns if col != dep_var]
+    feature_names = [c for c in data.columns if c != dep_var and c not in EXCLUDE_FEATURES]
     y = LabelEncoder().fit_transform(data[dep_var])
     X = data.drop(columns=[dep_var])
     del data
