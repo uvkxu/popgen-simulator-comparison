@@ -687,47 +687,6 @@ MEAN_SAMPLE_SIZE_OUTPUT_ALLEL = [
 ]
 
 
-RAW_SINGLE = [
-    f"{RAW_DATA_DIR}/zigzag/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
-    for combo in combinations_by_config["zigzag"]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-EXCLUDE_CONFIGS = {"zigzag", "one_population"}
-
-EFF_CHECK_OUTPUT = [
-    f"{RESULTS_DIR}/{sim}/{typ}/{config}/{mode}/{fname}"
-    for sim in SIMULATORS
-    for typ in ("tree", "allele")
-    for config in all_configs
-    if config not in EXCLUDE_CONFIGS
-    for mode in combinations_mode[config]
-    for fname in (
-        f"check_eff_pop_size_{sim}_summary.csv",
-        f"check_eff_pop_size_{sim}_plot.png",
-    )
-]
-
-
-
-TOPFEATURES_AGG_GLOBAL_DIR = TOPFEATURES_RESULTS_DIR / "aggregated_global"
-TOPFEATURES_AGG_GLOBAL_PLOTS_DIR = TOPFEATURES_AGG_GLOBAL_DIR / "plots"
-
-AGG_OVERALL = TOPFEATURES_AGG_GLOBAL_DIR / "agg_overall.csv"
-AGG_FEAT    = TOPFEATURES_AGG_GLOBAL_DIR / "agg_feature_accuracy.csv"
-AGG_PASSED  = TOPFEATURES_AGG_GLOBAL_DIR / "agg_passed_frequency.csv"
-AGG_INDEX   = TOPFEATURES_AGG_GLOBAL_DIR / "agg_files_index.csv"
-
-# These are "key plots" that your plot script writes (always)
-PLOT_BAR_OVERALL = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "bar_overall_by_config_tree_vs_allele.png"
-PLOT_LINE_SEQLEN = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "line_accuracy_vs_sequence_length.png"
-
-# These are only produced if you pass --demes-root
-PLOT_LINE_RATIO_MEAN = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "line_accuracy_vs_sample_over_meanNe.png"
-PLOT_LINE_RATIO_MIN  = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "line_accuracy_vs_sample_over_minNe.png"
-PLOT_BAR_MIG         = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "bar_accuracy_by_continuous_migration_tree_vs_allele.png"
-
 
 def list_all_topfeature_summary_csv():
     """
