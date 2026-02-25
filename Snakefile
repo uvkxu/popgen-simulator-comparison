@@ -7,4 +7,7 @@ include: "rules/plots.smk"
 
 rule all:
     input:
-        ALL_TREE_FEATURES
+        expand(
+            f"{ALLELFEATURES_PLOTS_DIR}" + "/{config}/deltas.csv",
+            config=all_configs
+        )
