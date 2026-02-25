@@ -383,7 +383,7 @@ def run_feature_evaluation(
     output_dir,
     use_optuna: bool = False,          # bleibt drin, aber wird in dieser Variante ignoriert
     optuna_trials: int = 50,           # ignored
-    es_rounds: int = 10,
+    es_rounds: int = 30,
     es_grid: list[int] | None = None,  # ignored
     perm_repeats: int = 1,             # ignored
     drop_threshold: float = 0.0,       # ignored
