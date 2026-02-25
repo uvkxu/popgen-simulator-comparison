@@ -46,8 +46,6 @@ rule compute_plots_allel_by_mode:
 rule compute_forward_backward_delta_per_config:
     output:
         output_file=f"{ALLELFEATURES_PLOTS_DIR}/{{config}}/deltas.csv"
-    resources:
-        mem_mb=lambda wildcards, input: estimate_mem_mb_classification(input_folder=f"{ALLEL_FEATURES_DIR}/{wildcards.config}/", config=wildcards.config, group=SIMULATORS, mode=wildcards.mode)
     conda:
         "../envs/plot-env.yaml"
     params:
