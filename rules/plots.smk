@@ -56,6 +56,6 @@ rule compute_forward_backward_delta_per_config:
         scripts/run_with_errorlog.sh {params.err_file} \
         python src/plotting/compute_forward_backward_deltas.py \
         --input_dir {params.input_dir} \
-        --output_file {output.output_files} \
+        --output_file {output.output_file} \
         --row_level
         """
