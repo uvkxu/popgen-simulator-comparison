@@ -43,24 +43,34 @@ rule compute_plots_allel_by_mode:
         touch {output.dummy}
         """
 
-
-rule compute_plots_pigot_rho:
-    input:
-        lambda wildcards: get_pigotrho_input(wildcards.simulator)
+rule collect_delta_simulators_tree:
     output:
-        dummy=f"{PLOTS_RESULTS_DIR}/pigotrho/{{simulator}}/.done"
+        output_file=f"{TREEFEATURES_COLLECT_DIR}/{{config}}/simulator_feature_values.csv"
     conda:
         "../envs/plot-env.yaml"
     params:
-        input_dir = lambda wildcards: f"{PIGOT_RHO_DIR}/",
-        output_dir = lambda wildcards: f"{PLOTS_RESULTS_DIR}/pigotrho/{wildcards.simulator}",
-        err_file = lambda wildcards: f"{PIGOT_RHO_DIR}/errorlog.err"
+        input_dir = lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/",
+        err_file = lambda wildcards: f"{TREEFEATURES_COLLECT_DIR}/{wildcards.config}/errorlog.err"
     shell:
         """
         scripts/run_with_errorlog.sh {params.err_file} \
-        python src/models/plot_pigot_rho.py \
-        --input_folder {params.input_dir} \
-        --output_folder {params.output_dir} \
-        --simulators {wildcards.simulator} 
-        touch {output.dummy}
+        python src/plotting/collect_simulator_feature_values.py \
+        --input {params.input_dir} \
+        --out {params.output_dir}
+        """
+
+rule collect_delta_simulators_allel:
+    output:
+        output_file=f"{ALLELFEATURES_COLLECT_DIR}/{{config}}/simulator_feature_values.csv"
+    conda:
+        "../envs/plot-env.yaml"
+    params:
+        input_dir = lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/",
+        err_file = lambda wildcards: f"{ALLELFEATURES_COLLECT_DIR}/{wildcards.config}/errorlog.err"
+    shell:
+        """
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/plotting/collect_simulator_feature_values.py \
+        --input {params.input_dir} \
+        --out {params.output_dir}
         """
