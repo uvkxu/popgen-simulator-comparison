@@ -56,7 +56,7 @@ rule collect_delta_simulators_tree:
         scripts/run_with_errorlog.sh {params.err_file} \
         python src/plotting/collect_simulator_feature_values.py \
         --input {params.input_dir} \
-        --out {params.output_dir}
+        --out {params.output_file}
         """
 
 rule collect_delta_simulators_allel:
@@ -72,5 +72,5 @@ rule collect_delta_simulators_allel:
         scripts/run_with_errorlog.sh {params.err_file} \
         python src/plotting/collect_simulator_feature_values.py \
         --input {params.input_dir} \
-        --out {params.output_dir}
+        --out {params.output_file}
         """
