@@ -201,113 +201,104 @@ def extract_values_from_df(df: pd.DataFrame, wanted: Iterable[str]) -> Dict[str,
 
 
 # ------------------ main collection ------------------
-
 def collect_one_config(config_dir: Path, filename_filter: Optional[str] = None) -> pd.DataFrame:
     """
     Returns tidy dataframe with columns:
-      config, kind, simulator, sample_dir, sample_size_key, seq_len, feature, value, source_csv
+      config, kind, simulator, sample_dir, sample_size_key, seq_len,
+      feature, value, defined, source_csv
     """
     config_dir = config_dir.resolve()
     config_name = config_dir.name
     kind = guess_kind_from_config_dir(config_dir)
 
     wanted_raw = TREE_FEATURES if kind == "tree" else ALLELE_STATS
-    # after cleaning (e.g. pooled_ removal, entropy rename), our target set is:
     wanted = [clean_feature_name(x, kind) for x in wanted_raw]
 
-    # subgroup directories are the sample_size...,seq_len... dirs
+    rows = []
+
+    # iterate over all subgroup dirs
     subgroup_dirs = sorted([p for p in config_dir.iterdir() if p.is_dir()])
 
-    rows = []
     for sd in subgroup_dirs:
         sample_key, seq_len = parse_sample_dir_name(sd.name)
 
-        # collect all csv files under this subgroup directory
         try:
-            csvs = collect_csv_files(sd)  # uses your helper
-            csv_paths = [Path(p) for p in csvs]
+            csv_paths = collect_csv_files(sd)
+            csv_paths = [Path(p) for p in csv_paths]
         except Exception:
             csv_paths = list(sd.rglob("*.csv"))
 
-        # optional filter (if you want only one specific csv type)
         if filename_filter:
             csv_paths = [p for p in csv_paths if p.name == filename_filter]
 
         if not csv_paths:
             continue
 
-        # merge values from potentially multiple CSVs (first hit wins unless later overwrites)
-        found: Dict[str, Tuple[float, Path]] = {}
+        # process EVERY csv independently
         for csv_path in sorted(csv_paths):
-            sim = detect_simulator_from_yaml(csv_path)
+
             try:
                 df = pd.read_csv(csv_path)
             except Exception:
                 continue
 
-            # normalize key names in dataframe (clean pooled_ and entropy)
-            # apply cleaning to columns if wide
+            # clean column names
             df_cols_clean = {c: clean_feature_name(str(c), kind) for c in df.columns}
             df = df.rename(columns=df_cols_clean)
 
-            # also clean key column entries in long format if present
             for keycol in ["feature", "stat", "name", "metric", "key"]:
                 if keycol in df.columns:
-                    df[keycol] = df[keycol].apply(lambda x: clean_feature_name(str(x), kind) if isinstance(x, str) else x)
+                    df[keycol] = df[keycol].apply(
+                        lambda x: clean_feature_name(str(x), kind)
+                        if isinstance(x, str)
+                        else x
+                    )
+
+            # detect simulator once per CSV
+            sim = detect_simulator_from_yaml(csv_path)
 
             vals = extract_values_from_df(df, wanted)
-            for feat, v in vals.items():
-                # keep first occurrence; change to "overwrite" if you prefer latest
-                if feat not in found:
-                    found[feat] = (v, csv_path)
 
-        for feat in wanted:
-            if feat not in found:
-                # explicitly record missing (useful for defined-rate calculations)
-                rows.append({
-                    "config": config_name,
-                    "kind": kind,
-                    "simulator": sim if sim is not None else "",
-                    "sample_dir": sd.name,
-                    "sample_size_key": sample_key,
-                    "seq_len": seq_len,
-                    "feature": feat,
-                    "value": np.nan,
-                    "defined": 0,
-                    "source_csv": "",
-                })
-                continue
+            # ---- NEW BEHAVIOUR: store ALL found values immediately ----
+            for feat in wanted:
 
-            v, src = found[feat]
+                if feat in vals:
+                    v = vals[feat]
 
-            # Treat undefined difficulty (-1) as missing (NaN)
-            if feat == "difficulty" and v == -1.0:
-                rows.append({
-                    "config": config_name,
-                    "kind": kind,
-                    "simulator": sim if sim is not None else "",
-                    "sample_dir": sd.name,
-                    "sample_size_key": sample_key,
-                    "seq_len": seq_len,
-                    "feature": feat,
-                    "value": np.nan,
-                    "defined": 0,
-                    "source_csv": str(src),
-                })
-                continue
+                    if feat == "difficulty" and v == -1.0:
+                        value = np.nan
+                        defined = 0
+                    else:
+                        value = v
+                        defined = 1
 
-            rows.append({
-                "config": config_name,
-                "kind": kind,
-                "simulator": sim if sim is not None else "",
-                "sample_dir": sd.name,
-                "sample_size_key": sample_key,
-                "seq_len": seq_len,
-                "feature": feat,
-                "value": v,
-                "defined": 1,
-                "source_csv": str(src),
-            })
+                    rows.append({
+                        "config": config_name,
+                        "kind": kind,
+                        "simulator": sim if sim is not None else "",
+                        "sample_dir": sd.name,
+                        "sample_size_key": sample_key,
+                        "seq_len": seq_len,
+                        "feature": feat,
+                        "value": value,
+                        "defined": defined,
+                        "source_csv": str(csv_path),
+                    })
+
+                else:
+                    # feature not present in this CSV
+                    rows.append({
+                        "config": config_name,
+                        "kind": kind,
+                        "simulator": sim if sim is not None else "",
+                        "sample_dir": sd.name,
+                        "sample_size_key": sample_key,
+                        "seq_len": seq_len,
+                        "feature": feat,
+                        "value": np.nan,
+                        "defined": 0,
+                        "source_csv": str(csv_path),
+                    })
 
     return pd.DataFrame(rows)
 
