@@ -39,26 +39,38 @@ ALLELE_STATS = [
     "alignment_entropy",
 ]
 
-_SAMPLE_RE = re.compile(r"sample_size_(.*),seq_len_(\d+)$")
+# match e.g.
+# sample_sizes-16_sequence_lengths-1000000_...
+_SAMPLE_SIZE_RE = re.compile(r"sample_sizes-([0-9.]+)")
+_SEQ_LEN_RE = re.compile(r"sequence_lengths-([0-9]+)")
 
-
-# ------------------ helpers ------------------
 
 def parse_sample_dir_name(name: str) -> Tuple[Optional[float], Optional[int]]:
     """
-    Parses:
-      sample_size_<something>,seq_len_<integer>
+    Parses real directory names like:
+    sample_sizes-16_sequence_lengths-1000000_population_sizes-10000_...
+
     Returns:
-      sample_size_key: max numeric token in sample_size part (float)
-      seq_len: int
+        sample_size_key (float)
+        seq_len (int)
     """
-    m = _SAMPLE_RE.match(name)
-    if not m:
-        return None, None
-    sample_part = m.group(1)
-    seq_len = int(m.group(2))
-    nums = re.findall(r"\d+(?:\.\d+)?", sample_part)
-    sample_key = max((float(x) for x in nums), default=None)
+    sample_key = None
+    seq_len = None
+
+    m1 = _SAMPLE_SIZE_RE.search(name)
+    if m1:
+        try:
+            sample_key = float(m1.group(1))
+        except Exception:
+            sample_key = None
+
+    m2 = _SEQ_LEN_RE.search(name)
+    if m2:
+        try:
+            seq_len = int(m2.group(1))
+        except Exception:
+            seq_len = None
+
     return sample_key, seq_len
 
 
@@ -188,27 +200,6 @@ def extract_values_from_df(df: pd.DataFrame, wanted: Iterable[str]) -> Dict[str,
     return {}
 
 
-def detect_simulator(sample_dir: Path) -> Optional[str]:
-    """
-    Uses your detect_simulator_from_yaml utility.
-    """
-    yml = find_yaml_for_simulator(sample_dir)
-    if yml is None:
-        return None
-    try:
-        sim = detect_simulator_from_yaml(yml)
-        if sim is None:
-            return None
-        sim = str(sim).strip()
-        # optional sanity check against SIMULATORS list
-        if SIMULATORS and sim not in SIMULATORS:
-            # still return it, but you’ll notice in output
-            return sim
-        return sim
-    except Exception:
-        return None
-
-
 # ------------------ main collection ------------------
 
 def collect_one_config(config_dir: Path, filename_filter: Optional[str] = None) -> pd.DataFrame:
@@ -230,7 +221,6 @@ def collect_one_config(config_dir: Path, filename_filter: Optional[str] = None) 
     rows = []
     for sd in subgroup_dirs:
         sample_key, seq_len = parse_sample_dir_name(sd.name)
-        sim = detect_simulator(sd)
 
         # collect all csv files under this subgroup directory
         try:
@@ -249,6 +239,7 @@ def collect_one_config(config_dir: Path, filename_filter: Optional[str] = None) 
         # merge values from potentially multiple CSVs (first hit wins unless later overwrites)
         found: Dict[str, Tuple[float, Path]] = {}
         for csv_path in sorted(csv_paths):
+            sim = detect_simulator_from_yaml(csv_path)
             try:
                 df = pd.read_csv(csv_path)
             except Exception:
