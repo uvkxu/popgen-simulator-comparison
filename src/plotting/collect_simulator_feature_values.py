@@ -16,7 +16,7 @@ sys.path.append(PROJECT_ROOT)
 UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(UTILS_ROOT)
 
-from snakemake_vars import SIMULATORS 
+from snakemake_vars import SIMULATORS
 from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml 
 
 
