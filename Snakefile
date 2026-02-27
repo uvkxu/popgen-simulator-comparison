@@ -7,5 +7,4 @@ include: "rules/plots.smk"
 
 rule all:
     input:
-        expand(f"{TREEFEATURES_COLLECT_DIR}/{{config}}/simulator_feature_values.csv", config=all_configs),
-        expand(f"{ALLELFEATURES_COLLECT_DIR}/{{config}}/simulator_feature_values.csv", config=all_configs)
+        ALL_TOGETHER_TOPFEATURES
