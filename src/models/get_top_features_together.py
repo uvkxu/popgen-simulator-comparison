@@ -63,7 +63,7 @@ def collect_and_merge_tree_allele_features(
     allele_csv_files: list[Path],
     simulators: list[str],
     suffix_tree: str = "_tree_features.csv",
-    suffix_allele: str = "_allele_features.csv",
+    suffix_allele: str = "_allel_features.csv",
 ) -> list[pd.DataFrame]:
     """
     Merge tree and allele feature CSVs.
