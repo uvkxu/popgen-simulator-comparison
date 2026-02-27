@@ -34,48 +34,6 @@ from snakemake_vars import (
 )
 from utils.io_helpers import collect_csv_files, assign_simulator_labels
 
-EXCLUDE_FEATURES = {
-    "non_binary_nodes", "non_binary_nodes_frac",
-    # Laplacian spectrum outputs
-    "laplace_spectrum_a",
-    "laplace_spectrum_p",
-    "laplace_spectrum_e",
-    "laplace_spectrum_g",
-
-    # min/max of laplacian/adjacency derived from (binary-resolved) matrices
-    "min_laplace",
-    "max_laplace",
-    "min_adj",
-    "max_adj",
-
-    # stats_laplace(...) outputs (highly sensitive to added nodes/edges)
-    "lap_max",
-    "lap_fiedler",
-    "lap_var",
-    "lap_skew",
-    "lap_mean",
-    "lap_kurt",
-    "lap_second_min",
-    "lap_entropy",
-    "lap_sum",
-    "cut_weight",
-    "conductance",
-    "normalized_cut",
-    "bottleneck_strength",
-    "density_pos",
-    "density_neg",
-    "modularity",
-    "fiedler_sd",
-
-    # graph centrality / distance measures
-    "max_betweenness",
-    "max_closeness",
-    "max_closenessW",
-    "eigen_centrality",
-    "eigen_centralityW",
-    "diameter",
-}
-
 # -----------------------------
 # Helpers for XGBoost Early Stopping (works with xgboost >= 2.1)
 # -----------------------------
@@ -393,8 +351,6 @@ def run_feature_evaluation(
     data = pd.concat(all_dfs, ignore_index=True)
     del all_dfs
 
-    # Drop excluded columns if present (optional columns)
-    drop_cols = [c for c in EXCLUDE_FEATURES if c in data.columns]
     if drop_cols:
         data = data.drop(columns=drop_cols)
 
@@ -414,9 +370,6 @@ def run_feature_evaluation(
 
     dep_var = "simulator"
     data = data[data[dep_var].isin(simulator_group)].copy()
-
-    # Features: everything except label, and also not in EXCLUDE_FEATURES (belt & suspenders)
-    feature_names = [c for c in data.columns if c != dep_var and c not in EXCLUDE_FEATURES]
 
     y = LabelEncoder().fit_transform(data[dep_var])
     X_all = data.drop(columns=[dep_var])
