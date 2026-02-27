@@ -275,3 +275,15 @@ calc_pigot_rho <- function(tr) {
   rho <- (r2 - r1) / (r1 + r2)
   return(rho)
 }
+
+sum_all_branch_lengths <- function(phy) {
+  if (!inherits(phy, "phylo")) {
+    stop("Input must be of class 'phylo'")
+  }
+  
+  if (is.null(phy$edge.length)) {
+    stop("Tree has no branch lengths.")
+  }
+  
+  return(sum(phy$edge.length))
+}
