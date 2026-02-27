@@ -92,7 +92,7 @@ rule compute_together_topfeatures_grouped_by_mode:
             wildcards.group_string.split("_")
         ),
         input_dir_allel = lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/",
-        input_dir_tree = lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/"
+        input_dir_tree = lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/",
         output_dir = lambda wildcards: f"{TOGETHER_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}",
         err_file = lambda wildcards: f"{TOGETHER_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}/errorlog.err"
     conda:
