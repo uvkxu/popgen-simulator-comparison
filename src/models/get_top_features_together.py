@@ -34,17 +34,6 @@ from snakemake_vars import (
 )
 from utils.io_helpers import collect_csv_files, assign_simulator_labels
 
-
-TOP_TREE_FEATURES = [
-    "tree_height_uw",
-    "num_branches",
-]
-
-TOP_ALLEL_FEATURES = [
-    "difficulty",
-    "bollback_multinomial",
-]
-
 EXCLUDE_FEATURES = {
     "non_binary_nodes", "non_binary_nodes_frac",
     # Laplacian spectrum outputs
@@ -193,7 +182,6 @@ def _fit_xgb_with_early_stopping(
 
     Returns best iteration index (best_iteration).
     """
-    # set early stopping on the estimator (NOT in fit)
     clf.set_params(early_stopping_rounds=int(early_stopping_rounds))
 
     clf.fit(
@@ -210,8 +198,20 @@ def _fit_xgb_with_early_stopping(
 
 
 def _iter_range(best_iter: int) -> tuple[int, int]:
-    # xgboost expects (start, end) with end exclusive
     return (0, int(best_iter) + 1)
+
+
+def _pred_labels_from_proba(proba: np.ndarray) -> np.ndarray:
+    """
+    Convert predict_proba output into 1D class labels robustly.
+    - multiclass: proba shape (n, K) -> argmax
+    - some binary setups might return shape (n,) -> threshold 0.5
+    """
+    proba = np.asarray(proba)
+    if proba.ndim == 2:
+        return np.argmax(proba, axis=1)
+    # fallback: 1D probabilities of class 1
+    return (proba >= 0.5).astype(int)
 
 
 # -----------------------------
@@ -250,6 +250,7 @@ def tune_xgb_with_optuna(
             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
             "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 100.0, log=True),
             "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+            # keep as-is for your pipeline; we use predict_proba everywhere anyway
             "objective": "multi:softprob",
             "num_class": num_class,
             "eval_metric": "mlogloss",
@@ -270,7 +271,6 @@ def tune_xgb_with_optuna(
             verbose=False,
         )
 
-        # Use best iteration for evaluation
         y_proba = clf.predict_proba(X_val, iteration_range=_iter_range(best_iter))
         return log_loss(y_val, y_proba, labels=list(range(num_class)))
 
@@ -315,7 +315,9 @@ def permutation_importance_accuracy(
     """
     rng = np.random.default_rng(seed)
 
-    baseline_preds = clf.predict(X_valid, iteration_range=iteration_range)
+    # FIX 1: always go via predict_proba -> labels
+    base_proba = clf.predict_proba(X_valid, iteration_range=iteration_range)
+    baseline_preds = _pred_labels_from_proba(base_proba)
     baseline_acc = accuracy_score(y_valid, baseline_preds)
 
     mean_drop: dict[str, float] = {}
@@ -332,11 +334,11 @@ def permutation_importance_accuracy(
             rng.shuffle(shuffled)
             Xv[f] = shuffled
 
-            preds_perm = clf.predict(Xv, iteration_range=iteration_range)
+            proba_perm = clf.predict_proba(Xv, iteration_range=iteration_range)
+            preds_perm = _pred_labels_from_proba(proba_perm)
             acc_perm = accuracy_score(y_valid, preds_perm)
             drops.append(baseline_acc - acc_perm)
 
-        # restore
         Xv[f] = original
 
         mean_drop[f] = float(np.mean(drops))
@@ -356,18 +358,13 @@ def plot_feature_performance(
     group,
     chance_baseline: float | None = None,
 ):
-    """
-    Reads the evaluation CSV and produces:
-    - one accuracy bar plot
-    - one feature importance plot for XGB
-    """
     df = pd.read_csv(csv_path)
 
     df = df.dropna(how="all").dropna(axis=1, how="all")
     for col in df.columns[1:]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    special = ["CHANCE_BASELINE", "ALL_FEATURES", "PASSED_FEATURES", "TOP_FEATURES"]
+    special = ["CHANCE_BASELINE", "ALL_FEATURES", "PASSED_FEATURES"]
     df_special = df[df["feature"].isin(special)]
     df_regular = df[~df["feature"].isin(special + ["OVERALL_MEAN"])]
     df_features = pd.concat([df_special, df_regular], ignore_index=True)
@@ -519,6 +516,7 @@ def run_feature_evaluation(
 
     num_class = len(simulator_group)
 
+    # Fixed params (same logic as before)
     xgb_params = {
         "n_estimators": 5000,  # high, early stopping will cut
         "learning_rate": 0.08,
@@ -622,8 +620,7 @@ def csv_list(s: str) -> list[str]:
 def parse_args():
     parser = argparse.ArgumentParser(description="Extract top features from simulation results.")
 
-    parser.add_argument("--input_folder_tree", type=Path, required=True, help="Input folder containing result files")
-    parser.add_argument("--input_folder_allel", type=Path, required=True, help="Input folder containing result files")
+    parser.add_argument("--input_folder", type=Path, required=True, help="Input folder containing result files")
     parser.add_argument("--output_folder", type=Path, required=True, help="Output folder path")
 
     parser.add_argument(
@@ -686,37 +683,6 @@ def assert_non_empty(csv_files, mode):
             "This indicates an inconsistent input directory or configuration."
         )
 
-
-def get_csv_files_mode(input_folder, grouped_by, seq_len_group=None, sample_size_group=None):
-    csv_my_mode = []
-
-    for root, _, files in os.walk(input_folder):
-            root_path = Path(root)
-
-            combo_yamls = [f for f in files if f.endswith(".yaml") or f.endswith(".yml")]
-            if not combo_yamls:
-                continue
-
-            combo_yaml_path = root_path / combo_yamls[0]
-            with open(combo_yaml_path, "r") as f:
-                combo_params = yaml.safe_load(f)
-
-            usePrecision = bool(combo_params.get("usePrecision"))
-            recombination_rate = float(combo_params.get("recombination_rate") or 0)
-            sample_size = int(combo_params["sample_structure"][0])
-            seq_len = int(combo_params["sequence_length"])
-
-            if (
-                (("precision_applied" not in grouped_by) or usePrecision)
-                and (("precision_skipped" not in grouped_by) or (not usePrecision))
-                and (("recombination_applied" not in grouped_by) or (recombination_rate > 0))
-                and (("recombination_skipped" not in grouped_by) or (recombination_rate == 0))
-                and (("sample_size" not in grouped_by) or (sample_size == sample_size_group and usePrecision))
-                and (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
-            ):
-                csv_my_mode += collect_csv_files(root_path)
-
-    return csv_my_mode
 
 def main():
     args = parse_args()
