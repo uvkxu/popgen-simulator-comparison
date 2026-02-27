@@ -620,7 +620,8 @@ def csv_list(s: str) -> list[str]:
 def parse_args():
     parser = argparse.ArgumentParser(description="Extract top features from simulation results.")
 
-    parser.add_argument("--input_folder", type=Path, required=True, help="Input folder containing result files")
+    parser.add_argument("--input_folder_tree", type=Path, required=True, help="Input folder containing result files")
+    parser.add_argument("--input_folder_allel", type=Path, required=True, help="Input folder containing result files")
     parser.add_argument("--output_folder", type=Path, required=True, help="Output folder path")
 
     parser.add_argument(
