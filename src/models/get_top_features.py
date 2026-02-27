@@ -34,6 +34,10 @@ from snakemake_vars import (
 )
 from utils.io_helpers import collect_csv_files, assign_simulator_labels
 
+EXCLUDE_FEATURES = {
+    "phylogenetic_div"
+}
+
 # -----------------------------
 # Helpers for XGBoost Early Stopping (works with xgboost >= 2.1)
 # -----------------------------
@@ -351,6 +355,8 @@ def run_feature_evaluation(
     data = pd.concat(all_dfs, ignore_index=True)
     del all_dfs
 
+    # Drop excluded columns if present (optional columns)
+    drop_cols = [c for c in EXCLUDE_FEATURES if c in data.columns]
     if drop_cols:
         data = data.drop(columns=drop_cols)
 
@@ -370,6 +376,9 @@ def run_feature_evaluation(
 
     dep_var = "simulator"
     data = data[data[dep_var].isin(simulator_group)].copy()
+
+    # Features: everything except label, and also not in EXCLUDE_FEATURES (belt & suspenders)
+    feature_names = [c for c in data.columns if c != dep_var and c not in EXCLUDE_FEATURES]
 
     y = LabelEncoder().fit_transform(data[dep_var])
     X_all = data.drop(columns=[dep_var])
