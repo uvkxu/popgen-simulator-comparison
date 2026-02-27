@@ -182,7 +182,7 @@ def tune_xgb_with_optuna(
     n_trials: int = 50,
     test_size: float = 0.2,
     seed: int = 0,
-    early_stopping_rounds: int = 30,
+    early_stopping_rounds: int = 50,
 ) -> tuple[dict, float]:
     """
     Tune XGBClassifier hyperparameters using Optuna.
@@ -432,7 +432,7 @@ def run_feature_evaluation(
     output_dir,
     use_optuna: bool = False,
     optuna_trials: int = 50,
-    es_rounds: int = 30,
+    es_rounds: int = 50,
     es_grid: list[int] | None = None,
     perm_repeats: int = 1,
     drop_threshold: float = 0.0,
@@ -772,7 +772,7 @@ def parse_args():
     )
     parser.add_argument("--optuna_trials", type=int, default=50, help="Number of Optuna trials (default: 50).")
 
-    parser.add_argument("--es_rounds", type=int, default=30, help="Early stopping rounds for XGB fits (default: 30).")
+    parser.add_argument("--es_rounds", type=int, default=50, help="Early stopping rounds for XGB fits (default: 50).")
 
     parser.add_argument(
         "--es_grid",
