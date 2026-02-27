@@ -44,6 +44,8 @@ ALLELFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "allele"
 TREE_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "tree"
 TREEFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "tree"
 
+TOGETHER_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "together"
+
 #-------COPY-FILE---------------
 COPY_DIR = Path("/hits/fast/cme/kuchve/without_recombination/data")
 COPY_RAW_DATA_DIR = COPY_DIR/ "raw"
@@ -814,6 +816,25 @@ ALL_ALLEL_TOPFEATURES = [
     for sim_group in simulator_groups
 ] + [
     f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
+    for classifier in CLASSIFIERS
+]
+
+
+ALL_TOGETHER_TOPFEATURES = [
+    f"{TOGETHER_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
+] + [
+    f"{TOGETHER_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
+] + [
+    f"{TOGETHER_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
     for config in all_configs
     for mode in combinations_mode[config]
     for sim_group in simulator_groups
