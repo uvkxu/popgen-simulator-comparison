@@ -46,40 +46,44 @@ TOP_ALLEL_FEATURES = [
 ]
 
 
-def _relative_key(p: Path) -> Path:
+def _relative_after_dir(p: Path, anchor: str) -> Path:
+    """
+    Return path relative to the directory named `anchor`
+    e.g. .../tree/configX/rep1/file.csv -> configX/rep1/file.csv
+    """
     parts = p.parts
-    for i, part in enumerate(parts):
-        if part.startswith("rep"):
-            return Path(*parts[i:])
-    raise ValueError(f"Could not build relative key for {p}")
+    if anchor not in parts:
+        raise ValueError(f"'{anchor}' not found in path: {p}")
+
+    idx = parts.index(anchor)
+    return Path(*parts[idx + 1:])
 
 def collect_and_merge_tree_allele_features(
-    tree_csv_files,
-    allele_csv_files,
-    simulators,
-    suffix_tree = "_tree_features.csv",
-    suffix_allele = "_allele_features.csv",
+    tree_csv_files: list[Path],
+    allele_csv_files: list[Path],
+    simulators: list[str],
+    suffix_tree: str = "_tree_features.csv",
+    suffix_allele: str = "_allele_features.csv",
 ) -> list[pd.DataFrame]:
     """
-    Merge tree and allele feature CSVs given explicit file lists.
+    Merge tree and allele feature CSVs.
+    Paths are assumed identical below `tree/` vs `allele/`.
     Feature names are NOT prefixed.
-
-    Matching is done via relative path + filename substitution.
     """
 
-    # --- build allele lookup by relative path ---
+    # --- build allele lookup: relative path below allele/ ---
     allele_lookup: dict[Path, Path] = {}
 
     for a in allele_csv_files:
-        key = _relative_key(a)
+        key = _relative_after_dir(a, "allele")
         allele_lookup[key] = a
 
     merged_dfs: list[pd.DataFrame] = []
 
     for tree_csv in tree_csv_files:
-        key = Path(*tree_csv.parts[-len(tree_csv.parts):])
+        tree_key = _relative_after_dir(tree_csv, "tree")
 
-        allele_key = key.with_name(
+        allele_key = tree_key.with_name(
             tree_csv.name.replace(suffix_tree, suffix_allele)
         )
 
