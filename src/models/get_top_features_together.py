@@ -32,7 +32,7 @@ from snakemake_vars import (
     format_classifier_importance_plot,
     XGB_STR,
 )
-from utils.io_helpers import collect_csv_files, assign_simulator_labels
+from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
 EXCLUDE_FEATURES = {
     "non_binary_nodes", "non_binary_nodes_frac",
@@ -134,13 +134,9 @@ def collect_and_merge_tree_allele_features(
             )
 
         # --- infer simulator from filename ---
-        simulator_name = None
-        for sim in simulators:
-            if f"{sim}_" in tree_csv.name:
-                simulator_name = sim
-                break
+        simulator_name = detect_simulator_from_yaml(tree_csv)
 
-        if simulator_name is None:
+        if simulator_name not in simulators:
             continue
 
         simulator_col = pd.Series(
