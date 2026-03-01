@@ -492,83 +492,195 @@ def run_feature_evaluation(
         "n_jobs": 1,
         "random_state": 0,
     }
-
-    # One split reused for all single-feature fits (fair comparison)
-    X_train_all, X_valid_all, y_train, y_valid = train_test_split(
-        X_all, y, stratify=y, test_size=0.2, random_state=0
+ 
+    X_train, X_valid, y_train, y_valid = train_test_split(
+        X, y, stratify=y, test_size=0.2, random_state=0
     )
+    if "difficulty" in X_train.columns:
+        median_diff = X_train["difficulty"].median(skipna=True)
+        X_train["difficulty"] = X_train["difficulty"].fillna(median_diff)
+        X_valid["difficulty"] = X_valid["difficulty"].fillna(median_diff)
 
-    # Fill difficulty NaNs using train median (same as your code)
-    if "difficulty" in X_train_all.columns:
-        median_diff = X_train_all["difficulty"].median(skipna=True)
-        X_train_all["difficulty"] = X_train_all["difficulty"].fillna(median_diff)
-        X_valid_all["difficulty"] = X_valid_all["difficulty"].fillna(median_diff)
+    clf = xgb.XGBClassifier(**xgb_params)
 
-    # Baselines
-    class_counts = np.bincount(y)
-    majority_prop = class_counts.max() / class_counts.sum()
-
-    # ALL_FEATURES baseline model
-    clf_all = xgb.XGBClassifier(**xgb_params)
-    best_iter_all = _fit_xgb_with_early_stopping(
-        clf=clf_all,
-        X_train=X_train_all,
+    best_iter = _fit_xgb_with_early_stopping(
+        clf=clf,
+        X_train=X_train,
         y_train=y_train,
-        X_val=X_valid_all,
+        X_val=X_valid,
         y_val=y_valid,
         early_stopping_rounds=es_rounds,
         verbose=False,
     )
-    ir_all = _iter_range(best_iter_all)
-    proba_all = clf_all.predict_proba(X_valid_all, iteration_range=ir_all)
-    preds_all = _pred_labels_from_proba(proba_all)
-    all_features_acc = accuracy_score(y_valid, preds_all)
 
-    # --- Single-feature evaluation ---
-    records = []
+    ir = _iter_range(best_iter)
 
-    # special rows
-    records.append({"feature": "CHANCE_BASELINE", "max_accuracy": float(majority_prop), XGB_STR: np.nan})
-    records.append({"feature": "ALL_FEATURES", "max_accuracy": float(all_features_acc), XGB_STR: float(all_features_acc)})
-    records.append({"feature": "PASSED_FEATURES", "max_accuracy": np.nan, XGB_STR: np.nan})  # not used here
+    # overall accuracy on the same validation set (best iteration only)
+    baseline_preds = clf.predict(X_valid, iteration_range=ir)
+    all_features_acc = accuracy_score(y_valid, baseline_preds)
 
-    # blank separator
-    records.append({"feature": np.nan, "max_accuracy": np.nan, XGB_STR: np.nan})
+    # chance baseline (majority class proportion)
+    class_counts = np.bincount(y)
+    majority_prop = class_counts.max() / class_counts.sum()
 
-    single_accs = []
+    # permutation importance = drop in accuracy (use best iteration only)
+    mean_drop, std_drop, baseline_acc = permutation_importance_accuracy(
+        clf=clf,
+        X_valid=X_valid,
+        y_valid=y_valid,
+        feature_names=feature_names,
+        n_repeats=perm_repeats,
+        seed=0,
+        iteration_range=ir,
+    )
 
+    # Passed if (mean_drop - std_drop) > threshold
+    threshold = float(drop_threshold)
+    passed_features = [
+        f for f in feature_names
+        if (mean_drop[f] - std_drop[f]) > threshold
+    ]
+
+    feature_records = []
     for f in feature_names:
-        Xtr = X_train_all[[f]].copy()
-        Xva = X_valid_all[[f]].copy()
+        perm_acc = baseline_acc - mean_drop[f]
+        feature_records.append(
+            {
+                "feature": f,
+                "max_accuracy": float(perm_acc),
+                XGB_STR: float(perm_acc),
+            }
+        )
 
-        # train model on the single column
-        clf = xgb.XGBClassifier(**xgb_params)
-        best_iter = _fit_xgb_with_early_stopping(
-            clf=clf,
-            X_train=Xtr,
+    feature_records_sorted = sorted(feature_records, key=lambda d: d["max_accuracy"], reverse=False)
+
+    # Evaluate with passed features: retrain once
+    if passed_features:
+        Xp_train = X_train[passed_features]
+        Xp_valid = X_valid[passed_features]
+
+        clf_passed = xgb.XGBClassifier(**xgb_params)
+
+        best_iter_passed = _fit_xgb_with_early_stopping(
+            clf=clf_passed,
+            X_train=Xp_train,
             y_train=y_train,
-            X_val=Xva,
+            X_val=Xp_valid,
             y_val=y_valid,
             early_stopping_rounds=es_rounds,
             verbose=False,
         )
-        ir = _iter_range(best_iter)
 
-        proba = clf.predict_proba(Xva, iteration_range=ir)
-        preds = _pred_labels_from_proba(proba)
-        acc = float(accuracy_score(y_valid, preds))
+        passed_acc = accuracy_score(
+            y_valid,
+            clf_passed.predict(Xp_valid, iteration_range=_iter_range(best_iter_passed)),
+        )
+    else:
+        passed_acc = np.nan
 
-        single_accs.append(acc)
-        records.append({"feature": f, "max_accuracy": acc, XGB_STR: acc})
+    # ---------------------------------------------------------
+    # Evaluate with fixed TOP_FEATURES: retrain once
+    # ---------------------------------------------------------
+    if "tree" in str(output_dir):
+        top_feature_candidates = TOP_TREE_FEATURES
+    elif "allele" in str(output_dir):
+        top_feature_candidates = TOP_ALLEL_FEATURES
+    else:
+        top_feature_candidates = []
 
-    # Optional summary row: mean single-feature accuracy
-    records.append({"feature": "SINGLE_FEATURE_MEAN", "max_accuracy": float(np.mean(single_accs)), XGB_STR: float(np.mean(single_accs))})
+    top_features = [f for f in top_feature_candidates if f in X_train.columns]
 
-    df_out = pd.DataFrame(records)[["feature", "max_accuracy", XGB_STR]]
-    df_out.to_csv(csv_file, index=False)
+    if top_features:
+        Xt_train = X_train[top_features]
+        Xt_valid = X_valid[top_features]
 
-    # Optional: barplot reusing your plotting function
-    plot_feature_performance({XGB_STR: {}}, csv_file, simulator_group, chance_baseline=float(majority_prop))
+        clf_top = xgb.XGBClassifier(**xgb_params)
+
+        best_iter_top = _fit_xgb_with_early_stopping(
+            clf=clf_top,
+            X_train=Xt_train,
+            y_train=y_train,
+            X_val=Xt_valid,
+            y_val=y_valid,
+            early_stopping_rounds=es_rounds,
+            verbose=False,
+        )
+
+        top_acc = accuracy_score(
+            y_valid,
+            clf_top.predict(Xt_valid, iteration_range=_iter_range(best_iter_top)),
+        )
+    else:
+        top_acc = np.nan
+
+    overall_mean_acc = float(all_features_acc)
+
+    # feature importances from the trained overall model
+    importance_dict = {XGB_STR: get_feature_importance_xgb(clf, feature_names)}
+
+    # --- Summary output ---
+    summary_records = []
+
+    summary_records.append(
+        {
+            "feature": "CHANCE_BASELINE",
+            "max_accuracy": float(majority_prop),
+            XGB_STR: np.nan,
+        }
+    )
+
+    summary_records.append(
+        {
+            "feature": "ALL_FEATURES",
+            "max_accuracy": float(all_features_acc),
+            XGB_STR: float(all_features_acc),
+        }
+    )
+
+    summary_records.append(
+        {
+            "feature": "PASSED_FEATURES",
+            "max_accuracy": float(passed_acc) if not np.isnan(passed_acc) else np.nan,
+            XGB_STR: float(passed_acc) if not np.isnan(passed_acc) else np.nan,
+        }
+    )
+
+    summary_records.append(
+        {
+            "feature": "TOP_FEATURES",
+            "max_accuracy": float(top_acc) if not np.isnan(top_acc) else np.nan,
+            XGB_STR: float(top_acc) if not np.isnan(top_acc) else np.nan,
+        }
+    )
+
+    if feature_records_sorted:
+        summary_records.append({k: np.nan for k in feature_records_sorted[0].keys()})
+
+    passed_records = [r for r in feature_records_sorted if r["feature"] in passed_features]
+    failed_records = [r for r in feature_records_sorted if r["feature"] not in passed_features]
+
+    summary_records.extend(passed_records)
+
+    if feature_records_sorted:
+        summary_records.append({k: np.nan for k in feature_records_sorted[0].keys()})
+        summary_records.append({k: np.nan for k in feature_records_sorted[0].keys()})
+
+    summary_records.extend(failed_records)
+
+    summary_records.append(
+        {
+            "feature": "OVERALL_MEAN",
+            "max_accuracy": overall_mean_acc,
+            XGB_STR: overall_mean_acc,
+        }
+    )
+
+    df_summary = pd.DataFrame(summary_records)
+    cols = ["feature", "max_accuracy", XGB_STR]
+    df_summary = df_summary[cols]
+    df_summary.to_csv(csv_file, index=False)
+
+    plot_feature_performance(importance_dict, csv_file, simulator_group, chance_baseline=majority_prop)
 
 
 def csv_list(s: str) -> list[str]:
