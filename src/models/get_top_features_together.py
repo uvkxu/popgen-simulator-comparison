@@ -32,7 +32,7 @@ from snakemake_vars import (
     format_classifier_importance_plot,
     XGB_STR,
 )
-from utils.io_helpers import collect_csv_files, assign_simulator_labels
+from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
 EXCLUDE_FEATURES = {
     "phylogenetic_div"
@@ -96,13 +96,10 @@ def collect_and_merge_tree_allele_features(
             )
 
         # --- infer simulator from filename ---
-        simulator_name = None
-        for sim in simulators:
-            if f"{sim}_" in tree_csv.name:
-                simulator_name = sim
-                break
+        simulator_name = detect_simulator_from_yaml(
+                input_file=tree_csv)
 
-        if simulator_name is None:
+        if simulator_name not in simulators:
             continue
 
         simulator_col = pd.Series(
@@ -253,7 +250,6 @@ def tune_xgb_with_optuna(
         }
     )
     return best, float(study.best_value)
-
 
 # -----------------------------
 # Permutation-importance helpers
