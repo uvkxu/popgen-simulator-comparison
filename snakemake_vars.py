@@ -44,6 +44,7 @@ ALLELFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "allele"
 TREE_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "tree"
 TREEFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "tree"
 TOGETHER_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "together"
+TIPTOP_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "top_feature_run"
 
 COLLECT_DIR = RESULTS_DIR / "collected"
 ALLELFEATURES_COLLECT_DIR = COLLECT_DIR / "allele"
@@ -537,8 +538,8 @@ def format_feature_ranking_barplot(group):
 def format_classifier_importance_plot(classifier, group):
     return f"feature_importance_{'_'.join(group)}_{classifier}.png"
             
-simulator_groups = list(combinations(SIMULATORS, 2))
-# simulator_groups = []
+# simulator_groups = list(combinations(SIMULATORS, 2))
+simulator_groups = []
 simulator_groups.append(tuple(SIMULATORS))
 simulator_groups = list(dict.fromkeys(simulator_groups))
 # simulator_groups.append(("msms", "msprime", "ms"))
@@ -960,4 +961,11 @@ CREATE_COMBO_PARAMETERS_YAML = [
     f"{ALLEL_FEATURES_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
     for config in all_configs
     for combo in combinations_by_config[config]
+]
+
+TOPFEATURES_ACCURACY = [
+    f"{TIPTOP_TOPFEATURES_DIR}/{config}/{mode}/feature_ranking_{group_string}_with_summary.csv"
+        for config in all_configs
+        for mode in combinations_mode[config]
+        for group in simulator_groups
 ]
