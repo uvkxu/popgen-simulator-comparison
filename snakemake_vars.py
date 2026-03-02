@@ -964,8 +964,8 @@ CREATE_COMBO_PARAMETERS_YAML = [
 ]
 
 TOPFEATURES_ACCURACY = [
-    f"{TIPTOP_TOPFEATURES_DIR}/{config}/{mode}/feature_ranking_{group_string}_with_summary.csv"
+    f"{TIPTOP_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
         for config in all_configs
         for mode in combinations_mode[config]
-        for group in simulator_groups
+        for sim_group in simulator_groups
 ]
