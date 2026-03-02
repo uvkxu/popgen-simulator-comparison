@@ -443,36 +443,86 @@ def run_feature_evaluation(
     data = pd.concat(all_dfs, ignore_index=True)
     del all_dfs
 
-    # Drop excluded columns if present (optional columns)
-    drop_cols = [c for c in EXCLUDE_FEATURES if c in data.columns]
-    if drop_cols:
-        data = data.drop(columns=drop_cols)
-
+    # -----------------------------
+    # Treat difficulty == -1 as missing (without touching CSV)
+    # -----------------------------
     if "difficulty" in data.columns:
         data["difficulty_missing"] = (data["difficulty"] == -1).astype(np.int8)
         data.loc[data["difficulty"] == -1, "difficulty"] = np.nan
 
     csv_file = output_dir / format_feature_ranking_file(simulator_group)
-    output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Clean NaNs / infs (same as before)
+    # --- Handle inf / NaN ---
     data = clean_nan_data(data, output_csv=csv_file)
 
-    # numeric downcast
     num_cols = data.select_dtypes(include=["float64"]).columns
     data[num_cols] = data[num_cols].astype(np.float32)
 
+    # --- Prepare features ---
     dep_var = "simulator"
     data = data[data[dep_var].isin(simulator_group)].copy()
+    FEATURES_TO_EXCLUDE = ["phylogenetic_div"]
 
-    # Features: everything except label, and also not in EXCLUDE_FEATURES (belt & suspenders)
-    feature_names = [c for c in data.columns if c != dep_var and c not in EXCLUDE_FEATURES]
+    feature_names = [
+        col for col in data.columns
+        if col != dep_var and col not in FEATURES_TO_EXCLUDE
+    ]
 
     y = LabelEncoder().fit_transform(data[dep_var])
-    X_all = data.drop(columns=[dep_var])
+    X = data[feature_names].copy()
     del data
 
     num_class = len(simulator_group)
+
+    # --- Optuna mode: run ES grid in ONE invocation and write ONE YAML ---
+    if use_optuna:
+        optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+        # default grid if not specified
+        if es_grid is None:
+            es_values = [10, 30, 50]
+        else:
+            es_values = [int(v) for v in es_grid]
+
+        results: list[dict] = []
+        best_overall: dict | None = None
+
+        for es in es_values:
+            best_xgb_params, best_val_mlogloss = tune_xgb_with_optuna(
+                X=X,
+                y=y,
+                num_class=num_class,
+                n_trials=optuna_trials,
+                test_size=0.2,
+                seed=0,
+                early_stopping_rounds=es,
+            )
+
+            entry = {
+                "early_stopping_rounds": int(es),
+                "optuna_trials": int(optuna_trials),
+                "best_val_mlogloss": float(best_val_mlogloss),
+                "best_params": best_xgb_params,
+            }
+            results.append(entry)
+
+            if best_overall is None or entry["best_val_mlogloss"] < best_overall["best_val_mlogloss"]:
+                best_overall = entry
+
+        params_out = output_dir / f"xgb_params_esgrid_{'_'.join(simulator_group)}.yaml"
+        report = {
+            "use_optuna": True,
+            "selection_metric": "val_mlogloss",
+            "es_grid": [int(e) for e in es_values],
+            "num_class": int(num_class),
+            "results": results,
+            "best_overall": best_overall,
+        }
+        with open(params_out, "w") as f:
+            yaml.safe_dump(report, f, sort_keys=False)
+
+        print(f"[INFO] Optuna ES-grid complete. Wrote combined parameter report to: {params_out}")
+        return
 
     # Fixed params (same logic as before)
     xgb_params = {
