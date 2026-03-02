@@ -46,6 +46,13 @@ FEATURE_SETS = {
         "num_branches",
         "difficulty",
     ],
+    "WITH_MORE": [
+        "tree_height_uw",
+        "num_branches",
+        "difficulty",
+        "bollback_multinomial",
+        "min_laplace",
+        "min_adj"]
 }
 
 
