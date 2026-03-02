@@ -8,4 +8,4 @@ include: "rules/effective_pop_size.smk"
 
 rule all:
     input:
-        ALL_COPY_COMBO_YAM
+        ALL_TREE_TOPFEATURES, ALL_ALLEL_TOPFEATURES, ALL_TOGETHER_TOPFEATURES

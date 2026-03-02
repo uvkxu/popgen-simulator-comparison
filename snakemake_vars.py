@@ -77,8 +77,8 @@ LR_STR = "logistic_regression"
 CLASSIFIERS = [XGB_STR]
 
 
-# all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
-all_configs = ["lavretsky_ducks", "li_african3epoch"]
+all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
+# all_configs = ["lavretsky_ducks", "li_african3epoch"]
 
 VALID_GROUPING_MODES = [
     "precision_applied", "precision_skipped",
