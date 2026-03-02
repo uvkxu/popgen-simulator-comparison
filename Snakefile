@@ -8,4 +8,4 @@ include: "rules/effective_pop_size.smk"
 
 rule all:
     input:
-        ALL_FEATURES
+        ALL_COPY_COMBO_YAM

@@ -729,3 +729,13 @@ ALL_OWN_FEATURES = [
     for sim in SIMULATORS
     for i in range(REPS)
 ]
+
+ALL_COPY_COMBO_YAML = [
+    f"{TREE_FEATURES_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+] + [
+    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+]
