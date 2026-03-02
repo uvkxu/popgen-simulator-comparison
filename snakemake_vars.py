@@ -42,6 +42,8 @@ ALLEL_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "allele"
 ALLELFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "allele"
 TREE_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "tree"
 TREEFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "tree"
+TOGETHER_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "together"
+TIPTOP_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "top_feature_run"
 
 #-------COPY-FILE---------------
 COPY_DIR = Path("/hits/fast/cme/kuchve/nichts/data")
@@ -650,6 +652,24 @@ ALL_ALLEL_TOPFEATURES = [
     for classifier in CLASSIFIERS
 ]
 
+ALL_TOGETHER_TOPFEATURES = [
+    f"{TOGETHER_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
+] + [
+    f"{TOGETHER_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
+] + [
+    f"{TOGETHER_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for sim_group in simulator_groups
+    for classifier in CLASSIFIERS
+]
+
 ALL_PLOTS = [
     f"{TREEFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
     for config in all_configs
@@ -738,4 +758,11 @@ ALL_COPY_COMBO_YAML = [
     f"{ALLEL_FEATURES_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
     for config in all_configs
     for combo in combinations_by_config[config]
+]
+
+TOPFEATURES_ACCURACY = [
+    f"{TIPTOP_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
+        for config in all_configs
+        for mode in combinations_mode[config]
+        for sim_group in simulator_groups
 ]
