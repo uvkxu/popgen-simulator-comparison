@@ -36,6 +36,7 @@ from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
 EXCLUDE_FEATURES = {
     "non_binary_nodes", "non_binary_nodes_frac",
+
     # Laplacian spectrum outputs
     "laplace_spectrum_a",
     "laplace_spectrum_p",
@@ -58,14 +59,37 @@ EXCLUDE_FEATURES = {
     "lap_second_min",
     "lap_entropy",
     "lap_sum",
+
+    # unweighted variants
+    "lap_max_uw",
+    "lap_fiedler_uw",
+    "lap_var_uw",
+    "lap_skew_uw",
+    "lap_mean_uw",
+    "lap_kurt_uw",
+    "lap_second_min_uw",
+    "lap_entropy_uw",
+    "lap_sum_uw",
+
+    # tree / cut structure
+    "tree_type",
+    "tree_type_uw",
+    "cut_edge_weight",
     "cut_weight",
     "conductance",
     "normalized_cut",
     "bottleneck_strength",
+
+    # partition / density features
     "density_pos",
     "density_neg",
     "modularity",
     "fiedler_sd",
+    "share_pos",
+    "share_neg",
+    "share_zero",
+    "ratio_neg_pos",
+    "dist_char",
 
     # graph centrality / distance measures
     "max_betweenness",
