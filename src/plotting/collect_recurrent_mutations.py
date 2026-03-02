@@ -1,43 +1,37 @@
 #!/usr/bin/env python3
 """
-collect_recurrent_mutations.py
+collect_recurrent_mutations_parallel.py
 
-Scan config directories for SLiM outputs and count:
-  - total number of individuals
-  - number of individuals with recurrent mutations (any allele > 1)
+Parallel collection of recurrent mutation statistics from SLiM outputs.
 
-Directory structure (assumed):
-data/raw/<config-dir>/
-  combo_parameters.yaml   (contains overall_samples)
-  rep*/slim_output.txt
+Parallelization level: one process per config directory.
 
 Usage:
-  python collect_recurrent_mutations.py <input_dir> <output_csv>
+  python collect_recurrent_mutations_parallel.py <input_dir> <output_csv> [--workers N]
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
-import re
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Dict
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import yaml
 
 
 SLIM_FILE = "slim_output.txt"
 
 
-def read_overall_samples(yaml_path: Path) -> int | None:
-    try:
-        with yaml_path.open("r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        return data.get("overall_samples")
-    except Exception:
-        return None
+def read_overall_samples(yaml_path: Path) -> int:
+    with yaml_path.open("r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    if "overall_samples" not in data:
+        raise ValueError(f"overall_samples not found in {yaml_path}")
+    return int(data["overall_samples"])
 
 
-def parse_slim_output(path: Path, overall_samples: int) -> tuple[int, int]:
+def parse_slim_output(path: Path, overall_samples: int) -> Tuple[int, int]:
     """
     Returns:
       (num_individuals, num_with_recurrent_mutation)
@@ -57,15 +51,13 @@ def parse_slim_output(path: Path, overall_samples: int) -> tuple[int, int]:
 
             # Every block has overall_samples individuals
             total_individuals += overall_samples
+            i += 1
 
-            i += 1  # move past segsites
-
-            # skip positions line if present
+            # skip positions line
             if i < len(lines) and lines[i].startswith("positions:"):
                 i += 1
 
             if segsites == 0:
-                # no mutations at all → no recurrent possible
                 continue
 
             counted = 0
@@ -80,7 +72,6 @@ def parse_slim_output(path: Path, overall_samples: int) -> tuple[int, int]:
                 counted += 1
                 i += 1
 
-            # sanity check (optional)
             if counted != overall_samples:
                 print(
                     f"[warn] {path}: expected {overall_samples} individuals, "
@@ -93,47 +84,77 @@ def parse_slim_output(path: Path, overall_samples: int) -> tuple[int, int]:
     return total_individuals, total_recurrent
 
 
+def process_config(config_dir: Path) -> Dict[str, object]:
+    """
+    Worker function: process a single config directory.
+    """
+    yaml_path = config_dir / "combo_parameters.yaml"
+    overall_samples = read_overall_samples(yaml_path)
+
+    total_individuals = 0
+    total_recurrent = 0
+
+    for rep_dir in config_dir.glob("rep*"):
+        slim_path = rep_dir / SLIM_FILE
+        if not slim_path.exists():
+            continue
+
+        n_ind, n_rec = parse_slim_output(slim_path, overall_samples)
+        total_individuals += n_ind
+        total_recurrent += n_rec
+
+    frac = (
+        total_recurrent / total_individuals
+        if total_individuals > 0
+        else ""
+    )
+
+    return {
+        "config_dir": config_dir.name,
+        "overall_samples": overall_samples,
+        "num_individuals_total": total_individuals,
+        "num_individuals_with_recurrent_mutation": total_recurrent,
+        "frac_with_recurrent_mutation": frac,
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("input_dir", type=Path, help="Root directory containing config dirs")
+    ap.add_argument("input_dir", type=Path, help="Directory containing config dirs")
     ap.add_argument("output_csv", type=Path, help="Output CSV file")
+    ap.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="Number of parallel workers (default: number of CPU cores)",
+    )
     args = ap.parse_args()
 
     if not args.input_dir.is_dir():
         raise SystemExit(f"Not a directory: {args.input_dir}")
 
+    config_dirs = sorted(
+        p for p in args.input_dir.iterdir()
+        if p.is_dir() and (p / "combo_parameters.yaml").exists()
+    )
+
+    if not config_dirs:
+        raise SystemExit("No config directories found.")
+
     rows = []
 
-    for config_dir in sorted(p for p in args.input_dir.iterdir() if p.is_dir()):
-        yaml_path = config_dir / "combo_parameters.yaml"
-        overall_samples = read_overall_samples(yaml_path)
+    with ProcessPoolExecutor(max_workers=args.workers) as executor:
+        futures = {
+            executor.submit(process_config, cfg): cfg
+            for cfg in config_dirs
+        }
 
-        total_individuals = 0
-        total_recurrent = 0
-
-        for rep_dir in config_dir.glob("rep*"):
-            slim_path = rep_dir / SLIM_FILE
-            if not slim_path.exists():
-                continue
-
-            n_ind, n_rec = parse_slim_output(slim_path)
-            total_individuals += n_ind
-            total_recurrent += n_rec
-
-        if total_individuals == 0:
-            frac = ""
-        else:
-            frac = total_recurrent / total_individuals
-
-        rows.append(
-            {
-                "config_dir": config_dir.name,
-                "overall_samples": overall_samples if overall_samples is not None else "",
-                "num_individuals_total": total_individuals,
-                "num_individuals_with_recurrent_mutation": total_recurrent,
-                "frac_with_recurrent_mutation": frac,
-            }
-        )
+        for fut in as_completed(futures):
+            cfg = futures[fut]
+            try:
+                rows.append(fut.result())
+            except Exception as e:
+                print(f"[error] {cfg.name}: {e}")
 
     args.output_csv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_csv.open("w", newline="", encoding="utf-8") as f:
@@ -148,7 +169,7 @@ def main() -> None:
             ],
         )
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(sorted(rows, key=lambda r: r["config_dir"]))
 
     print(f"✅ Wrote {args.output_csv}")
     print(f"   Configs processed: {len(rows)}")
