@@ -35,7 +35,10 @@ from snakemake_vars import (
 from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
 EXCLUDE_FEATURES = {
-    "phylogenetic_div"
+    "phylogenetic_div", "lap_max", "lap_fiedler", "lap_var", "lap_skew", "lap_mean",
+        "lap_kurt", "lap_second_min", "lap_entropy", "lap_sum",
+        "cut_weight", "conductance", "normalized_cut", "bottleneck_strength",
+        "density_pos", "density_neg", "modularity", "fiedler_sd"
 }
 
 
