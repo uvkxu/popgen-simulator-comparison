@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """
-collect_recurrent_mutations_parallel.py
-
 Parallel collection of recurrent mutation statistics from SLiM outputs.
 
-Parallelization level: one process per config directory.
+Unit of analysis: combo directory (contains combo_parameters.yaml).
 
 Usage:
   python collect_recurrent_mutations_parallel.py <input_dir> <output_csv> [--workers N]
@@ -15,7 +13,7 @@ from __future__ import annotations
 import argparse
 import csv
 from pathlib import Path
-from typing import Tuple, Dict
+from typing import Dict, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import yaml
 
@@ -49,11 +47,11 @@ def parse_slim_output(path: Path, overall_samples: int) -> Tuple[int, int]:
         if line.startswith("segsites:"):
             segsites = int(line.split(":")[1].strip())
 
-            # Every block has overall_samples individuals
+            # Each block corresponds to overall_samples individuals
             total_individuals += overall_samples
             i += 1
 
-            # skip positions line
+            # Skip positions line
             if i < len(lines) and lines[i].startswith("positions:"):
                 i += 1
 
@@ -84,17 +82,17 @@ def parse_slim_output(path: Path, overall_samples: int) -> Tuple[int, int]:
     return total_individuals, total_recurrent
 
 
-def process_config(config_dir: Path) -> Dict[str, object]:
+def process_combo(combo_dir: Path) -> Dict[str, object]:
     """
-    Worker function: process a single config directory.
+    Worker function: process a single combo directory.
     """
-    yaml_path = config_dir / "combo_parameters.yaml"
+    yaml_path = combo_dir / "combo_parameters.yaml"
     overall_samples = read_overall_samples(yaml_path)
 
     total_individuals = 0
     total_recurrent = 0
 
-    for rep_dir in config_dir.glob("rep*"):
+    for rep_dir in combo_dir.glob("rep*"):
         slim_path = rep_dir / SLIM_FILE
         if not slim_path.exists():
             continue
@@ -110,7 +108,8 @@ def process_config(config_dir: Path) -> Dict[str, object]:
     )
 
     return {
-        "config_dir": config_dir.name,
+        "config_dir": combo_dir.parent.name,
+        "combo_dir": combo_dir.name,
         "overall_samples": overall_samples,
         "num_individuals_total": total_individuals,
         "num_individuals_with_recurrent_mutation": total_recurrent,
@@ -120,41 +119,42 @@ def process_config(config_dir: Path) -> Dict[str, object]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("input_dir", type=Path, help="Directory containing config dirs")
+    ap.add_argument("input_dir", type=Path, help="Root directory (e.g. data/raw)")
     ap.add_argument("output_csv", type=Path, help="Output CSV file")
     ap.add_argument(
         "--workers",
         type=int,
         default=None,
-        help="Number of parallel workers (default: number of CPU cores)",
+        help="Number of parallel workers (default: CPU count)",
     )
     args = ap.parse_args()
 
     if not args.input_dir.is_dir():
         raise SystemExit(f"Not a directory: {args.input_dir}")
 
-    config_dirs = sorted(
-        p for p in args.input_dir.iterdir()
-        if p.is_dir() and (p / "combo_parameters.yaml").exists()
+    # Find all combo directories
+    combo_dirs = sorted(
+        p.parent
+        for p in args.input_dir.rglob("combo_parameters.yaml")
     )
 
-    if not config_dirs:
-        raise SystemExit("No config directories found.")
+    if not combo_dirs:
+        raise SystemExit("No combo_parameters.yaml found.")
 
     rows = []
 
     with ProcessPoolExecutor(max_workers=args.workers) as executor:
         futures = {
-            executor.submit(process_config, cfg): cfg
-            for cfg in config_dirs
+            executor.submit(process_combo, combo): combo
+            for combo in combo_dirs
         }
 
         for fut in as_completed(futures):
-            cfg = futures[fut]
+            combo = futures[fut]
             try:
                 rows.append(fut.result())
             except Exception as e:
-                print(f"[error] {cfg.name}: {e}")
+                print(f"[error] {combo}: {e}")
 
     args.output_csv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_csv.open("w", newline="", encoding="utf-8") as f:
@@ -162,6 +162,7 @@ def main() -> None:
             f,
             fieldnames=[
                 "config_dir",
+                "combo_dir",
                 "overall_samples",
                 "num_individuals_total",
                 "num_individuals_with_recurrent_mutation",
@@ -169,10 +170,12 @@ def main() -> None:
             ],
         )
         writer.writeheader()
-        writer.writerows(sorted(rows, key=lambda r: r["config_dir"]))
+        writer.writerows(
+            sorted(rows, key=lambda r: (r["config_dir"], r["combo_dir"]))
+        )
 
     print(f"✅ Wrote {args.output_csv}")
-    print(f"   Configs processed: {len(rows)}")
+    print(f"   Combos processed: {len(rows)}")
 
 
 if __name__ == "__main__":
