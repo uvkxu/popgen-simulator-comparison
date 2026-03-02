@@ -566,7 +566,8 @@ def run_feature_evaluation(
     ir = _iter_range(best_iter)
 
     # overall accuracy on the same validation set (best iteration only)
-    baseline_preds = clf.predict(X_valid, iteration_range=ir)
+    base_proba = clf.predict_proba(X_valid, iteration_range=ir)
+    baseline_preds = _pred_labels_from_proba(base_proba)
     all_features_acc = accuracy_score(y_valid, baseline_preds)
 
     # chance baseline (majority class proportion)
@@ -621,10 +622,11 @@ def run_feature_evaluation(
             verbose=False,
         )
 
-        passed_acc = accuracy_score(
-            y_valid,
-            clf_passed.predict(Xp_valid, iteration_range=_iter_range(best_iter_passed)),
+        proba_passed = clf_passed.predict_proba(
+            Xp_valid, iteration_range=_iter_range(best_iter_passed)
         )
+        passed_preds = _pred_labels_from_proba(proba_passed)
+        passed_acc = accuracy_score(y_valid, passed_preds)
     else:
         passed_acc = np.nan
 
@@ -656,10 +658,11 @@ def run_feature_evaluation(
             verbose=False,
         )
 
-        top_acc = accuracy_score(
-            y_valid,
-            clf_top.predict(Xt_valid, iteration_range=_iter_range(best_iter_top)),
+        proba_top = clf_top.predict_proba(
+            Xt_valid, iteration_range=_iter_range(best_iter_top)
         )
+        top_preds = _pred_labels_from_proba(proba_top)
+        top_acc = accuracy_score(y_valid, top_preds)
     else:
         top_acc = np.nan
 
