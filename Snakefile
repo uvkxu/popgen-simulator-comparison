@@ -7,5 +7,5 @@ include: "rules/plots.smk"
 
 rule all:
     input:
-        TOPFEATURES_ACCURACY
+        COLLECT_FEATURES
         

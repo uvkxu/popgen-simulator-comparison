@@ -969,3 +969,9 @@ TOPFEATURES_ACCURACY = [
         for mode in combinations_mode[config]
         for sim_group in simulator_groups
 ]
+
+COLLECT_FEATURES = [
+    f"{COLLECT_DIR}/{type_}/{config}/simulator_feature_values.csv"
+        for type_ in ("tree", "allele")
+        for config in all_configs
+]
