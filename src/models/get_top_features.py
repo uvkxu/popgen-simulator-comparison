@@ -45,6 +45,19 @@ TOP_ALLEL_FEATURES = [
     "bollback_multinomial",
 ]
 
+
+def _pred_labels_from_proba(proba: np.ndarray) -> np.ndarray:
+    """
+    Convert predict_proba output into 1D class labels robustly.
+    - multiclass: proba shape (n, K) -> argmax
+    - some binary setups might return shape (n,) -> threshold 0.5
+    """
+    proba = np.asarray(proba)
+    if proba.ndim == 2:
+        return np.argmax(proba, axis=1)
+    # fallback: 1D probabilities of class 1
+    return (proba >= 0.5).astype(int)
+
 # -----------------------------
 # Helpers for XGBoost Early Stopping (works with xgboost >= 2.1)
 # -----------------------------
@@ -186,7 +199,8 @@ def permutation_importance_accuracy(
     """
     rng = np.random.default_rng(seed)
 
-    baseline_preds = clf.predict(X_valid, iteration_range=iteration_range)
+    baseline_proba = clf.predict_proba(X_valid, iteration_range=iteration_range)
+    baseline_preds = _pred_labels_from_proba(baseline_proba)
     baseline_acc = accuracy_score(y_valid, baseline_preds)
 
     mean_drop: dict[str, float] = {}
@@ -203,7 +217,8 @@ def permutation_importance_accuracy(
             rng.shuffle(shuffled)
             Xv[f] = shuffled
 
-            preds_perm = clf.predict(Xv, iteration_range=iteration_range)
+            proba_perm = clf.predict_proba(Xv, iteration_range=iteration_range)
+            preds_perm = _pred_labels_from_proba(proba_perm)
             acc_perm = accuracy_score(y_valid, preds_perm)
             drops.append(baseline_acc - acc_perm)
 
@@ -501,7 +516,8 @@ def run_feature_evaluation(
     ir = _iter_range(best_iter)
 
     # overall accuracy on the same validation set (best iteration only)
-    baseline_preds = clf.predict(X_valid, iteration_range=ir)
+    baseline_proba = clf.predict_proba(X_valid, iteration_range=ir)
+    baseline_preds = _pred_labels_from_proba(baseline_proba)
     all_features_acc = accuracy_score(y_valid, baseline_preds)
 
     # chance baseline (majority class proportion)
@@ -556,10 +572,11 @@ def run_feature_evaluation(
             verbose=False,
         )
 
-        passed_acc = accuracy_score(
-            y_valid,
-            clf_passed.predict(Xp_valid, iteration_range=_iter_range(best_iter_passed)),
+        passed_proba = clf_passed.predict_proba(
+            Xp_valid, iteration_range=_iter_range(best_iter_passed)
         )
+        passed_preds = _pred_labels_from_proba(passed_proba)
+        passed_acc = accuracy_score(y_valid, passed_preds)
     else:
         passed_acc = np.nan
 
@@ -591,10 +608,11 @@ def run_feature_evaluation(
             verbose=False,
         )
 
-        top_acc = accuracy_score(
-            y_valid,
-            clf_top.predict(Xt_valid, iteration_range=_iter_range(best_iter_top)),
+        top_proba = clf_top.predict_proba(
+            Xt_valid, iteration_range=_iter_range(best_iter_top)
         )
+        top_preds = _pred_labels_from_proba(top_proba)
+        top_acc = accuracy_score(y_valid, top_preds)
     else:
         top_acc = np.nan
 
