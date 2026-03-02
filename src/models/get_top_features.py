@@ -37,17 +37,12 @@ from utils.io_helpers import collect_csv_files, assign_simulator_labels
 
 TOP_TREE_FEATURES = [
     "tree_height_uw",
-    "phylogenetic_div",
     "num_branches",
-    "min_adj_uw",
 ]
 
 TOP_ALLEL_FEATURES = [
     "difficulty",
     "bollback_multinomial",
-    "mean_ld",
-    "sfs_skewness",
-    "alignment_entropy",
 ]
 
 # -----------------------------
@@ -377,9 +372,15 @@ def run_feature_evaluation(
     # --- Prepare features ---
     dep_var = "simulator"
     data = data[data[dep_var].isin(simulator_group)].copy()
-    feature_names = [col for col in data.columns if col != dep_var]
+    FEATURES_TO_EXCLUDE = ["phylogenetic_div"]
+
+    feature_names = [
+        col for col in data.columns
+        if col != dep_var and col not in FEATURES_TO_EXCLUDE
+    ]
+
     y = LabelEncoder().fit_transform(data[dep_var])
-    X = data.drop(columns=[dep_var])
+    X = data[feature_names].copy()
     del data
 
     num_class = len(simulator_group)
