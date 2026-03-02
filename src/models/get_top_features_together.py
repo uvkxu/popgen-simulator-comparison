@@ -465,6 +465,7 @@ def run_feature_evaluation(
     dep_var = "simulator"
     data = data[data[dep_var].isin(simulator_group)].copy()
     FEATURES_TO_EXCLUDE = [
+        "phylogenetic_div",
         # --- stats_laplace (weighted = TRUE) ---
         "lap_max",
         "lap_fiedler",
