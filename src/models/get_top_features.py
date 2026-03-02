@@ -372,10 +372,48 @@ def run_feature_evaluation(
     # --- Prepare features ---
     dep_var = "simulator"
     data = data[data[dep_var].isin(simulator_group)].copy()
-    FEATURES_TO_EXCLUDE = ["phylogenetic_div", "lap_max", "lap_fiedler", "lap_var", "lap_skew", "lap_mean",
-        "lap_kurt", "lap_second_min", "lap_entropy", "lap_sum",
-        "cut_weight", "conductance", "normalized_cut", "bottleneck_strength",
-        "density_pos", "density_neg", "modularity", "fiedler_sd"]
+    FEATURES_TO_EXCLUDE = [
+        "phylogenetic_div",
+        # --- stats_laplace (weighted = TRUE) ---
+        "lap_max",
+        "lap_fiedler",
+        "lap_var",
+        "lap_skew",
+        "lap_mean",
+        "lap_kurt",
+        "lap_second_min",
+        "lap_entropy",
+        "lap_sum",
+        "tree_type",
+        "cut_edge_weight",
+        "share_pos",
+        "share_neg",
+        "share_zero",
+        "ratio_neg_pos",
+        "dist_char",
+
+        # --- stats_laplace (weighted = FALSE / unweighted) ---
+        "lap_max_uw",
+        "lap_fiedler_uw",
+        "lap_var_uw",
+        "lap_skew_uw",
+        "lap_mean_uw",
+        "lap_kurt_uw",
+        "lap_second_min_uw",
+        "lap_entropy_uw",
+        "lap_sum_uw",
+        "tree_type_uw",
+
+        # --- compute_characteristic_features ---
+        "cut_weight",
+        "conductance",
+        "normalized_cut",
+        "bottleneck_strength",
+        "density_pos",
+        "density_neg",
+        "modularity",
+        "fiedler_sd",
+    ]
 
     feature_names = [
         col for col in data.columns
