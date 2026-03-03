@@ -34,13 +34,6 @@ from snakemake_vars import (
 )
 from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
-EXCLUDE_FEATURES = {
-    "phylogenetic_div", "lap_max", "lap_fiedler", "lap_var", "lap_skew", "lap_mean",
-        "lap_kurt", "lap_second_min", "lap_entropy", "lap_sum",
-        "cut_weight", "conductance", "normalized_cut", "bottleneck_strength",
-        "density_pos", "density_neg", "modularity", "fiedler_sd"
-}
-
 
 def _relative_after_dir(p: Path, anchor: str) -> Path:
     """
@@ -54,71 +47,122 @@ def _relative_after_dir(p: Path, anchor: str) -> Path:
     idx = parts.index(anchor)
     return Path(*parts[idx + 1:])
 
+
+def aggregate_tree_block(block: pd.DataFrame) -> dict:
+    """
+    Aggregate all tree features in one replicate block.
+    """
+    agg = {}
+    for col in block.columns:
+        agg[f"{col}_mean"] = block[col].mean()
+        agg[f"{col}_std"] = block[col].std()
+        agg[f"{col}_min"] = block[col].min()
+        agg[f"{col}_max"] = block[col].max()
+    agg["num_trees"] = len(block)
+    return agg
+
+
+def count_trees_per_replicate(cleaned_output: Path) -> list[int]:
+    """
+    Parse <sim>_cleaned_output.txt and return number of marginal trees
+    per replicate (block).
+    """
+    counts = []
+    current = 0
+    in_rep = False
+
+    with open(cleaned_output, "r") as f:
+        for line in f:
+            line = line.strip()
+
+            if line.startswith("//"):
+                if in_rep:
+                    counts.append(current)
+                current = 0
+                in_rep = True
+
+            elif line.startswith("segsites"):
+                if in_rep:
+                    counts.append(current)
+                in_rep = False
+
+            elif in_rep and "(" in line and not line.startswith("segsites"):
+                current += 1
+
+    return counts
+
+
 def collect_and_merge_tree_allele_features(
     tree_csv_files: list[Path],
     allele_csv_files: list[Path],
+    raw_csv_files: list[Path],
     simulators: list[str],
     suffix_tree: str = "_tree_features.csv",
     suffix_allele: str = "_allel_features.csv",
+    suffix_raw: str = "_output.txt",
 ) -> list[pd.DataFrame]:
+
     """
-    Merge tree and allele feature CSVs.
-    Paths are assumed identical below `tree/` vs `allele/`.
-    Feature names are NOT prefixed.
+    Merge tree- and allele-features at BLOCK level using raw simulator output
+    to reconstruct how many marginal trees belong to each replicate.
+    Assumes identical directory structure below tree/ vs allele/ vs raw/.
     """
 
-    # --- build allele lookup: relative path below allele/ ---
+    # --- build allele lookup ---
     allele_lookup: dict[Path, Path] = {}
-
     for a in allele_csv_files:
-        key = _relative_after_dir(a, "allele")
+        key = a.with_name(a.name.replace(suffix_allele, ""))
         allele_lookup[key] = a
+
+    # --- build raw lookup ---
+    raw_lookup: dict[Path, Path] = {}
+    for c in raw_csv_files:
+        key = c.with_name(c.name.replace(suffix_raw, ""))
+        raw_lookup[key] = c
 
     merged_dfs: list[pd.DataFrame] = []
 
     for tree_csv in tree_csv_files:
-        tree_key = _relative_after_dir(tree_csv, "tree")
-
-        allele_key = tree_key.with_name(
-            tree_csv.name.replace(suffix_tree, suffix_allele)
-        )
-
-        if allele_key not in allele_lookup:
-            raise FileNotFoundError(
-                f"No matching allele CSV for:\n{tree_csv}"
-            )
-
-        allele_csv = allele_lookup[allele_key]
-
-        df_tree = pd.read_csv(tree_csv)
-        df_allele = pd.read_csv(allele_csv)
-
-        if len(df_tree) != len(df_allele):
-            raise ValueError(
-                f"Row mismatch:\n{tree_csv}\n{allele_csv}"
-            )
-
-        # --- infer simulator from filename ---
-        simulator_name = detect_simulator_from_yaml(
-                input_file=tree_csv)
-
-        if simulator_name not in simulators:
+        sim_name = detect_simulator_from_yaml(tree_csv)
+        if sim_name not in simulators:
             continue
 
-        simulator_col = pd.Series(
-            [simulator_name] * len(df_tree),
-            name="simulator"
-        )
+        key = tree_csv.with_name(tree_csv.name.replace(suffix_tree, ""))
 
-        tree_feats = df_tree.drop(columns=["simulator"], errors="ignore")
-        allele_feats = df_allele.drop(columns=["simulator"], errors="ignore")
+        if key not in allele_lookup:
+            raise FileNotFoundError(f"No matching allele CSV for {tree_csv}")
+        if key not in raw_lookup:
+            raise FileNotFoundError(f"No matching raw_output.txt for {tree_csv}")
 
-        df_merged = pd.concat(
-            [simulator_col, tree_feats, allele_feats],
-            axis=1
-        )
+        df_tree = pd.read_csv(tree_csv)
+        df_allele = pd.read_csv(allele_lookup[key])
+        raw_file = raw_lookup[key]
 
-        merged_dfs.append(df_merged)
+        counts = count_trees_per_replicate(raw_file)
+
+        if sum(counts) != len(df_tree):
+            raise ValueError(
+                f"Tree count mismatch for {tree_csv}: "
+                f"sum(raw)={sum(counts)} vs tree_rows={len(df_tree)}"
+            )
+
+        # --- aggregate trees per replicate ---
+        offset = 0
+        aggregated = []
+        for k in counts:
+            block = df_tree.iloc[offset: offset + k]
+            block = block.drop(columns=["simulator"], errors="ignore")
+            aggregated.append(aggregate_tree_block(block))
+            offset += k
+
+        df_tree_block = pd.DataFrame(aggregated)
+        df_allele = df_allele.drop(columns=["simulator"], errors="ignore")
+
+        if len(df_tree_block) != len(df_allele):
+            raise ValueError("Block mismatch between tree and allele features")
+
+        sim_col = pd.Series([sim_name] * len(df_tree_block), name="simulator")
+        merged_dfs.append(pd.concat([sim_col, df_tree_block, df_allele], axis=1))
 
     if not merged_dfs:
         raise ValueError("No CSV pairs were merged.")
@@ -429,6 +473,7 @@ def run_feature_evaluation(
     simulator_group,
     tree_csv_files,
     allel_csv_files,
+    raw_csv_files,
     output_dir,
     use_optuna: bool = False,
     optuna_trials: int = 50,
@@ -438,9 +483,10 @@ def run_feature_evaluation(
     drop_threshold: float = 0.0,
 ):
     # --- Load and label data ---
-    all_dfs =  collect_and_merge_tree_allele_features(
+    all_dfs = collect_and_merge_tree_allele_features(
         tree_csv_files=tree_csv_files,
         allele_csv_files=allel_csv_files,
+        raw_csv_files=raw_csv_files,
         simulators=simulator_group
     )
     data = pd.concat(all_dfs, ignore_index=True)
@@ -890,6 +936,8 @@ def main():
 
     input_folder_tree = args.input_folder_tree
     input_folder_allel = args.input_folder_allel
+    input_folder_raw = args.input_folder_raw
+
     output_folder = args.output_folder
     simulator_group = args.simulators
     grouped_by = args.grouped_by
@@ -927,13 +975,16 @@ def main():
     output_folder.mkdir(parents=True, exist_ok=True)
     tree_csv_files = get_csv_files_mode(input_folder_tree, grouped_by, seq_len_group, sample_size_group)
     allel_csv_files = get_csv_files_mode(input_folder_allel, grouped_by, seq_len_group, sample_size_group)
+    raw_csv_files = get_csv_files_mode(input_folder_raw, grouped_by, seq_len_group, sample_size_group)
 
     assert len(tree_csv_files) == len(allel_csv_files)
+    assert len(raw_csv_files) == len(allel_csv_files)
 
     run_feature_evaluation(
         simulator_group=simulator_group,
         tree_csv_files=tree_csv_files,
         allel_csv_files=allel_csv_files,
+        raw_csv_files=raw_csv_files,
         output_dir=output_folder,
         use_optuna=use_optuna,
         optuna_trials=optuna_trials,
