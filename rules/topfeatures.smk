@@ -2,29 +2,29 @@ include: "../snakemake_vars.py"
 
 
 rule copy_combo_yaml_tree_features:
-    input:
-        combo_yaml = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     output:
         copy_file = f"{TREE_FEATURES_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+    params:
+        input = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     run:
         from pathlib import Path
         import shutil
 
         Path(output.copy_file).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(input.combo_yaml, output.copy_file)
+        shutil.copy2(params.input, output.copy_file)
 
 
 rule copy_combo_yaml_allel_features:
-    input:
-        combo_yaml = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     output:
         copy_file = f"{ALLEL_FEATURES_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+    params:
+        input = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     run:
         from pathlib import Path
         import shutil
 
         Path(output.copy_file).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(input.combo_yaml, output.copy_file)
+        shutil.copy2(params.input, output.copy_file)
 
     
 rule compute_tree_topfeatures_grouped_by_mode:
