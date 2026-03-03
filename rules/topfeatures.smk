@@ -11,7 +11,7 @@ rule copy_combo_yaml_tree_features:
         import shutil
 
         Path(output.copy_file).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(params.input, output.copy_file)
+        shutil.copy(params.input, output.copy_file)
 
 
 rule copy_combo_yaml_allel_features:
@@ -24,7 +24,7 @@ rule copy_combo_yaml_allel_features:
         import shutil
 
         Path(output.copy_file).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(params.input, output.copy_file)
+        shutil.copy(params.input, output.copy_file)
 
     
 rule compute_tree_topfeatures_grouped_by_mode:
