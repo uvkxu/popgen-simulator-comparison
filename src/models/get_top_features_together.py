@@ -171,7 +171,6 @@ def collect_and_merge_tree_allele_features(
         block_path.parent.mkdir(parents=True, exist_ok=True)
         df_tree_block.to_csv(block_path, index=False)
 
-        df_tree_block.to_csv(block_file, index=False)
         df_allele = df_allele.drop(columns=["simulator"], errors="ignore")
 
         if len(df_tree_block) != len(df_allele):
