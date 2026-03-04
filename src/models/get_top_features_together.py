@@ -859,7 +859,7 @@ def get_csv_files_mode(input_folder, grouped_by, seq_len_group=None, sample_size
                 and (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
             ):
                 if "raw" in input_folder.parts:
-                    csv_my_mode += list(input_dir.rglob("*.txt"))
+                    csv_my_mode += list(input_folder.rglob("*.txt"))
                 else:
                     csv_my_mode += collect_csv_files(root_path)
 
