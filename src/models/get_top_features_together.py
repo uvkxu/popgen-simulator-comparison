@@ -159,6 +159,12 @@ def collect_and_merge_tree_allele_features(
             offset += k
 
         df_tree_block = pd.DataFrame(aggregated)
+        # create block-level filename
+        block_file = tree_csv.with_name(
+            tree_csv.name.replace(suffix_tree, "_tree_block_features.csv")
+        )
+
+        df_tree_block.to_csv(block_file, index=False)
         df_allele = df_allele.drop(columns=["simulator"], errors="ignore")
 
         if len(df_tree_block) != len(df_allele):
