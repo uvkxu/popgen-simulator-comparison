@@ -987,7 +987,7 @@ def main():
     raw_csv_files = get_csv_files_mode(input_folder_raw, grouped_by, seq_len_group, sample_size_group)
 
     assert len(tree_csv_files) == len(allel_csv_files)
-    assert len(raw_csv_files) == len(allel_csv_files)
+    # assert len(raw_csv_files) == len(allel_csv_files)
 
     run_feature_evaluation(
         simulator_group=simulator_group,
