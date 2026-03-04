@@ -159,10 +159,17 @@ def collect_and_merge_tree_allele_features(
             offset += k
 
         df_tree_block = pd.DataFrame(aggregated)
-        # create block-level filename
-        block_file = tree_csv.with_name(
+        # build output path in tree_block directory instead of tree
+        parts = list(tree_csv.parts)
+        tree_idx = parts.index("tree")
+        parts[tree_idx] = "tree_block"
+
+        block_path = Path(*parts).with_name(
             tree_csv.name.replace(suffix_tree, "_tree_block_features.csv")
         )
+
+        block_path.parent.mkdir(parents=True, exist_ok=True)
+        df_tree_block.to_csv(block_path, index=False)
 
         df_tree_block.to_csv(block_file, index=False)
         df_allele = df_allele.drop(columns=["simulator"], errors="ignore")
