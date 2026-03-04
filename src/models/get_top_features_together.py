@@ -570,7 +570,8 @@ def run_feature_evaluation(
 
     feature_names = [
         col for col in data.columns
-        if col != dep_var and col not in FEATURES_TO_EXCLUDE
+        if col != dep_var
+        and not any(col == f or col.startswith(f + "_") for f in FEATURES_TO_EXCLUDE)
     ]
 
     y = LabelEncoder().fit_transform(data[dep_var])
