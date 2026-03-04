@@ -111,14 +111,16 @@ def collect_and_merge_tree_allele_features(
     # --- build allele lookup ---
     allele_lookup: dict[Path, Path] = {}
     for a in allele_csv_files:
-        key = a.with_name(a.name.replace(suffix_allele, ""))
+        rel = _relative_after_dir(a, "allele")
+        key = rel.with_name(rel.name.replace(suffix_allele, ""))
         allele_lookup[key] = a
 
     # --- build raw lookup ---
     raw_lookup: dict[Path, Path] = {}
-    for c in raw_csv_files:
-        key = c.with_name(c.name.replace(suffix_raw, ""))
-        raw_lookup[key] = c
+    for r in raw_csv_files:
+        rel = _relative_after_dir(r, "raw")
+        key = rel.with_name(rel.name.replace(suffix_raw, ""))
+        raw_lookup[key] = r
 
     merged_dfs: list[pd.DataFrame] = []
 
@@ -127,7 +129,8 @@ def collect_and_merge_tree_allele_features(
         if sim_name not in simulators:
             continue
 
-        key = tree_csv.with_name(tree_csv.name.replace(suffix_tree, ""))
+        rel_tree = _relative_after_dir(tree_csv, "tree")
+        key = rel_tree.with_name(rel_tree.name.replace(suffix_tree, ""))
 
         if key not in allele_lookup:
             raise FileNotFoundError(f"No matching allele CSV for {tree_csv}")
