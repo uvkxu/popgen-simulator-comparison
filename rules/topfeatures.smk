@@ -138,3 +138,40 @@ rule compute_actual_topfeatures_grouped_by_mode:
         --simulators {params.args_group} \
         --grouped_by {wildcards.mode}
         """
+
+
+rule detect_source_tree:
+    output:
+        output_file = f"{TREE_TOPFEATURES_DIR}/{{config}}/{{combo}}/feature_ranking_with_summary.csv"
+    params:
+        input_dir_1 = lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/{wildcards.combo}",
+        input_dir_2 = lambda wildcards: f"/hits/fast/cme/kuchve/without_recombination/data/features/tree/{wildcards.config}/{wildcards.combo}",
+        err_file = lambda wildcards: f"{TREE_TOPFEATURES_DIR}/{wildcards.config}/errorlog.err"
+    conda:
+        "../envs/models-env.yaml"
+    shell:
+        """
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/models/detect_source.py \
+        --input_dir_1 {params.input_dir_1} \
+        --input_dir_2 {params.input_dir_2} \
+        --output_file {output.output_file}
+        """
+
+rule detect_source_allele:
+    output:
+        output_file = f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{combo}}/feature_ranking_with_summary.csv"
+    params:
+        input_dir_1 = lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/{wildcards.combo}",
+        input_dir_2 = lambda wildcards: f"/hits/fast/cme/kuchve/without_recombination/data/features/allele/{wildcards.config}/{wildcards.combo}",
+        err_file = lambda wildcards: f"{ALLEL_TOPFEATURES_DIR}/{wildcards.config}/errorlog.err"
+    conda:
+        "../envs/models-env.yaml"
+    shell:
+        """
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/models/detect_source.py \
+        --input_dir_1 {params.input_dir_1} \
+        --input_dir_2 {params.input_dir_2} \
+        --output_file {output.output_file}
+        """

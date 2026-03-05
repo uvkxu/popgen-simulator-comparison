@@ -982,3 +982,13 @@ COLLECT_FEATURES = [
         for type_ in ("tree", "allele")
         for config in all_configs
 ]
+
+OWN_COMPARISON_OUTPUT = [
+    f"{ALLEL_TOPFEATURES_DIR}/{config}/{combo}/feature_ranking_with_summary.csv"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+] + [
+    f"{TREE_TOPFEATURES_DIR}/{config}/{combo}/feature_ranking_with_summary.csv"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+]
