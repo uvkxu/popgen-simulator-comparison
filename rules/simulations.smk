@@ -30,6 +30,36 @@ rule run_config_combo_rep_simulation_demes:
             --copy_file {params.copy_file}
         """
 
+rule run_config_combo_rep_simulation_own:
+    input:
+        config_file = f"own_configs/{{config}}.yaml"
+    output:
+        output_file = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_output.txt"
+    params:
+        combo_json=lambda w: combo_folder_to_json[w.combo],
+        err_file=lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
+        copy_file= lambda w: f"{COPY_RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_output.txt"
+    resources:
+        mem_mb = lambda wildcards, attempt: estimate_mem_mb(
+            config=wildcards.config,
+            combo=wildcards.combo,
+            simulator=wildcards.simulator,
+            func="simulate"
+        )
+    conda:
+        "../envs/simulations-env.yaml"
+    shell:
+        r"""
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/simulations/demes_run.py \
+            --config_path {input.config_file}\
+            --simulator {wildcards.simulator} \
+            --combo '{params.combo_json}' \
+            --nreps {NUM_REPLICATES} \
+            --output_file {output.output_file} \
+            --copy_file {params.copy_file}
+        """
+
 
 rule create_combo_yaml_file:
     input:

@@ -399,7 +399,7 @@ elif sim=="msms":
 elif sim=="slim" or sim.startswith("slim"):
     sim_path = slim_path
 
-if "own" in str(config_path):
+if "own_" in str(output_file):
     run_command_own(
         config_path=config_path,
         sim=sim,
