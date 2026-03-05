@@ -92,14 +92,7 @@ def clean_sim_output(input_file, output_file, sequence_length,
             elif "(" in line and ":" in line:
                 def scale_branch(m):
                     val = float(m.group(1))
-                    if branches_already_scaled:
-                        if branch_decimals is not None:
-                            val = (val / factor)
-                            val = round(val, branch_decimals)
-                            val *= factor
-                    else:
-                        if branch_decimals is not None:
-                            val = round(val, branch_decimals)
+                    if not branches_already_scaled:
                         val *= factor
                     if slim_scaling_factor is not None:
                         val = round(val / slim_scaling_factor) * slim_scaling_factor
