@@ -103,7 +103,7 @@ def get_num_sampled_populations(config_path):
     num_pops = 0
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
-    if "demes" in config:
+    if CONFIG_DIR.name != "own_configs":
         for pop in config.get("demes"):
             epochs_time = {epoch.get("end_time", 0) for epoch in pop.get("epochs")}
             if any(t == 0 for t in epochs_time):
