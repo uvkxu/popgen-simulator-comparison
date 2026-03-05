@@ -7,5 +7,5 @@ include: "rules/plots.smk"
 
 rule all:
     input:
-        OWN_COMPARISON_OUTPUT
+        ALL_FEATURES
         
