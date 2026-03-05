@@ -12,7 +12,7 @@ def collect_ms_csvs(folder: Path):
     """
     Collect all CSV files containing 'ms_' in the filename.
     """
-    return [p for p in folder.rglob("*.csv") if "ms_" in p.name]
+    return [p for p in folder.rglob("*.csv") if p.name.startswith("ms_")]
 
 
 def load_dataset(dir1: Path, dir2: Path):
