@@ -90,7 +90,7 @@ def get_num_sampled_populations(config_path):
     num_pops = 0
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
-    if "demes" not in config:
+    if "demes" in config:
         for pop in config.get("demes"):
             epochs_time = {epoch.get("end_time", 0) for epoch in pop.get("epochs")}
             if any(t == 0 for t in epochs_time):
@@ -98,7 +98,7 @@ def get_num_sampled_populations(config_path):
     else:
         if "populations" not in config:
             return 1
-        for pop in config.get("populations"):
+        for pop in config.get("populations", []):
             if pop.get("sample_size", 0) > 0:
                 num_pops += 1
     return num_pops
