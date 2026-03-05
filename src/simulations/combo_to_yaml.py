@@ -22,7 +22,7 @@ def get_sample_sizes(config, sample_size=None):
             for pop in config.get("populations"):
                 sample_size = pop.get("sample_size", 0)
                 if sample_size:
-                    samples.append(s)
+                    samples.append(sample_size)
     return samples
 
 parser = argparse.ArgumentParser(
