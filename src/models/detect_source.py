@@ -9,6 +9,9 @@ from sklearn.metrics import accuracy_score
 
 
 def collect_ms_csvs(folder: Path):
+    """
+    Collect all CSV files containing 'ms_' in the filename.
+    """
     return [p for p in folder.rglob("*.csv") if "ms_" in p.name]
 
 
@@ -19,6 +22,7 @@ def load_dataset(dir1: Path, dir2: Path):
 
     if not files1:
         raise ValueError(f"No ms_ CSV files found in {dir1}")
+
     if not files2:
         raise ValueError(f"No ms_ CSV files found in {dir2}")
 
@@ -36,7 +40,7 @@ def load_dataset(dir1: Path, dir2: Path):
 
     data = pd.concat(dfs, ignore_index=True)
 
-    # difficulty handling (same logic as your main script)
+    # difficulty handling (same logic as your other script)
     if "difficulty" in data.columns:
         data["difficulty_missing"] = (data["difficulty"] == -1).astype(np.int8)
         data.loc[data["difficulty"] == -1, "difficulty"] = np.nan
@@ -54,7 +58,23 @@ def clean_data(df: pd.DataFrame):
     return df
 
 
-def train_xgb(X, y, output_dir):
+def compute_dataset_stats(data):
+
+    counts = data["label"].value_counts().to_dict()
+
+    n_dir1 = counts.get(0, 0)
+    n_dir2 = counts.get(1, 0)
+
+    total = n_dir1 + n_dir2
+
+    chance_baseline = max(n_dir1, n_dir2) / total
+
+    balanced = n_dir1 == n_dir2
+
+    return n_dir1, n_dir2, chance_baseline, balanced
+
+
+def train_xgb(X, y, output_path):
 
     X_train, X_test, y_train, y_test = train_test_split(
         X,
@@ -64,7 +84,8 @@ def train_xgb(X, y, output_dir):
         random_state=0,
     )
 
-    if "tree" in str(output_dir):
+    if "tree" in str(output_path):
+
         xgb_params = {
             "n_estimators": 300,
             "learning_rate": 0.08,
@@ -82,7 +103,7 @@ def train_xgb(X, y, output_dir):
             "random_state": 0,
         }
 
-    elif "allele" in str(output_dir):
+    elif "allele" in str(output_path):
 
         xgb_params = {
             "n_estimators": 300,
@@ -102,9 +123,9 @@ def train_xgb(X, y, output_dir):
         }
 
     else:
-        raise ValueError("Output path must contain 'tree' or 'allele'.")
+        raise ValueError("Output file path must contain 'tree' or 'allele'.")
 
-    # difficulty median imputation (wie im großen Script)
+    # difficulty median imputation
     if "difficulty" in X_train.columns:
         median_diff = X_train["difficulty"].median(skipna=True)
         X_train["difficulty"] = X_train["difficulty"].fillna(median_diff)
@@ -115,33 +136,26 @@ def train_xgb(X, y, output_dir):
     model.fit(X_train, y_train)
 
     preds = model.predict(X_test)
+
     acc = accuracy_score(y_test, preds)
 
-    return model, acc
+    return acc
 
 
-def get_feature_importance(model, feature_names):
+def save_results(output_file: Path, n1, n2, chance, balanced, accuracy):
 
-    importances = model.feature_importances_
-    return dict(zip(feature_names, importances))
-
-
-def save_results(output_file: Path, accuracy: float, importance: dict):
-
-    rows = []
-
-    rows.append({
-        "feature": "OVERALL_ACCURACY",
-        "value": accuracy
-    })
-
-    for f, v in sorted(importance.items(), key=lambda x: x[1], reverse=True):
-        rows.append({
-            "feature": f,
-            "value": v
-        })
+    rows = [
+        {"metric": "N_DIR1", "value": n1},
+        {"metric": "N_DIR2", "value": n2},
+        {"metric": "BALANCED_DATASET", "value": balanced},
+        {"metric": "CHANCE_BASELINE", "value": chance},
+        {"metric": "MODEL_ACCURACY", "value": accuracy},
+    ]
 
     df = pd.DataFrame(rows)
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
     df.to_csv(output_file, index=False)
 
 
@@ -151,7 +165,6 @@ def main():
 
     parser.add_argument("--input_dir1", type=Path, required=True)
     parser.add_argument("--input_dir2", type=Path, required=True)
-
     parser.add_argument("--output_file", type=Path, required=True)
 
     args = parser.parse_args()
@@ -160,16 +173,21 @@ def main():
 
     data = clean_data(data)
 
+    n1, n2, chance, balanced = compute_dataset_stats(data)
+
     y = data["label"]
     X = data.drop(columns=["label"])
 
-    feature_names = list(X.columns)
+    accuracy = train_xgb(X, y, args.output_file)
 
-    model, acc = train_xgb(X, y, args.output_file)
-
-    importance = get_feature_importance(model, feature_names)
-
-    save_results(args.output_file, acc, importance)
+    save_results(
+        args.output_file,
+        n1,
+        n2,
+        chance,
+        balanced,
+        accuracy
+    )
 
 
 if __name__ == "__main__":
