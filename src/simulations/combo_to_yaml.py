@@ -5,15 +5,24 @@ import yaml
 
 def get_sample_sizes(config, sample_size=None):
     samples = []
-    for pop in config.get("demes"):
-        epochs_time = {epoch.get("end_time", 0) for epoch in pop.get("epochs")}
-        if any(t == 0 for t in epochs_time):
-            s = sample_size if sample_size else pop.get("sample_size")
-            if s is None:
-                raise ValueError(f"Population '{pop.get('name')}' no sample_size defined.")
-            samples.append(s)
+    if "demes" in config:
+        for pop in config.get("demes"):
+            epochs_time = {epoch.get("end_time", 0) for epoch in pop.get("epochs")}
+            if any(t == 0 for t in epochs_time):
+                s = sample_size if sample_size else pop.get("sample_size")
+                if s is None:
+                    raise ValueError(f"Population '{pop.get('name')}' no sample_size defined.")
+                samples.append(s)
+            else:
+                samples.append(0)
+    else:
+        if not "populations" in config:
+            samples.append(config.get("sample_size"))
         else:
-            samples.append(0)
+            for pop in config.get("populations"):
+                sample_size = pop.get("sample_size", 0)
+                if sample_size:
+                    samples.append(s)
     return samples
 
 parser = argparse.ArgumentParser(
