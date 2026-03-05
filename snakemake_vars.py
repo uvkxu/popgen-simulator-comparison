@@ -96,6 +96,8 @@ def get_num_sampled_populations(config_path):
             if any(t == 0 for t in epochs_time):
                 num_pops += 1
     else:
+        if "populations" not in config:
+            return 1
         for pop in config.get("populations"):
             if pop.get("sample_size", 0) > 0:
                 num_pops += 1
