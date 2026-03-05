@@ -37,13 +37,80 @@ from utils.io_helpers import collect_csv_files, assign_simulator_labels
 
 TOP_TREE_FEATURES = [
     "tree_height_uw",
-    "num_branches",
+    "min_laplace",
+    "min_adj"
 ]
 
 TOP_ALLEL_FEATURES = [
     "difficulty",
     "bollback_multinomial",
 ]
+
+features = [
+    "min_laplace",
+    "tree_height_uw",
+    "min_adj",
+    "var_branch_length_ext",
+    "mean_branch_length_ext",
+    "root_imbalance",
+    "avg_ladder",
+    "max_betweenness",
+    "four_prong",
+    "double_cherries",
+    "laplace_spectrum_a",
+    "laplace_spectrum_a_uw",
+    "laplace_spectrum_p",
+    "b1",
+    "i_stat",
+    "crown_age",
+    "laplace_spectrum_p_uw",
+    "num_branches",
+    "ew_colless",
+    "treeness",
+    "max_ladder",
+    "rquartet",
+    "min_adj_uw",
+    "mntd_uw",
+    "mean_branch_length",
+    "eigen_centralityW",
+    "eigen_centrality",
+    "vpd",
+    "b2",
+    "cherries",
+    "mean_branch_length_int",
+    "min_laplace_uw",
+    "rogers",
+    "var_branch_length_int",
+    "laplace_spectrum_e",
+    "max_laplace_uw",
+    "area_per_pair",
+    "max_closenessW",
+    "max_depth",
+    "mw_over_md",
+    "symmetry_nodes",
+    "diameter",
+    "laplace_spectrum_e_uw",
+    "stairs2",
+    "average_leaf_depth",
+    "beta",
+    "pigot_rho",
+    "wiener",
+    "blum",
+    "max_adj",
+]
+
+
+def _pred_labels_from_proba(proba: np.ndarray) -> np.ndarray:
+    """
+    Convert predict_proba output into 1D class labels robustly.
+    - multiclass: proba shape (n, K) -> argmax
+    - some binary setups might return shape (n,) -> threshold 0.5
+    """
+    proba = np.asarray(proba)
+    if proba.ndim == 2:
+        return np.argmax(proba, axis=1)
+    # fallback: 1D probabilities of class 1
+    return (proba >= 0.5).astype(int)
 
 # -----------------------------
 # Helpers for XGBoost Early Stopping (works with xgboost >= 2.1)
@@ -186,7 +253,8 @@ def permutation_importance_accuracy(
     """
     rng = np.random.default_rng(seed)
 
-    baseline_preds = clf.predict(X_valid, iteration_range=iteration_range)
+    baseline_proba = clf.predict_proba(X_valid, iteration_range=iteration_range)
+    baseline_preds = _pred_labels_from_proba(baseline_proba)
     baseline_acc = accuracy_score(y_valid, baseline_preds)
 
     mean_drop: dict[str, float] = {}
@@ -203,7 +271,8 @@ def permutation_importance_accuracy(
             rng.shuffle(shuffled)
             Xv[f] = shuffled
 
-            preds_perm = clf.predict(Xv, iteration_range=iteration_range)
+            proba_perm = clf.predict_proba(Xv, iteration_range=iteration_range)
+            preds_perm = _pred_labels_from_proba(proba_perm)
             acc_perm = accuracy_score(y_valid, preds_perm)
             drops.append(baseline_acc - acc_perm)
 
@@ -420,6 +489,10 @@ def run_feature_evaluation(
         if col != dep_var and col not in FEATURES_TO_EXCLUDE
     ]
 
+    # If this is a tree-only run, restrict to predefined tree feature list
+    if "tree" in str(output_dir):
+        feature_names = [f for f in features if f in feature_names]
+
     y = LabelEncoder().fit_transform(data[dep_var])
     X = data[feature_names].copy()
     del data
@@ -538,7 +611,8 @@ def run_feature_evaluation(
     ir = _iter_range(best_iter)
 
     # overall accuracy on the same validation set (best iteration only)
-    baseline_preds = clf.predict(X_valid, iteration_range=ir)
+    baseline_proba = clf.predict_proba(X_valid, iteration_range=ir)
+    baseline_preds = _pred_labels_from_proba(baseline_proba)
     all_features_acc = accuracy_score(y_valid, baseline_preds)
 
     # chance baseline (majority class proportion)
@@ -593,10 +667,11 @@ def run_feature_evaluation(
             verbose=False,
         )
 
-        passed_acc = accuracy_score(
-            y_valid,
-            clf_passed.predict(Xp_valid, iteration_range=_iter_range(best_iter_passed)),
+        passed_proba = clf_passed.predict_proba(
+            Xp_valid, iteration_range=_iter_range(best_iter_passed)
         )
+        passed_preds = _pred_labels_from_proba(passed_proba)
+        passed_acc = accuracy_score(y_valid, passed_preds)
     else:
         passed_acc = np.nan
 
@@ -628,10 +703,11 @@ def run_feature_evaluation(
             verbose=False,
         )
 
-        top_acc = accuracy_score(
-            y_valid,
-            clf_top.predict(Xt_valid, iteration_range=_iter_range(best_iter_top)),
+        top_proba = clf_top.predict_proba(
+            Xt_valid, iteration_range=_iter_range(best_iter_top)
         )
+        top_preds = _pred_labels_from_proba(top_proba)
+        top_acc = accuracy_score(y_valid, top_preds)
     else:
         top_acc = np.nan
 
