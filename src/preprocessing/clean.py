@@ -98,7 +98,7 @@ def clean_sim_output(input_file, output_file, sequence_length,
                         val = round(val / slim_scaling_factor) * slim_scaling_factor
                     val = int(round(val))
                     return f":{val}"
-                scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, line) if factor != 1 else line
+                scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, line)
                 fout.write(scaled_line + "\n")
 
             else:
