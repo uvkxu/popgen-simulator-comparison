@@ -90,10 +90,15 @@ def get_num_sampled_populations(config_path):
     num_pops = 0
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
-    for pop in config.get("demes"):
-        epochs_time = {epoch.get("end_time", 0) for epoch in pop.get("epochs")}
-        if any(t == 0 for t in epochs_time):
-            num_pops += 1
+    if "demes" not in config:
+        for pop in config.get("demes"):
+            epochs_time = {epoch.get("end_time", 0) for epoch in pop.get("epochs")}
+            if any(t == 0 for t in epochs_time):
+                num_pops += 1
+    else:
+        for pop in config.get("populations"):
+            if pop.get("sample_size", 0) > 0:
+                num_pops += 1
     return num_pops
 
 def get_combinations(config_path, variable_file):
@@ -152,7 +157,8 @@ for config_name in all_configs:
         if not bool(combo.get("usePrecision")) and float(combo.get("recombination_rates", 0)) > 0.0:
             continue
 
-        if num_populations * combo.get("sample_sizes") > MAX_OVERALL_SAMPLES:
+        if not (num_populations * combo.get("sample_sizes") * 2 > MAX_OVERALL_SAMPLES and 
+            num_populations * combo.get("sample_sizes") <= MAX_OVERALL_SAMPLES):
             continue
 
         possible_mode = f"sample_size_{int(combo.get('sample_sizes'))}"
