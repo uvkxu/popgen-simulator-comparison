@@ -1,8 +1,8 @@
-sequence_length: 100000      
+sequence_length: 1000000     
 mutation_rate: 1.22e-8
 num_replicates: 2                
 save_trees: True    
-population_size: 100000  
+population_size: 10000
 
 populations:
   - name: Loschbour
