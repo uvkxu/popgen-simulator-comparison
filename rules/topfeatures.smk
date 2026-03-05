@@ -171,7 +171,7 @@ rule detect_source_allele:
         """
         scripts/run_with_errorlog.sh {params.err_file} \
         python src/models/detect_source.py \
-        --input_dir_1 {params.input_dir_1} \
-        --input_dir_2 {params.input_dir_2} \
+        --input_dir1 {params.input_dir_1} \
+        --input_dir2 {params.input_dir_2} \
         --output_file {output.output_file}
         """
