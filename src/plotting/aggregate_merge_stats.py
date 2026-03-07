@@ -3,6 +3,7 @@ from pathlib import Path
 import csv
 from collections import defaultdict
 import os
+import sys
 
 UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(UTILS_ROOT)
