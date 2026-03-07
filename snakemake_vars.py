@@ -10,7 +10,7 @@ import math
 import re
 import re
 
-ROOT_DIR = Path(".")
+ROOT_DIR = Path(__file__).resolve().parent
 BIN_DIR = ROOT_DIR / "bin"
 CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 # CONFIG_DIR = ROOT_DIR / "configs"
