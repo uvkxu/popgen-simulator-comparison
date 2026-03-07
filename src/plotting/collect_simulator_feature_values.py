@@ -142,17 +142,21 @@ def extract_values_from_df(df: pd.DataFrame, wanted: Iterable[str]) -> Dict[str,
     wanted_set = set(wanted)
 
     # --- Case 1: wide format (columns are features) ---
+    # --- Case 1: wide format (columns are features) ---
     cols = {str(c).strip() for c in df.columns}
-    # if most wanted appear as columns, treat as wide
+
     if len(cols.intersection(wanted_set)) >= max(1, min(3, len(wanted_set) // 3)):
-        row0 = df.iloc[0] if len(df) > 0 else None
-        out: Dict[str, float] = {}
-        if row0 is not None:
+        rows_out = []
+
+        for _, row in df.iterrows():
+            out = {}
             for f in wanted_set.intersection(cols):
-                v = safe_float(row0.get(f))
+                v = safe_float(row.get(f))
                 if v is not None:
                     out[f] = v
-        return out
+            rows_out.append(out)
+
+        return rows_out
 
     # --- Case 2: long format ---
     lower_cols = {str(c).strip().lower(): c for c in df.columns}
@@ -257,48 +261,52 @@ def collect_one_config(config_dir: Path, filename_filter: Optional[str] = None) 
             # detect simulator once per CSV
             sim = detect_simulator_from_yaml(csv_path)
 
-            vals = extract_values_from_df(df, wanted)
+            vals_list = extract_values_from_df(df, wanted)
+
+            if isinstance(vals_list, dict):
+                vals_list = [vals_list]
 
             # ---- NEW BEHAVIOUR: store ALL found values immediately ----
-            for feat in wanted:
+            for vals in vals_list:
+                for feat in wanted:
 
-                if feat in vals:
-                    v = vals[feat]
+                    if feat in vals:
+                        v = vals[feat]
 
-                    if feat == "difficulty" and v == -1.0:
-                        value = np.nan
-                        defined = 0
+                        if feat == "difficulty" and v == -1.0:
+                            value = np.nan
+                            defined = 0
+                        else:
+                            value = v
+                            defined = 1
+
+                        rows.append({
+                            "config": config_name,
+                            "kind": kind,
+                            "simulator": sim if sim is not None else "",
+                            "sample_dir": sd.name,
+                            "sample_size_key": sample_key,
+                            "seq_len": seq_len,
+                            "feature": feat,
+                            "value": value,
+                            "defined": defined,
+                            "source_csv": str(csv_path),
+                        })
+
                     else:
-                        value = v
-                        defined = 1
-
-                    rows.append({
-                        "config": config_name,
-                        "kind": kind,
-                        "simulator": sim if sim is not None else "",
-                        "sample_dir": sd.name,
-                        "sample_size_key": sample_key,
-                        "seq_len": seq_len,
-                        "feature": feat,
-                        "value": value,
-                        "defined": defined,
-                        "source_csv": str(csv_path),
-                    })
-
-                else:
-                    # feature not present in this CSV
-                    rows.append({
-                        "config": config_name,
-                        "kind": kind,
-                        "simulator": sim if sim is not None else "",
-                        "sample_dir": sd.name,
-                        "sample_size_key": sample_key,
-                        "seq_len": seq_len,
-                        "feature": feat,
-                        "value": np.nan,
-                        "defined": 0,
-                        "source_csv": str(csv_path),
-                    })
+                        # feature not present in this CSV
+                        rows.append({
+                            "config": config_name,
+                            "kind": kind,
+                            "simulator": sim if sim is not None else "",
+                            "sample_dir": sd.name,
+                            "sample_size_key": sample_key,
+                            "seq_len": seq_len,
+                            "feature": feat,
+                            "value": np.nan,
+                            "defined": 0,
+                            "source_csv": str(csv_path),
+                        })
 
     return pd.DataFrame(rows)
 
