@@ -432,11 +432,6 @@ def main():
 
     print(f"Wrote {delta_path}")
 
-    stats.to_csv(
-        outdir / "delta_feature_statistics.csv",
-        index=False
-    )
-
     features = sorted(df_delta["feature"].unique())
 
     print(f"Generating plots for {len(features)} features "
