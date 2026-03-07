@@ -83,14 +83,14 @@ rule collect_feature_values_tree:
         """
 
 
-rule collect_feature_values_allel:
+rule collect_feature_values_tree_block:
     output:
-        output_file=f"{ALLELFEATURES_COLLECT_DIR}/{{config}}/simulator_feature_values.csv"
+        output_file=f"{TREEBLOCKFEATURES_COLLECT_DIR}/{{config}}/simulator_feature_values.csv"
     conda:
         "../envs/plot-env.yaml"
     params:
-        input_dir = lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/",
-        err_file = lambda wildcards: f"{ALLELFEATURES_COLLECT_DIR}/{wildcards.config}/errorlog.err"
+        input_dir = lambda wildcards: f"{FEATURES_DIR}/tree_block/{wildcards.config}/",
+        err_file = lambda wildcards: f"{TREEBLOCKFEATURES_COLLECT_DIR}/{wildcards.config}/errorlog.err"
     threads: 4
     shell:
         """

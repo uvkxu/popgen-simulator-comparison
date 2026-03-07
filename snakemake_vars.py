@@ -46,7 +46,7 @@ TOGETHER_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "together"
 TIPTOP_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "top_feature_run"
 
 COLLECT_DIR = RESULTS_DIR / "collected"
-ALLELFEATURES_COLLECT_DIR = COLLECT_DIR / "allele"
+TREEBLOCKFEATURES_COLLECT_DIR = COLLECT_DIR / "tree_block"
 TREEFEATURES_COLLECT_DIR = COLLECT_DIR / "tree"
 
 #-------COPY-FILE---------------
@@ -773,6 +773,6 @@ TOPFEATURES_ACCURACY = [
 
 COLLECT_FEATURES = [
     f"{COLLECT_DIR}/{type_}/{config}/simulator_feature_values.csv"
-        for type_ in ("tree", "allele")
+        for type_ in ("tree", "tree_block")
         for config in all_configs
 ]
