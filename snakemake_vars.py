@@ -12,13 +12,13 @@ import re
 
 ROOT_DIR = Path(".")
 BIN_DIR = ROOT_DIR / "bin"
-CONFIG_DIR = ROOT_DIR / "own_configs"
+CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 # CONFIG_DIR = ROOT_DIR / "configs"
 CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
-DATA_DIR = Path("/hits/fast/cme/kuchve/own_comparison/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/own_comparison/results_final")
+DATA_DIR = Path("/hits/fast/cme/kuchve/without_recombination/data")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/without_recombination/results_final")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
