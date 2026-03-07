@@ -43,6 +43,9 @@ def setup_matplotlib() -> None:
         "legend.frameon": False,
     })
 
+def _shorten(s: str, maxlen: int = 24) -> str:
+    return s if len(s) <= maxlen else s[:maxlen - 1] + "…"
+
 
 def plot_feature_split(
     df: pd.DataFrame,
