@@ -46,6 +46,7 @@ TREEFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "tree"
 TOGETHER_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "together"
 TIPTOP_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "top_feature_run"
 
+MERGES_COLLECT_DIR = RESULTS_DIR / "merged_stats"
 COLLECT_DIR = RESULTS_DIR / "collected"
 ALLELFEATURES_COLLECT_DIR = COLLECT_DIR / "allele"
 TREEFEATURES_COLLECT_DIR = COLLECT_DIR / "tree"
@@ -991,4 +992,22 @@ OWN_COMPARISON_OUTPUT = [
     f"{TREE_TOPFEATURES_DIR}/{config}/{combo}/feature_ranking_with_summary.csv"
     for config in all_configs
     for combo in combinations_by_config[config]
+]
+
+MERGED_STATS = [
+    f"{MERGES_COLLECT_DIR}/{config}/{combo}/rep{i + 1}/{simulator}_merge_stats.csv"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for i in range(REPS)
+    for simulator in ["ms", "msms"]
+]
+
+MERGED_STATS_OVERALL = [
+    f"{ALLELFEATURES_COLLECT_DIR}/{config}/{simulator}_merged_positions_overall.csv"
+    for config in all_configs
+    for simulator in ["ms", "msms"]
+] + [
+    f"{ALLELFEATURES_COLLECT_DIR}/{config}/{simulator}_merged_positions_sample_size.csv"
+    for config in all_configs
+    for simulator in ["ms", "msms"]
 ]

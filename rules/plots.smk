@@ -74,3 +74,41 @@ rule collect_delta_simulators_allel:
         --input {params.input_dir} \
         --out {output.output_file}
         """
+
+rule get_merged_positions_stats:
+    output:
+        output_file=f"{MERGES_COLLECT_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_merge_stats.csv"
+    conda:
+        "../envs/plot-env.yaml"
+    params:
+        input = lambda w: f"{CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_cleaned_output.txt",
+        err_file = lambda w: f"{MERGES_COLLECT_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
+        combo_yaml = lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/{COMBO_PARAMETERS_YAML}"
+    shell:
+        """
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/plotting/merged_positions_stats.py \
+        --input {params.input} \
+        --output {output.output_file} \
+        --combo_yaml {params.combo_yaml} \
+        --precision {PRECISION}
+        """
+
+rule collect_merged_positions_stats:
+    output:
+        output_overall=f"{ALLELFEATURES_COLLECT_DIR}/{{config}}/{{simulator}}_merged_positions_overall.csv",
+        output_by_sample_size=f"{ALLELFEATURES_COLLECT_DIR}/{{config}}/{{simulator}}_merged_positions_sample_size.csv"
+    conda:
+        "../envs/plot-env.yaml"
+    params:
+        input_dir = lambda wildcards: f"{MERGES_COLLECT_DIR}/{wildcards.config}/",
+        err_file = lambda wildcards: f"{ALLELFEATURES_COLLECT_DIR}/{wildcards.config}/errorlog.err"
+    shell:
+        """
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/plotting/aggregate_merge_stats.py \
+        --input {params.input_dir} \
+        --output_overall {output.output_overall} \
+        --output_by_sample_size {output.output_by_sample_size} \
+        --simulator {wildcards.simulator}
+        """
