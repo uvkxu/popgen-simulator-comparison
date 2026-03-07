@@ -11,6 +11,7 @@ import re
 import re
 
 ROOT_DIR = Path(__file__).resolve().parent
+print(ROOT_DIR)
 BIN_DIR = ROOT_DIR / "bin"
 CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 # CONFIG_DIR = ROOT_DIR / "configs"
