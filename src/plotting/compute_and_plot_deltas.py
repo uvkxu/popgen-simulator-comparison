@@ -374,18 +374,17 @@ def load_all_configs(root: Path):
 def plot_worker(args):
 
     feature, df, outdir = args
-    plot_dir = "plots"
 
     plot_feature(
         df,
         feature,
-        Path(outdir / plot_dir / f"delta_{feature}.png")
+        Path(outdir / f"delta_{feature}.png")
     )
 
     plot_feature_split(
         df,
         feature,
-        Path(outdir / plot_dir / f"delta_{feature}_split.png")
+        Path(outdir / f"delta_{feature}_split.png")
     )
 
 
@@ -421,6 +420,8 @@ def main():
     outdir = args.outdir.resolve()
 
     outdir.mkdir(parents=True, exist_ok=True)
+    plotdir = outdir / "plots"
+    plotdir.mkdir(parents=True, exist_ok=True)
 
     setup_matplotlib()
 
@@ -441,7 +442,7 @@ def main():
           f"using {args.threads} threads")
 
     tasks = [
-        (feature, df_delta, outdir)
+        (feature, df_delta, plotdir)
         for feature in features
     ]
 
