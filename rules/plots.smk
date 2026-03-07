@@ -100,6 +100,7 @@ rule collect_merged_positions_stats:
         output_by_sample_size=f"{ALLELFEATURES_COLLECT_DIR}/{{config}}/{{simulator}}_merged_positions_sample_size.csv"
     conda:
         "../envs/plot-env.yaml"
+    threads: 4
     params:
         input_dir = lambda wildcards: f"{MERGES_COLLECT_DIR}/{wildcards.config}/",
         err_file = lambda wildcards: f"{ALLELFEATURES_COLLECT_DIR}/{wildcards.config}/errorlog.err"
