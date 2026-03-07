@@ -7,8 +7,9 @@ import re
 import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
-import numpy as np
+from concurrent.futures import ThreadPoolExecutor
 
+import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -17,7 +18,7 @@ UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(UTILS_ROOT)
 
 from snakemake_vars import SIMULATORS
-from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml 
+from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
 
 # ------------------ feature lists ------------------
@@ -25,28 +26,20 @@ from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 TREE_FEATURES = [
     "tree_height_uw",
     "min_laplace",
-    "min_adj"
+    "min_adj",
 ]
 
 TREE_BLOCK_FEATURES = [
     "num_trees"
 ]
 
-# match e.g.
-# sample_sizes-16_sequence_lengths-1000000_...
 _SAMPLE_SIZE_RE = re.compile(r"sample_sizes-([0-9.]+)")
 _SEQ_LEN_RE = re.compile(r"sequence_lengths-([0-9]+)")
 
 
-def parse_sample_dir_name(name: str) -> Tuple[Optional[float], Optional[int]]:
-    """
-    Parses real directory names like:
-    sample_sizes-16_sequence_lengths-1000000_population_sizes-10000_...
+# ------------------ helpers ------------------
 
-    Returns:
-        sample_size_key (float)
-        seq_len (int)
-    """
+def parse_sample_dir_name(name: str) -> Tuple[Optional[float], Optional[int]]:
     sample_key = None
     seq_len = None
 
@@ -68,13 +61,9 @@ def parse_sample_dir_name(name: str) -> Tuple[Optional[float], Optional[int]]:
 
 
 def guess_kind_from_config_dir(config_dir: Path) -> str:
-    """
-    Expected layout: .../tree/<config-name>/ or .../tree_block/<config-name>/
-    """
     parent = config_dir.parent.name.lower()
     if parent in {"tree", "tree_block"}:
         return parent
-    # fallback: infer from available feature names later; default tree
     return "tree"
 
 
@@ -84,25 +73,13 @@ def clean_feature_name(name: str, kind: str) -> str:
 
     s = name.strip()
 
-    # tree_block: remove pooled_ prefix (your issue)
+    if kind == "tree_block" and s.startswith("pooled_"):
+        s = s[len("pooled_"):]
 
-    # rename entropy -> alignment_entropy
     if s == "entropy":
         s = "alignment_entropy"
 
     return s
-
-
-def find_yaml_for_simulator(sample_dir: Path) -> Optional[Path]:
-    """
-    Try to find a yaml/yml inside the subgroup directory.
-    If your pipeline uses a specific name, adjust here.
-    """
-    for pat in ("*.yaml", "*.yml"):
-        hits = sorted(sample_dir.glob(pat))
-        if hits:
-            return hits[0]
-    return None
 
 
 def safe_float(x) -> Optional[float]:
@@ -113,43 +90,48 @@ def safe_float(x) -> Optional[float]:
             return None
     except Exception:
         pass
+
     s = str(x).strip()
+
     if s == "" or s.lower() in {"nan", "none", "null"}:
         return None
+
     try:
         return float(s)
     except Exception:
         return None
 
 
-def extract_values_from_df(df: pd.DataFrame, wanted: Iterable[str]) -> Dict[str, float]:
-    """
-    Robust extraction supporting multiple CSV shapes:
-    1) wide: feature names are columns, one row
-    2) long: columns like [feature,value] or [stat,value] etc.
-    3) key/value: first col key, second col value
-    Returns dict feature->value for found wanted features.
-    """
+# ------------------ dataframe parsing ------------------
+
+def extract_values_from_df(df: pd.DataFrame, wanted: Iterable[str]):
+
     wanted_set = set(wanted)
 
-    # --- Case 1: wide format (columns are features) ---
+    # --- Case 1: wide format ---
     cols = {str(c).strip() for c in df.columns}
 
     if len(cols.intersection(wanted_set)) >= max(1, min(3, len(wanted_set) // 3)):
+
         rows_out = []
 
         for _, row in df.iterrows():
+
             out = {}
+
             for f in wanted_set.intersection(cols):
                 v = safe_float(row.get(f))
+
                 if v is not None:
                     out[f] = v
+
             rows_out.append(out)
 
-    return rows_out
+        return rows_out
 
     # --- Case 2: long format ---
     lower_cols = {str(c).strip().lower(): c for c in df.columns}
+
     key_col = None
     val_col = None
 
@@ -157,106 +139,120 @@ def extract_values_from_df(df: pd.DataFrame, wanted: Iterable[str]) -> Dict[str,
         if cand in lower_cols:
             key_col = lower_cols[cand]
             break
+
     for cand in ["value", "val", "x", "y"]:
         if cand in lower_cols:
             val_col = lower_cols[cand]
             break
 
     if key_col is not None and val_col is not None:
+
         out: Dict[str, float] = {}
+
         for _, r in df.iterrows():
+
             k = r.get(key_col)
+
             if k is None:
                 continue
+
             k = str(k).strip()
+
             if k in wanted_set:
+
                 v = safe_float(r.get(val_col))
+
                 if v is not None:
                     out[k] = v
+
         return out
 
-    # --- Case 3: key/value as first two columns ---
+    # --- Case 3: key/value first two columns ---
     if df.shape[1] >= 2:
+
         out: Dict[str, float] = {}
+
         kcol = df.columns[0]
         vcol = df.columns[1]
+
         for _, r in df.iterrows():
+
             k = r.get(kcol)
+
             if k is None:
                 continue
+
             k = str(k).strip()
+
             if k in wanted_set:
+
                 v = safe_float(r.get(vcol))
+
                 if v is not None:
                     out[k] = v
+
         return out
 
     return {}
 
 
-# ------------------ main collection ------------------
-def collect_one_config(config_dir: Path, filename_filter: Optional[str] = None) -> pd.DataFrame:
-    """
-    Returns tidy dataframe with columns:
-      config, kind, simulator, sample_dir, sample_size_key, seq_len,
-      feature, value, defined, source_csv
-    """
-    config_dir = config_dir.resolve()
-    config_name = config_dir.name
-    kind = guess_kind_from_config_dir(config_dir)
+# ------------------ worker ------------------
 
-    wanted_raw = TREE_FEATURES if kind == "tree" else TREE_BLOCK_FEATURES
-    wanted = [clean_feature_name(x, kind) for x in wanted_raw]
+def process_sample_dir(
+    sd: Path,
+    config_name: str,
+    kind: str,
+    wanted: List[str],
+    filename_filter: Optional[str]
+):
 
     rows = []
 
-    # iterate over all subgroup dirs
-    subgroup_dirs = sorted([p for p in config_dir.iterdir() if p.is_dir()])
+    sample_key, seq_len = parse_sample_dir_name(sd.name)
 
-    for sd in subgroup_dirs:
-        sample_key, seq_len = parse_sample_dir_name(sd.name)
+    try:
+        csv_paths = collect_csv_files(sd)
+        csv_paths = [Path(p) for p in csv_paths]
+    except Exception:
+        csv_paths = list(sd.rglob("*.csv"))
+
+    if filename_filter:
+        csv_paths = [p for p in csv_paths if p.name == filename_filter]
+
+    if not csv_paths:
+        return rows
+
+    for csv_path in sorted(csv_paths):
 
         try:
-            csv_paths = collect_csv_files(sd)
-            csv_paths = [Path(p) for p in csv_paths]
+            df = pd.read_csv(csv_path)
         except Exception:
-            csv_paths = list(sd.rglob("*.csv"))
-
-        if filename_filter:
-            csv_paths = [p for p in csv_paths if p.name == filename_filter]
-
-        if not csv_paths:
             continue
 
-        # process EVERY csv independently
-        for csv_path in sorted(csv_paths):
+        df_cols_clean = {c: clean_feature_name(str(c), kind) for c in df.columns}
+        df = df.rename(columns=df_cols_clean)
 
-            try:
-                df = pd.read_csv(csv_path)
-            except Exception:
-                continue
+        for keycol in ["feature", "stat", "name", "metric", "key"]:
+            if keycol in df.columns:
+                df[keycol] = df[keycol].apply(
+                    lambda x: clean_feature_name(str(x), kind)
+                    if isinstance(x, str)
+                    else x
+                )
 
-            # clean column names
-            df_cols_clean = {c: clean_feature_name(str(c), kind) for c in df.columns}
-            df = df.rename(columns=df_cols_clean)
+        sim = detect_simulator_from_yaml(csv_path)
 
-            for keycol in ["feature", "stat", "name", "metric", "key"]:
-                if keycol in df.columns:
-                    df[keycol] = df[keycol].apply(
-                        lambda x: clean_feature_name(str(x), kind)
-                        if isinstance(x, str)
-                        else x
-                    )
+        vals_list = extract_values_from_df(df, wanted)
 
-            # detect simulator once per CSV
-            sim = detect_simulator_from_yaml(csv_path)
+        if isinstance(vals_list, dict):
+            vals_list = [vals_list]
 
-            vals = extract_values_from_df(df, wanted)
+        for vals in vals_list:
 
-            # ---- NEW BEHAVIOUR: store ALL found values immediately ----
             for feat in wanted:
 
                 if feat in vals:
+
                     v = vals[feat]
 
                     if feat == "difficulty" and v == -1.0:
@@ -266,58 +262,115 @@ def collect_one_config(config_dir: Path, filename_filter: Optional[str] = None) 
                         value = v
                         defined = 1
 
-                    rows.append({
-                        "config": config_name,
-                        "kind": kind,
-                        "simulator": sim if sim is not None else "",
-                        "sample_dir": sd.name,
-                        "sample_size_key": sample_key,
-                        "seq_len": seq_len,
-                        "feature": feat,
-                        "value": value,
-                        "defined": defined,
-                        "source_csv": str(csv_path),
-                    })
-
                 else:
-                    # feature not present in this CSV
-                    rows.append({
-                        "config": config_name,
-                        "kind": kind,
-                        "simulator": sim if sim is not None else "",
-                        "sample_dir": sd.name,
-                        "sample_size_key": sample_key,
-                        "seq_len": seq_len,
-                        "feature": feat,
-                        "value": np.nan,
-                        "defined": 0,
-                        "source_csv": str(csv_path),
-                    })
+                    value = np.nan
+                    defined = 0
+
+                rows.append({
+                    "config": config_name,
+                    "kind": kind,
+                    "simulator": sim if sim is not None else "",
+                    "sample_dir": sd.name,
+                    "sample_size_key": sample_key,
+                    "seq_len": seq_len,
+                    "feature": feat,
+                    "value": value,
+                    "defined": defined,
+                    "source_csv": str(csv_path),
+                })
+
+    return rows
+
+
+# ------------------ main collection ------------------
+
+def collect_one_config(
+    config_dir: Path,
+    filename_filter: Optional[str] = None,
+    threads: int = 4
+) -> pd.DataFrame:
+
+    config_dir = config_dir.resolve()
+    config_name = config_dir.name
+
+    kind = guess_kind_from_config_dir(config_dir)
+
+    wanted_raw = TREE_FEATURES if kind == "tree" else TREE_BLOCK_FEATURES
+    wanted = [clean_feature_name(x, kind) for x in wanted_raw]
+
+    subgroup_dirs = sorted([p for p in config_dir.iterdir() if p.is_dir()])
+
+    rows = []
+
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+
+        futures = [
+
+            executor.submit(
+                process_sample_dir,
+                sd,
+                config_name,
+                kind,
+                wanted,
+                filename_filter
+            )
+
+            for sd in subgroup_dirs
+        ]
+
+        for f in futures:
+            rows.extend(f.result())
 
     return pd.DataFrame(rows)
 
 
+# ------------------ CLI ------------------
+
 def main() -> int:
+
     ap = argparse.ArgumentParser(
-        description="Collect per-subgroup feature/stat values per simulator for one config dir (tree or tree_block)."
+        description="Collect per-subgroup feature/stat values per simulator for one config dir."
     )
-    ap.add_argument("--input", required=True, help="Path to a single config directory")
-    ap.add_argument("--out", default=None, help="Output CSV path (default: <config_dir>/simulator_feature_values.csv)")
-    ap.add_argument("--filename-filter", default=None, help="If set, only read CSVs with exactly this filename")
+
+    ap.add_argument("--input", required=True)
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--filename-filter", default=None)
+
+    ap.add_argument(
+        "--threads",
+        type=int,
+        default=4,
+        help="Number of parallel threads (default: 4)"
+    )
+
     args = ap.parse_args()
 
     config_dir = Path(args.input).expanduser()
+
     if not config_dir.exists() or not config_dir.is_dir():
         raise SystemExit(f"Not a directory: {config_dir}")
 
-    df = collect_one_config(config_dir, filename_filter=args.filename_filter)
+    df = collect_one_config(
+        config_dir,
+        filename_filter=args.filename_filter,
+        threads=args.threads
+    )
 
-    out = Path(args.out).expanduser().resolve() if args.out else (config_dir / "simulator_feature_values.csv")
+    out = (
+        Path(args.out).expanduser().resolve()
+        if args.out
+        else (config_dir / "simulator_feature_values.csv")
+    )
+
     df.to_csv(out, index=False)
 
     print(f"[OK] wrote {len(df)} rows -> {out}")
+
     if len(df) == 0:
-        print("[WARN] no rows collected. Likely reasons: no CSVs found, YAML not found, or wanted features not present.")
+        print(
+            "[WARN] no rows collected. Likely reasons: no CSVs found, YAML not found, or wanted features not present."
+        )
+
     return 0
 
 

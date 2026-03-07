@@ -64,3 +64,38 @@ rule compute_plots_pigot_rho:
         --simulators {wildcards.simulator} 
         touch {output.dummy}
         """
+
+rule collect_feature_values_tree:
+    output:
+        output_file=f"{TREEFEATURES_COLLECT_DIR}/{{config}}/simulator_feature_values.csv"
+    conda:
+        "../envs/plot-env.yaml"
+    params:
+        input_dir = lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/",
+        err_file = lambda wildcards: f"{TREEFEATURES_COLLECT_DIR}/{wildcards.config}/errorlog.err"
+    threads: 4
+    shell:
+        """
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/plotting/collect_simulator_feature_values.py \
+        --input {params.input_dir} \
+        --out {output.output_file}
+        """
+
+
+rule collect_feature_values_allel:
+    output:
+        output_file=f"{ALLELFEATURES_COLLECT_DIR}/{{config}}/simulator_feature_values.csv"
+    conda:
+        "../envs/plot-env.yaml"
+    params:
+        input_dir = lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/",
+        err_file = lambda wildcards: f"{ALLELFEATURES_COLLECT_DIR}/{wildcards.config}/errorlog.err"
+    threads: 4
+    shell:
+        """
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/plotting/collect_simulator_feature_values.py \
+        --input {params.input_dir} \
+        --out {output.output_file}
+        """
