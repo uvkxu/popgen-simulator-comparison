@@ -3,17 +3,11 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import polars as pl
 import pandas as pd
 import numpy as np
-from concurrent.futures import ProcessPoolExecutor
-import multiprocessing
-import os
 from tqdm import tqdm
-
-# prevent BLAS oversubscription
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
+import multiprocessing
 
 import matplotlib
 matplotlib.use("Agg")
@@ -32,11 +26,9 @@ ORDER = [
     "jacobs_papuans",
 ]
 
-GLOBAL_DF = None
-
 
 # ==========================================================
-# Matplotlib setup
+# matplotlib
 # ==========================================================
 
 def setup_matplotlib():
@@ -52,81 +44,43 @@ def _shorten(s: str, maxlen: int = 24):
 
 
 # ==========================================================
-# CSV loading
+# CSV loading (polars parallel)
 # ==========================================================
 
-def load_single_csv(csv: Path):
-
-    df = pd.read_csv(
-        csv,
-        engine="pyarrow",   # MUCH faster
-        dtype={
-            "feature": "category",
-            "simulator": "category",
-            "value": "float64"
-        }
-    )
-
-    mask = (df["feature"] == "difficulty") & (df["value"] == -1)
-    df.loc[mask, "value"] = np.nan
-
-    if "config" not in df.columns:
-        df["config"] = csv.parent.name
-
-    if "sample_size_key" not in df.columns:
-        df["sample_size_key"] = None
-
-    if "seq_len" not in df.columns:
-        df["seq_len"] = None
-
-    return df
-
-
-def load_all_configs(root: Path, threads: int):
+def load_all_configs(root: Path):
 
     csv_files = sorted(root.glob("*/simulator_feature_values.csv"))
 
     print(f"Loading {len(csv_files)} CSV files")
 
-    with ProcessPoolExecutor(max_workers=min(len(csv_files), threads)) as pool:
+    dfs = []
 
-        dfs = list(
-            tqdm(
-                pool.map(load_single_csv, csv_files),
-                total=len(csv_files),
-                desc="Loading CSV files"
-            )
+    for csv in tqdm(csv_files, desc="Reading CSVs"):
+
+        df = pl.read_csv(
+            csv,
+            try_parse_dates=False
         )
 
-    return pd.concat(dfs, ignore_index=True)
+        if "config" not in df.columns:
+            df = df.with_columns(pl.lit(csv.parent.name).alias("config"))
+
+        if "sample_size_key" not in df.columns:
+            df = df.with_columns(pl.lit(None).alias("sample_size_key"))
+
+        if "seq_len" not in df.columns:
+            df = df.with_columns(pl.lit(None).alias("seq_len"))
+
+        dfs.append(df)
+
+    return pl.concat(dfs)
 
 
 # ==========================================================
-# Delta computation
+# Delta computation (fully parallel)
 # ==========================================================
 
-def compute_group_delta(args):
-
-    key, idx = args
-
-    group = GLOBAL_DF.loc[idx]
-
-    sim_medians = (
-        group.groupby("simulator", observed=True)["value"]
-        .median()
-        .reset_index()
-    )
-
-    baseline = sim_medians["value"].median()
-
-    group = group.copy()
-    group["baseline"] = baseline
-    group["delta"] = group["value"] - baseline
-
-    return group
-
-
-def compute_deltas_parallel(df: pd.DataFrame, threads: int):
+def compute_deltas(df: pl.DataFrame) -> pl.DataFrame:
 
     group_cols = [
         "config",
@@ -135,35 +89,43 @@ def compute_deltas_parallel(df: pd.DataFrame, threads: int):
         "feature",
     ]
 
-    groups = list(
-        df.groupby(group_cols, observed=True).groups.items()
+    print("Computing simulator medians")
+
+    sim_medians = (
+        df
+        .groupby(group_cols + ["simulator"])
+        .agg(pl.median("value").alias("value"))
     )
 
-    print(f"Computing deltas for {len(groups)} groups")
+    print("Computing baseline medians")
 
-    with ProcessPoolExecutor(max_workers=threads) as pool:
+    baseline = (
+        sim_medians
+        .groupby(group_cols)
+        .agg(pl.median("value").alias("baseline"))
+    )
 
-        results = list(
-            tqdm(
-                pool.map(compute_group_delta, groups, chunksize=1),
-                total=len(groups),
-                desc="Computing deltas"
-            )
-        )
+    print("Joining baseline")
 
-    return pd.concat(results, ignore_index=True)
+    df = df.join(baseline, on=group_cols)
+
+    print("Computing deltas")
+
+    df = df.with_columns(
+        (pl.col("value") - pl.col("baseline")).alias("delta")
+    )
+
+    return df
 
 
 # ==========================================================
 # Plotting
 # ==========================================================
 
-def plot_feature_task(args):
+def plot_feature(feature_df: pd.DataFrame, feature: str, out_path: Path):
 
-    feature, df_f, out_path = args
-
-    configs = [c for c in ORDER if c in df_f["config"].unique()]
-    simulators = sorted(df_f["simulator"].unique())
+    configs = [c for c in ORDER if c in feature_df["config"].unique()]
+    simulators = sorted(feature_df["simulator"].unique())
 
     base = np.arange(len(configs)) * 1.8
 
@@ -182,8 +144,10 @@ def plot_feature_task(args):
         for c_idx, cfg in enumerate(configs):
 
             vals = (
-                df_f[(df_f["config"] == cfg) &
-                     (df_f["simulator"] == sim)]["delta"]
+                feature_df[
+                    (feature_df["config"] == cfg) &
+                    (feature_df["simulator"] == sim)
+                ]["delta"]
                 .dropna()
                 .values
             )
@@ -220,29 +184,6 @@ def plot_feature_task(args):
     plt.close(fig)
 
 
-def generate_plots_parallel(df_delta, plotdir, threads):
-
-    tasks = []
-
-    for feature in df_delta["feature"].unique():
-
-        df_f = df_delta[df_delta["feature"] == feature]
-
-        tasks.append(
-            (feature, df_f, plotdir / f"delta_{feature}.png")
-        )
-
-    with ProcessPoolExecutor(max_workers=min(len(tasks), threads)) as pool:
-
-        list(
-            tqdm(
-                pool.map(plot_feature_task, tasks),
-                total=len(tasks),
-                desc="Generating plots"
-            )
-        )
-
-
 # ==========================================================
 # Main
 # ==========================================================
@@ -253,12 +194,6 @@ def main():
 
     parser.add_argument("--input-dir", required=True, type=Path)
     parser.add_argument("--outdir", required=True, type=Path)
-
-    parser.add_argument(
-        "--threads",
-        type=int,
-        default=max(1, multiprocessing.cpu_count() // 2)
-    )
 
     args = parser.parse_args()
 
@@ -273,29 +208,38 @@ def main():
 
     # ------------------------------------------------------
 
-    print("Loading CSV tables...")
-    df = load_all_configs(root, args.threads)
-
-    global GLOBAL_DF
-    GLOBAL_DF = df
+    print("Loading data")
+    df = load_all_configs(root)
 
     # ------------------------------------------------------
 
-    print("Computing deltas...")
-    df_delta = compute_deltas_parallel(df, args.threads)
+    print("Computing deltas")
+    df = compute_deltas(df)
+
+    print("Converting to pandas for plotting")
+    df_pd = df.to_pandas()
 
     delta_path = outdir / "deltas.csv"
-    df_delta.to_csv(delta_path, index=False)
+    df_pd.to_csv(delta_path, index=False)
 
     print(f"Wrote {delta_path}")
 
     # ------------------------------------------------------
 
-    print("Generating plots...")
-    generate_plots_parallel(df_delta, plotdir, args.threads)
+    print("Generating plots")
+
+    for feature in tqdm(df_pd["feature"].unique(), desc="Plotting"):
+
+        df_f = df_pd[df_pd["feature"] == feature]
+
+        plot_feature(
+            df_f,
+            feature,
+            plotdir / f"delta_{feature}.png"
+        )
 
     print("All plots generated.")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
