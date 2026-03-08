@@ -7,11 +7,18 @@ import pandas as pd
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
+import os
+
+# prevent numpy / BLAS oversubscription
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
 
 import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+
 
 ORDER = [
     "one_population",
@@ -41,9 +48,14 @@ def setup_matplotlib() -> None:
         "legend.frameon": False,
     })
 
+
 def _shorten(s: str, maxlen: int = 24) -> str:
     return s if len(s) <= maxlen else s[:maxlen - 1] + "…"
 
+
+# ==========================================================
+# Plotting
+# ==========================================================
 
 def plot_feature_split(
     df: pd.DataFrame,
@@ -54,14 +66,12 @@ def plot_feature_split(
 
     df_f = df[df["feature"] == feature]
 
-    # nothing at all
     if df_f.empty or df_f["delta"].notna().sum() == 0:
         return
 
     configs = [c for c in ORDER if c in df_f["config"].unique()]
     simulators = sorted(df_f["simulator"].unique())
 
-    # ---- NaN-robust medians ----
     medians = (
         df_f.groupby("config")["delta"]
         .apply(lambda x: np.nanmedian(np.abs(x)))
@@ -76,7 +86,7 @@ def plot_feature_split(
     regular = [c for c in configs if c not in extreme]
 
     if len(extreme) == 0:
-        return  # nothing to split
+        return
 
     fig, (ax_top, ax_bottom) = plt.subplots(
         2, 1,
@@ -99,6 +109,7 @@ def plot_feature_split(
             data = []
 
             for c_idx, cfg in enumerate(cfg_subset):
+
                 vals = (
                     df_f[(df_f["config"] == cfg) &
                          (df_f["simulator"] == sim)]["delta"]
@@ -130,6 +141,7 @@ def plot_feature_split(
 
         ax.axhline(0, linestyle="--", linewidth=1.4, color="0.1")
         ax.yaxis.grid(True, alpha=0.22)
+
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
 
@@ -154,9 +166,6 @@ def plot_feature(
     df: pd.DataFrame,
     feature: str,
     out_path: Path,
-    config_gap: float = 1.8,
-    within_gap: float = 0.22,
-    box_width: float = 0.18,
 ):
 
     df_f = df[df["feature"] == feature]
@@ -167,57 +176,22 @@ def plot_feature(
     configs = [c for c in ORDER if c in df_f["config"].unique()]
     simulators = sorted(df_f["simulator"].unique())
 
-    n_cfg = len(configs)
-    n_sim = len(simulators)
+    base = np.arange(len(configs)) * 1.8
 
-    base = np.arange(n_cfg) * config_gap
-
-    fig_w = max(12, min(26, 0.8 * n_cfg + 6))
-    fig, ax = plt.subplots(figsize=(fig_w, 6.2), constrained_layout=True)
-
-    problematic_features = {
-        "phylogenetic_div",
-        "mean_branch_length",
-        "tree_height",
-        "bollback_multinomial"
-    }
-
-    if feature in problematic_features:
-        ax.set_ylabel("Feature deviation from global median (Δ, arcsinh scale)")
-        ax.set_yscale("function", functions=(np.arcsinh, np.sinh))
-    else: 
-        ax.set_ylabel("Feature deviation from global median baseline (Δ)")
-
-
-    for i in range(n_cfg - 1):
-        ax.axvline(
-            (base[i] + base[i + 1]) / 2,
-            color="0.2",
-            linewidth=0.8,
-            alpha=0.12,
-            zorder=0
-        )
-
-    ax.axhline(
-        0.0,
-        linestyle="--",
-        linewidth=1.4,
-        color="0.1",
-        alpha=0.9,
-        zorder=1
-    )
+    fig, ax = plt.subplots(figsize=(14, 6), constrained_layout=True)
 
     cmap = plt.get_cmap("tab10")
     colors = {sim: cmap(i) for i, sim in enumerate(simulators)}
 
     for s_idx, sim in enumerate(simulators):
 
-        offset = (s_idx - (n_sim - 1) / 2) * within_gap
+        offset = (s_idx - (len(simulators) - 1) / 2) * 0.22
 
         positions = []
         data = []
 
         for c_idx, cfg in enumerate(configs):
+
             vals = (
                 df_f[(df_f["config"] == cfg) &
                      (df_f["simulator"] == sim)]["delta"]
@@ -235,14 +209,11 @@ def plot_feature(
         bp = ax.boxplot(
             data,
             positions=positions,
-            widths=box_width,
+            widths=0.18,
             patch_artist=True,
             whis=(0, 100),
             showfliers=False,
             medianprops=dict(linewidth=1.5, color="black"),
-            whiskerprops=dict(linewidth=1.1),
-            capprops=dict(linewidth=1.1),
-            boxprops=dict(linewidth=1.0),
         )
 
         for b in bp["boxes"]:
@@ -250,18 +221,7 @@ def plot_feature(
             b.set_alpha(0.35)
             b.set_edgecolor(colors[sim])
 
-        for w in bp["whiskers"]:
-            w.set_color(colors[sim])
-        for c in bp["caps"]:
-            c.set_color(colors[sim])
-
-    ax.set_xlabel("Demographic models (ordered by number of populations)")
-
-    ax.yaxis.grid(True, alpha=0.22)
-    ax.set_axisbelow(True)
-
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+    ax.axhline(0, linestyle="--", linewidth=1.4, color="0.1")
 
     ax.set_xticks(base)
     ax.set_xticklabels(
@@ -270,30 +230,14 @@ def plot_feature(
         ha="right"
     )
 
-    from matplotlib.patches import Patch
-    from matplotlib.lines import Line2D
+    ax.yaxis.grid(True, alpha=0.22)
 
-    legend_handles = [
-        Patch(facecolor=colors[sim], edgecolor=colors[sim],
-              alpha=0.35, label=sim)
-        for sim in simulators
-    ]
-
-    legend_handles.append(
-        Line2D([], [], linestyle="--",
-               color="0.1", linewidth=1.4,
-               label="baseline (0)")
-    )
-
-    ax.legend(handles=legend_handles, 
-        loc="lower center",
-        bbox_to_anchor=(0.5, 1.02),
-        ncol=4,
-        frameon=True
-    )
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
 
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
+
 
 # ==========================================================
 # Efficient delta computation
@@ -308,14 +252,12 @@ def compute_deltas(df: pd.DataFrame) -> pd.DataFrame:
         "feature",
     ]
 
-    # median per simulator inside subgroup
     sim_medians = (
         df.groupby(group_cols + ["simulator"])["value"]
         .median()
         .reset_index()
     )
 
-    # baseline = median over simulator medians
     baseline = (
         sim_medians
         .groupby(group_cols)["value"]
@@ -332,15 +274,12 @@ def compute_deltas(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ==========================================================
-# Load all configs
+# Load configs
 # ==========================================================
 
 def load_all_configs(root: Path):
 
     csv_files = sorted(root.glob("*/simulator_feature_values.csv"))
-
-    if not csv_files:
-        raise RuntimeError("No simulator_feature_values.csv found.")
 
     dfs = []
 
@@ -366,24 +305,34 @@ def load_all_configs(root: Path):
 
 
 # ==========================================================
-# Parallel plotting worker
+# Parallel worker
 # ==========================================================
 
-def plot_worker(args):
+def prepare_group(args):
 
-    feature, df, outdir = args
+    feature, config, sample_size, seq_len, df_g = args
 
-    plot_feature(
-        df,
-        feature,
-        Path(outdir / f"delta_{feature}.png")
-    )
+    rows = []
 
-    plot_feature_split(
-        df,
-        feature,
-        Path(outdir / f"delta_{feature}_split.png")
-    )
+    for sim in df_g["simulator"].unique():
+
+        vals = (
+            df_g[df_g["simulator"] == sim]["delta"]
+            .dropna()
+            .values
+        )
+
+        for v in vals:
+            rows.append({
+                "feature": feature,
+                "config": config,
+                "sample_size_key": sample_size,
+                "seq_len": seq_len,
+                "simulator": sim,
+                "delta": v
+            })
+
+    return rows
 
 
 # ==========================================================
@@ -394,22 +343,13 @@ def main():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        "--input-dir",
-        required=True,
-        type=Path
-    )
-
-    parser.add_argument(
-        "--outdir",
-        required=True,
-        type=Path
-    )
+    parser.add_argument("--input-dir", required=True, type=Path)
+    parser.add_argument("--outdir", required=True, type=Path)
 
     parser.add_argument(
         "--threads",
         type=int,
-        default=max(1, multiprocessing.cpu_count() - 1)
+        default=max(1, multiprocessing.cpu_count() // 2)
     )
 
     args = parser.parse_args()
@@ -426,30 +366,54 @@ def main():
     print("Loading feature tables...")
     df = load_all_configs(root)
 
-    print("Computing deltas (vectorized)...")
+    print("Computing deltas...")
     df_delta = compute_deltas(df)
 
     delta_path = outdir / "deltas.csv"
     df_delta.to_csv(delta_path, index=False)
 
-    print(f"Wrote {delta_path}")
+    print("Preparing parallel tasks...")
 
-    features = sorted(df_delta["feature"].unique())
-
-    print(f"Generating plots for {len(features)} features "
-          f"using {args.threads} threads")
-
-    tasks = [
-        (feature, df_delta, plotdir)
-        for feature in features
+    group_cols = [
+        "feature",
+        "config",
+        "sample_size_key",
+        "seq_len",
     ]
 
+    groups = list(df_delta.groupby(group_cols))
+
+    tasks = [
+        (feature, config, sample_size, seq_len, gdf)
+        for (feature, config, sample_size, seq_len), gdf in groups
+    ]
+
+    print(f"Running {len(tasks)} tasks on {args.threads} workers")
+
     with ProcessPoolExecutor(max_workers=args.threads) as pool:
-        list(pool.map(plot_worker, tasks))
+        results = list(pool.map(prepare_group, tasks))
+
+    rows = [r for sub in results for r in sub]
+
+    df_prepared = pd.DataFrame(rows)
+
+    print("Generating plots...")
+
+    for feature in df_prepared["feature"].unique():
+
+        plot_feature(
+            df_prepared,
+            feature,
+            plotdir / f"delta_{feature}.png"
+        )
+
+        plot_feature_split(
+            df_prepared,
+            feature,
+            plotdir / f"delta_{feature}_split.png"
+        )
 
     print("All plots generated.")
-
-    return 0
 
 
 if __name__ == "__main__":
