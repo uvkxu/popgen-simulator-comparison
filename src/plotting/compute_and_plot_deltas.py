@@ -4,10 +4,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import polars as pl
-import pandas as pd
 import numpy as np
 from tqdm import tqdm
-import multiprocessing
 
 import matplotlib
 matplotlib.use("Agg")
@@ -44,13 +42,12 @@ def _shorten(s: str, maxlen: int = 24):
 
 
 # ==========================================================
-# CSV loading (polars parallel)
+# CSV loading (lazy + parallel)
 # ==========================================================
 
 def load_all_configs(root: Path):
 
     csv_files = sorted(root.glob("*/simulator_feature_values.csv"))
-
     print(f"Loading {len(csv_files)} CSV files")
 
     lazy_frames = []
@@ -70,7 +67,7 @@ def load_all_configs(root: Path):
 
 
 # ==========================================================
-# Delta computation (fully parallel)
+# Delta computation
 # ==========================================================
 
 def compute_deltas(df: pl.DataFrame) -> pl.DataFrame:
@@ -112,13 +109,38 @@ def compute_deltas(df: pl.DataFrame) -> pl.DataFrame:
 
 
 # ==========================================================
-# Plotting
+# Compute boxplot statistics
 # ==========================================================
 
-def plot_feature(feature_df: pd.DataFrame, feature: str, out_path: Path):
+def compute_box_stats(df: pl.DataFrame):
 
-    configs = [c for c in ORDER if c in feature_df["config"].unique()]
-    simulators = sorted(feature_df["simulator"].unique())
+    print("Computing boxplot statistics")
+
+    stats = (
+        df
+        .group_by(["feature", "config", "simulator"])
+        .agg([
+            pl.col("delta").quantile(0.0).alias("min"),
+            pl.col("delta").quantile(0.25).alias("q1"),
+            pl.col("delta").quantile(0.5).alias("median"),
+            pl.col("delta").quantile(0.75).alias("q3"),
+            pl.col("delta").quantile(1.0).alias("max"),
+        ])
+    )
+
+    return stats.to_pandas()
+
+
+# ==========================================================
+# Plotting using precomputed stats
+# ==========================================================
+
+def plot_feature(stats_df, feature, out_path):
+
+    df_f = stats_df[stats_df["feature"] == feature]
+
+    configs = [c for c in ORDER if c in df_f["config"].unique()]
+    simulators = sorted(df_f["simulator"].unique())
 
     base = np.arange(len(configs)) * 1.8
 
@@ -132,28 +154,35 @@ def plot_feature(feature_df: pd.DataFrame, feature: str, out_path: Path):
         offset = (s_idx - (len(simulators) - 1) / 2) * 0.22
 
         positions = []
-        data = []
+        stats = []
 
         for c_idx, cfg in enumerate(configs):
 
-            vals = (
-                feature_df[
-                    (feature_df["config"] == cfg) &
-                    (feature_df["simulator"] == sim)
-                ]["delta"]
-                .dropna()
-                .values
-            )
+            row = df_f[
+                (df_f["config"] == cfg) &
+                (df_f["simulator"] == sim)
+            ]
 
-            if len(vals) > 0:
-                positions.append(base[c_idx] + offset)
-                data.append(vals)
+            if len(row) == 0:
+                continue
 
-        if not data:
+            r = row.iloc[0]
+
+            positions.append(base[c_idx] + offset)
+
+            stats.append({
+                "med": r["median"],
+                "q1": r["q1"],
+                "q3": r["q3"],
+                "whislo": r["min"],
+                "whishi": r["max"],
+            })
+
+        if not stats:
             continue
 
-        bp = ax.boxplot(
-            data,
+        bp = ax.bxp(
+            stats,
             positions=positions,
             widths=0.18,
             patch_artist=True,
@@ -209,24 +238,18 @@ def main():
     print("Computing deltas")
     df = compute_deltas(df)
 
-    print("Converting to pandas for plotting")
-    df_pd = df.to_pandas()
+    # ------------------------------------------------------
 
-    delta_path = outdir / "deltas.csv"
-    df_pd.to_csv(delta_path, index=False)
-
-    print(f"Wrote {delta_path}")
+    stats_df = compute_box_stats(df)
 
     # ------------------------------------------------------
 
     print("Generating plots")
 
-    for feature in tqdm(df_pd["feature"].unique(), desc="Plotting"):
-
-        df_f = df_pd[df_pd["feature"] == feature]
+    for feature in tqdm(stats_df["feature"].unique(), desc="Plotting"):
 
         plot_feature(
-            df_f,
+            stats_df,
             feature,
             plotdir / f"delta_{feature}.png"
         )
