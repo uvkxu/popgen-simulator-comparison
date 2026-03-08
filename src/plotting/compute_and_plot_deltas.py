@@ -41,8 +41,6 @@ def setup_matplotlib():
         "figure.dpi": 200,
         "savefig.dpi": 300,
         "font.size": 11,
-        "axes.titlesize": 13,
-        "axes.labelsize": 12,
     })
 
 
@@ -51,7 +49,7 @@ def _shorten(s: str, maxlen: int = 24):
 
 
 # ==========================================================
-# Parallel CSV loading
+# CSV loading (parallel over files)
 # ==========================================================
 
 def load_single_csv(csv: Path):
@@ -77,16 +75,16 @@ def load_all_configs(root: Path, threads: int):
 
     csv_files = sorted(root.glob("*/simulator_feature_values.csv"))
 
-    print(f"Loading {len(csv_files)} CSV files with {threads} workers")
+    print(f"Loading {len(csv_files)} CSV files")
 
-    with ProcessPoolExecutor(max_workers=threads) as pool:
+    with ProcessPoolExecutor(max_workers=min(len(csv_files), threads)) as pool:
         dfs = list(pool.map(load_single_csv, csv_files))
 
     return pd.concat(dfs, ignore_index=True)
 
 
 # ==========================================================
-# Parallel delta computation
+# Delta computation (parallel over groups)
 # ==========================================================
 
 def compute_group_delta(args):
@@ -131,7 +129,7 @@ def compute_deltas_parallel(df: pd.DataFrame, threads: int):
 # Plotting
 # ==========================================================
 
-def plot_feature(args):
+def plot_feature_task(args):
 
     feature, df_f, out_path = args
 
@@ -193,6 +191,22 @@ def plot_feature(args):
     plt.close(fig)
 
 
+def generate_plots_parallel(df_delta, plotdir, threads):
+
+    tasks = []
+
+    for feature in df_delta["feature"].unique():
+
+        df_f = df_delta[df_delta["feature"] == feature]
+
+        tasks.append(
+            (feature, df_f, plotdir / f"delta_{feature}.png")
+        )
+
+    with ProcessPoolExecutor(max_workers=min(len(tasks), threads)) as pool:
+        pool.map(plot_feature_task, tasks)
+
+
 # ==========================================================
 # Main
 # ==========================================================
@@ -222,39 +236,24 @@ def main():
     setup_matplotlib()
 
     # ------------------------------------------------------
-    # CSV loading
-    # ------------------------------------------------------
 
     print("Loading CSV tables...")
     df = load_all_configs(root, args.threads)
 
     # ------------------------------------------------------
-    # Delta computation
-    # ------------------------------------------------------
 
     print("Computing deltas...")
     df_delta = compute_deltas_parallel(df, args.threads)
 
-    df_delta.to_csv(outdir / "deltas.csv", index=False)
+    delta_path = outdir / "deltas.csv"
+    df_delta.to_csv(delta_path, index=False)
 
-    # ------------------------------------------------------
-    # Plotting
+    print(f"Wrote {delta_path}")
+
     # ------------------------------------------------------
 
     print("Generating plots...")
-
-    tasks = []
-
-    for feature in df_delta["feature"].unique():
-
-        df_f = df_delta[df_delta["feature"] == feature]
-
-        tasks.append(
-            (feature, df_f, plotdir / f"delta_{feature}.png")
-        )
-
-    with ProcessPoolExecutor(max_workers=args.threads) as pool:
-        pool.map(plot_feature, tasks)
+    generate_plots_parallel(df_delta, plotdir, args.threads)
 
     print("All plots generated.")
 
