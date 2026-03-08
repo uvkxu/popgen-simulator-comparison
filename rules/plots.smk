@@ -81,7 +81,7 @@ rule get_merged_positions_stats:
     conda:
         "../envs/plot-env.yaml"
     params:
-        input = lambda w: f"{CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_cleaned_output.txt",
+        input = lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_cleaned_output.txt",
         err_file = lambda w: f"{MERGES_COLLECT_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
         combo_yaml = lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/{COMBO_PARAMETERS_YAML}"
     shell:
