@@ -59,6 +59,7 @@ def load_single_csv(csv: Path):
 
     df = pd.read_csv(
         csv,
+        engine="pyarrow",   # MUCH faster
         dtype={
             "feature": "category",
             "simulator": "category",
@@ -111,7 +112,7 @@ def compute_group_delta(args):
     group = GLOBAL_DF.loc[idx]
 
     sim_medians = (
-        group.groupby("simulator")["value"]
+        group.groupby("simulator", observed=True)["value"]
         .median()
         .reset_index()
     )
@@ -134,7 +135,9 @@ def compute_deltas_parallel(df: pd.DataFrame, threads: int):
         "feature",
     ]
 
-    groups = list(df.groupby(group_cols).groups.items())
+    groups = list(
+        df.groupby(group_cols, observed=True).groups.items()
+    )
 
     print(f"Computing deltas for {len(groups)} groups")
 
