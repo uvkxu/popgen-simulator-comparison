@@ -53,27 +53,20 @@ def load_all_configs(root: Path):
 
     print(f"Loading {len(csv_files)} CSV files")
 
-    dfs = []
+    lazy_frames = []
 
-    for csv in tqdm(csv_files, desc="Reading CSVs"):
+    for csv in csv_files:
 
-        df = pl.read_csv(
-            csv,
-            try_parse_dates=False
+        lf = (
+            pl.scan_csv(csv)
+            .with_columns(pl.lit(csv.parent.name).alias("config"))
         )
 
-        if "config" not in df.columns:
-            df = df.with_columns(pl.lit(csv.parent.name).alias("config"))
+        lazy_frames.append(lf)
 
-        if "sample_size_key" not in df.columns:
-            df = df.with_columns(pl.lit(None).alias("sample_size_key"))
+    df = pl.concat(lazy_frames)
 
-        if "seq_len" not in df.columns:
-            df = df.with_columns(pl.lit(None).alias("seq_len"))
-
-        dfs.append(df)
-
-    return pl.concat(dfs)
+    return df.collect()
 
 
 # ==========================================================
