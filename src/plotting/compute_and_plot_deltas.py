@@ -86,7 +86,7 @@ def compute_deltas(df: pl.DataFrame) -> pl.DataFrame:
 
     sim_medians = (
         df
-        .groupby(group_cols + ["simulator"])
+        .group_by(group_cols + ["simulator"])
         .agg(pl.median("value").alias("value"))
     )
 
@@ -94,7 +94,7 @@ def compute_deltas(df: pl.DataFrame) -> pl.DataFrame:
 
     baseline = (
         sim_medians
-        .groupby(group_cols)
+        .group_by(group_cols)
         .agg(pl.median("value").alias("baseline"))
     )
 
