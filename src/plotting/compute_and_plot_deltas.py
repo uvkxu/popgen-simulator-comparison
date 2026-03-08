@@ -16,7 +16,6 @@ os.environ["MKL_NUM_THREADS"] = "1"
 
 import matplotlib
 matplotlib.use("Agg")
-
 import matplotlib.pyplot as plt
 
 
@@ -37,67 +36,25 @@ ORDER = [
 # Matplotlib setup
 # ==========================================================
 
-def setup_matplotlib() -> None:
+def setup_matplotlib():
     plt.rcParams.update({
         "figure.dpi": 200,
         "savefig.dpi": 300,
         "font.size": 11,
         "axes.titlesize": 13,
         "axes.labelsize": 12,
-        "legend.fontsize": 10,
-        "xtick.labelsize": 10,
-        "ytick.labelsize": 10,
-        "axes.linewidth": 0.8,
-        "grid.linewidth": 0.6,
-        "legend.frameon": False,
     })
 
 
-def _shorten(s: str, maxlen: int = 24) -> str:
+def _shorten(s: str, maxlen: int = 24):
     return s if len(s) <= maxlen else s[:maxlen - 1] + "…"
-
-
-# ==========================================================
-# Efficient delta computation
-# ==========================================================
-
-def compute_deltas(df: pd.DataFrame) -> pd.DataFrame:
-
-    group_cols = [
-        "config",
-        "sample_size_key",
-        "seq_len",
-        "feature",
-    ]
-
-    sim_medians = (
-        df.groupby(group_cols + ["simulator"])["value"]
-        .median()
-        .reset_index()
-    )
-
-    baseline = (
-        sim_medians
-        .groupby(group_cols)["value"]
-        .median()
-        .rename("baseline")
-        .reset_index()
-    )
-
-    df = df.merge(baseline, on=group_cols, how="left")
-
-    df["delta"] = df["value"] - df["baseline"]
-
-    return df
 
 
 # ==========================================================
 # Parallel CSV loading
 # ==========================================================
 
-def load_single_csv(csv: Path) -> pd.DataFrame:
-
-    print(f"Reading {csv}")
+def load_single_csv(csv: Path):
 
     df = pd.read_csv(csv)
 
@@ -120,41 +77,70 @@ def load_all_configs(root: Path, threads: int):
 
     csv_files = sorted(root.glob("*/simulator_feature_values.csv"))
 
-    if not csv_files:
-        raise RuntimeError("No simulator_feature_values.csv found.")
-
-    print(f"Found {len(csv_files)} CSV files")
-    print(f"Reading CSVs with {threads} parallel workers")
+    print(f"Loading {len(csv_files)} CSV files with {threads} workers")
 
     with ProcessPoolExecutor(max_workers=threads) as pool:
         dfs = list(pool.map(load_single_csv, csv_files))
 
-    print("Concatenating tables...")
-
     return pd.concat(dfs, ignore_index=True)
+
+
+# ==========================================================
+# Parallel delta computation
+# ==========================================================
+
+def compute_group_delta(args):
+
+    key, group = args
+
+    sim_medians = (
+        group.groupby("simulator")["value"]
+        .median()
+        .reset_index()
+    )
+
+    baseline = sim_medians["value"].median()
+
+    group = group.copy()
+    group["baseline"] = baseline
+    group["delta"] = group["value"] - baseline
+
+    return group
+
+
+def compute_deltas_parallel(df: pd.DataFrame, threads: int):
+
+    group_cols = [
+        "config",
+        "sample_size_key",
+        "seq_len",
+        "feature",
+    ]
+
+    groups = list(df.groupby(group_cols))
+
+    print(f"Computing deltas for {len(groups)} groups")
+
+    with ProcessPoolExecutor(max_workers=threads) as pool:
+        results = list(pool.map(compute_group_delta, groups))
+
+    return pd.concat(results, ignore_index=True)
 
 
 # ==========================================================
 # Plotting
 # ==========================================================
 
-def plot_feature(
-    df: pd.DataFrame,
-    feature: str,
-    out_path: Path,
-):
+def plot_feature(args):
 
-    df_f = df[df["feature"] == feature]
-
-    if df_f.empty or df_f["delta"].notna().sum() == 0:
-        return
+    feature, df_f, out_path = args
 
     configs = [c for c in ORDER if c in df_f["config"].unique()]
     simulators = sorted(df_f["simulator"].unique())
 
     base = np.arange(len(configs)) * 1.8
 
-    fig, ax = plt.subplots(figsize=(14, 6), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(14, 6))
 
     cmap = plt.get_cmap("tab10")
     colors = {sim: cmap(i) for i, sim in enumerate(simulators)}
@@ -187,17 +173,14 @@ def plot_feature(
             positions=positions,
             widths=0.18,
             patch_artist=True,
-            whis=(0, 100),
             showfliers=False,
-            medianprops=dict(linewidth=1.5, color="black"),
         )
 
         for b in bp["boxes"]:
             b.set_facecolor(colors[sim])
             b.set_alpha(0.35)
-            b.set_edgecolor(colors[sim])
 
-    ax.axhline(0, linestyle="--", linewidth=1.4, color="0.1")
+    ax.axhline(0, linestyle="--")
 
     ax.set_xticks(base)
     ax.set_xticklabels(
@@ -205,11 +188,6 @@ def plot_feature(
         rotation=35,
         ha="right"
     )
-
-    ax.yaxis.grid(True, alpha=0.22)
-
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
 
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
@@ -223,17 +201,8 @@ def main():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        "--input-dir",
-        required=True,
-        type=Path
-    )
-
-    parser.add_argument(
-        "--outdir",
-        required=True,
-        type=Path
-    )
+    parser.add_argument("--input-dir", required=True, type=Path)
+    parser.add_argument("--outdir", required=True, type=Path)
 
     parser.add_argument(
         "--threads",
@@ -252,30 +221,40 @@ def main():
 
     setup_matplotlib()
 
-    print("Loading feature tables (parallel)...")
+    # ------------------------------------------------------
+    # CSV loading
+    # ------------------------------------------------------
 
+    print("Loading CSV tables...")
     df = load_all_configs(root, args.threads)
 
+    # ------------------------------------------------------
+    # Delta computation
+    # ------------------------------------------------------
+
     print("Computing deltas...")
+    df_delta = compute_deltas_parallel(df, args.threads)
 
-    df_delta = compute_deltas(df)
+    df_delta.to_csv(outdir / "deltas.csv", index=False)
 
-    delta_path = outdir / "deltas.csv"
-    df_delta.to_csv(delta_path, index=False)
-
-    print(f"Wrote {delta_path}")
+    # ------------------------------------------------------
+    # Plotting
+    # ------------------------------------------------------
 
     print("Generating plots...")
 
-    features = sorted(df_delta["feature"].unique())
+    tasks = []
 
-    for feature in features:
+    for feature in df_delta["feature"].unique():
 
-        plot_feature(
-            df_delta,
-            feature,
-            plotdir / f"delta_{feature}.png"
+        df_f = df_delta[df_delta["feature"] == feature]
+
+        tasks.append(
+            (feature, df_f, plotdir / f"delta_{feature}.png")
         )
+
+    with ProcessPoolExecutor(max_workers=args.threads) as pool:
+        pool.map(plot_feature, tasks)
 
     print("All plots generated.")
 
