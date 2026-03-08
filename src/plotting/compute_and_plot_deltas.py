@@ -279,6 +279,119 @@ def plot_feature(stats_df, feature, out_path, scale="linear"):
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
 
+def plot_feature_split(stats_df, feature, out_path, scale="linear"):
+
+    df_f = stats_df[stats_df["feature"] == feature]
+
+    simulators = sorted(df_f["simulator"].unique())
+
+    top_cfgs = ["one_population", "zigzag", "locke_orangutan"]
+    bottom_cfgs = [c for c in ORDER if c not in top_cfgs]
+
+    config_gap = 1.8
+    within_gap = 0.22
+    box_width = 0.18
+
+    fig, (ax_top, ax_bottom) = plt.subplots(
+        2, 1,
+        figsize=(14, 8),
+        sharex=False,
+        gridspec_kw={"height_ratios": [1.1, 1.6]},
+        constrained_layout=True
+    )
+
+    axes = [(ax_top, top_cfgs), (ax_bottom, bottom_cfgs)]
+
+    cmap = plt.get_cmap("tab10")
+    colors = {sim: cmap(i) for i, sim in enumerate(simulators)}
+
+    for ax, configs in axes:
+
+        configs = [c for c in configs if c in df_f["config"].unique()]
+
+        n_cfg = len(configs)
+        n_sim = len(simulators)
+
+        base = np.arange(n_cfg) * config_gap
+
+        if scale == "arcsinh":
+            ax.set_yscale("function", functions=(np.arcsinh, np.sinh))
+        elif scale == "symlog":
+            ax.set_yscale("symlog", linthresh=1)
+
+        for i in range(n_cfg - 1):
+            ax.axvline(
+                (base[i] + base[i + 1]) / 2,
+                color="0.2",
+                linewidth=0.8,
+                alpha=0.12,
+                zorder=0
+            )
+
+        for s_idx, sim in enumerate(simulators):
+
+            offset = (s_idx - (n_sim - 1) / 2) * within_gap
+
+            positions = []
+            stats = []
+
+            for c_idx, cfg in enumerate(configs):
+
+                row = df_f[
+                    (df_f["config"] == cfg) &
+                    (df_f["simulator"] == sim)
+                ]
+
+                if len(row) == 0:
+                    continue
+
+                r = row.iloc[0]
+
+                positions.append(base[c_idx] + offset)
+
+                stats.append({
+                    "med": r["median"],
+                    "q1": r["q1"],
+                    "q3": r["q3"],
+                    "whislo": r["min"],
+                    "whishi": r["max"],
+                })
+
+            if not stats:
+                continue
+
+            bp = ax.bxp(
+                stats,
+                positions=positions,
+                widths=box_width,
+                patch_artist=True,
+                showfliers=False,
+            )
+
+            for b in bp["boxes"]:
+                b.set_facecolor(colors[sim])
+                b.set_alpha(0.35)
+                b.set_edgecolor(colors[sim])
+
+        ax.axhline(0, linestyle="--")
+
+        ax.yaxis.grid(True, alpha=0.22)
+        ax.set_axisbelow(True)
+
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+        ax.set_xticks(base)
+        ax.set_xticklabels(
+            [_shorten(c) for c in configs],
+            rotation=35,
+            ha="right"
+        )
+
+    ax_bottom.set_xlabel("Demographic models (ordered by number of populations)")
+
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
 
 # ==========================================================
 # Main
@@ -345,6 +458,28 @@ def main():
                 stats_df,
                 feature,
                 plotdir / f"delta_{feature}_symlog.png",
+                scale="symlog"
+            )
+
+            # split plots
+            plot_feature_split(
+                stats_df,
+                feature,
+                plotdir / f"delta_{feature}_split.png",
+                scale="linear"
+            )
+
+            plot_feature_split(
+                stats_df,
+                feature,
+                plotdir / f"delta_{feature}_split_arcsinh.png",
+                scale="arcsinh"
+            )
+
+            plot_feature_split(
+                stats_df,
+                feature,
+                plotdir / f"delta_{feature}_split_symlog.png",
                 scale="symlog"
             )
 
