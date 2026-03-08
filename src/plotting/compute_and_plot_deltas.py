@@ -8,6 +8,7 @@ import numpy as np
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
 import os
+from tqdm import tqdm
 
 # prevent BLAS oversubscription
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -31,6 +32,8 @@ ORDER = [
     "jacobs_papuans",
 ]
 
+GLOBAL_DF = None
+
 
 # ==========================================================
 # Matplotlib setup
@@ -49,12 +52,19 @@ def _shorten(s: str, maxlen: int = 24):
 
 
 # ==========================================================
-# CSV loading (parallel over files)
+# CSV loading
 # ==========================================================
 
 def load_single_csv(csv: Path):
 
-    df = pd.read_csv(csv)
+    df = pd.read_csv(
+        csv,
+        dtype={
+            "feature": "category",
+            "simulator": "category",
+            "value": "float64"
+        }
+    )
 
     mask = (df["feature"] == "difficulty") & (df["value"] == -1)
     df.loc[mask, "value"] = np.nan
@@ -78,18 +88,27 @@ def load_all_configs(root: Path, threads: int):
     print(f"Loading {len(csv_files)} CSV files")
 
     with ProcessPoolExecutor(max_workers=min(len(csv_files), threads)) as pool:
-        dfs = list(pool.map(load_single_csv, csv_files))
+
+        dfs = list(
+            tqdm(
+                pool.map(load_single_csv, csv_files),
+                total=len(csv_files),
+                desc="Loading CSV files"
+            )
+        )
 
     return pd.concat(dfs, ignore_index=True)
 
 
 # ==========================================================
-# Delta computation (parallel over groups)
+# Delta computation
 # ==========================================================
 
 def compute_group_delta(args):
 
-    key, group = args
+    key, idx = args
+
+    group = GLOBAL_DF.loc[idx]
 
     sim_medians = (
         group.groupby("simulator")["value"]
@@ -115,12 +134,19 @@ def compute_deltas_parallel(df: pd.DataFrame, threads: int):
         "feature",
     ]
 
-    groups = list(df.groupby(group_cols))
+    groups = list(df.groupby(group_cols).groups.items())
 
     print(f"Computing deltas for {len(groups)} groups")
 
     with ProcessPoolExecutor(max_workers=threads) as pool:
-        results = list(pool.map(compute_group_delta, groups))
+
+        results = list(
+            tqdm(
+                pool.map(compute_group_delta, groups, chunksize=1),
+                total=len(groups),
+                desc="Computing deltas"
+            )
+        )
 
     return pd.concat(results, ignore_index=True)
 
@@ -204,7 +230,14 @@ def generate_plots_parallel(df_delta, plotdir, threads):
         )
 
     with ProcessPoolExecutor(max_workers=min(len(tasks), threads)) as pool:
-        pool.map(plot_feature_task, tasks)
+
+        list(
+            tqdm(
+                pool.map(plot_feature_task, tasks),
+                total=len(tasks),
+                desc="Generating plots"
+            )
+        )
 
 
 # ==========================================================
@@ -239,6 +272,9 @@ def main():
 
     print("Loading CSV tables...")
     df = load_all_configs(root, args.threads)
+
+    global GLOBAL_DF
+    GLOBAL_DF = df
 
     # ------------------------------------------------------
 
