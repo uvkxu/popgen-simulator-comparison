@@ -440,20 +440,13 @@ elif sim=="msms":
 elif sim=="slim" or sim.startswith("slim"):
     sim_path = slim_path
 
-if "own" in str(config_path):
-    run_command_own(
-        config_path=config_path,
-        sim=sim,
-        output_file=output_file
-        )
-else:
-    run_command_demes(
-        config_path=config_path, 
-        combo=combo, 
-        sim=sim, 
-        output_file=output_file, 
-        nreps=nreps, 
-        sim_path=sim_path,
-        log_file=log_file
-    )
+run_command_demes(
+    config_path=config_path, 
+    combo=combo, 
+    sim=sim, 
+    output_file=output_file, 
+    nreps=nreps, 
+    sim_path=sim_path,
+    log_file=log_file
+)
 

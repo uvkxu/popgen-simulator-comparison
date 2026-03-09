@@ -510,7 +510,7 @@ def main():
 
     print("Generating plots")
 
-    SCALED_FEATURES = {"min_laplace", "min_adj"}
+    SCALED_FEATURES = {"min_laplace", "min_adj", "num_trees"}
 
     for feature in tqdm(stats_df["feature"].unique(), desc="Plotting"):
 
