@@ -393,6 +393,83 @@ def plot_feature_split(stats_df, feature, out_path, scale="linear"):
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
 
+
+def plot_feature_per_config(stats_df, feature, config, out_path):
+
+    df_f = stats_df[
+        (stats_df["feature"] == feature) &
+        (stats_df["config"] == config)
+    ]
+
+    simulators = sorted(df_f["simulator"].unique())
+
+    n_sim = len(simulators)
+
+    base = np.arange(n_sim)
+
+    fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
+
+    cmap = plt.get_cmap("tab10")
+    colors = {sim: cmap(i) for i, sim in enumerate(simulators)}
+
+    stats = []
+
+    for sim in simulators:
+
+        row = df_f[df_f["simulator"] == sim]
+
+        if len(row) == 0:
+            continue
+
+        r = row.iloc[0]
+
+        stats.append({
+            "med": r["median"],
+            "q1": r["q1"],
+            "q3": r["q3"],
+            "whislo": r["min"],
+            "whishi": r["max"],
+        })
+
+    bp = ax.bxp(
+        stats,
+        positions=base,
+        widths=0.6,
+        patch_artist=True,
+        showfliers=False,
+    )
+
+    for i, b in enumerate(bp["boxes"]):
+        sim = simulators[i]
+        b.set_facecolor(colors[sim])
+        b.set_alpha(0.35)
+        b.set_edgecolor(colors[sim])
+
+    for w in bp["whiskers"]:
+        w.set_linewidth(1.1)
+
+    for c in bp["caps"]:
+        c.set_linewidth(1.1)
+
+    ax.axhline(0, linestyle="--")
+
+    ax.set_ylabel("Feature deviation from global median baseline (Δ)")
+    ax.set_xlabel("Simulator")
+
+    ax.set_xticks(base)
+    ax.set_xticklabels(simulators, rotation=35, ha="right")
+
+    ax.yaxis.grid(True, alpha=0.22)
+    ax.set_axisbelow(True)
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    ax.set_title(f"{feature} — {config}")
+
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+
 # ==========================================================
 # Main
 # ==========================================================
@@ -482,6 +559,18 @@ def main():
                 plotdir / f"delta_{feature}_split_symlog.png",
                 scale="symlog"
             )
+
+            for cfg in ORDER:
+
+                if cfg not in stats_df["config"].unique():
+                    continue
+
+                plot_feature_per_config(
+                    stats_df,
+                    feature,
+                    cfg,
+                    plotdir / f"delta_{feature}_{cfg}.png"
+                )
 
     print("All plots generated.")
 
