@@ -88,3 +88,6 @@ def main():
     print(f"Using {n_workers} workers")
 
     process_all_files(args.input_folder, n_workers=n_workers)
+
+if __name__ == "__main__":
+    main()
