@@ -65,7 +65,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["mspms"] #"msms", "msprime", "ms"
+SIMULATORS = ["mspms", "msprime"] #"msms", "msprime", "ms"
 REPS = 200
 NUM_REPLICATES = 2
 PRECISION = 17
@@ -632,12 +632,6 @@ ALL_TREE_TOPFEATURES = [
     for config in all_configs
     for mode in combinations_mode[config]
     for sim_group in simulator_groups
-] + [
-    f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for config in all_configs
-    for mode in combinations_mode[config]
-    for sim_group in simulator_groups
-    for classifier in CLASSIFIERS
 ]
 
 
@@ -651,12 +645,6 @@ ALL_ALLEL_TOPFEATURES = [
     for config in all_configs
     for mode in combinations_mode[config]
     for sim_group in simulator_groups
-] + [
-    f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for config in all_configs
-    for mode in combinations_mode[config]
-    for sim_group in simulator_groups
-    for classifier in CLASSIFIERS
 ]
 
 ALL_TOGETHER_TOPFEATURES = [
@@ -669,13 +657,11 @@ ALL_TOGETHER_TOPFEATURES = [
     for config in all_configs
     for mode in combinations_mode[config]
     for sim_group in simulator_groups
-] + [
-    f"{TOGETHER_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for config in all_configs
-    for mode in combinations_mode[config]
-    for sim_group in simulator_groups
-    for classifier in CLASSIFIERS
 ]
+
+
+ALL_TOPFEATURES = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES + ALL_TOGETHER_TOPFEATURES
+
 
 ALL_PLOTS = [
     f"{TREEFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
