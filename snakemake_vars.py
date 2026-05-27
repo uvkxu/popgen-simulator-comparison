@@ -859,6 +859,10 @@ STATS_RESULTS = [
     ]
 ]
 
+print("=== STATS_RESULTS (first 5) ===")
+print(STATS_RESULTS[:5])
+print("=================================")
+
 
 MEAN_SAMPLE_SIZE_OUTPUT_TREE = [
     path
