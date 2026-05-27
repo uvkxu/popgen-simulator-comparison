@@ -7,5 +7,5 @@ include: "rules/plots.smk"
 
 rule all:
     input:
-        MERGED_STATS
+        STATS_RESULTS
         

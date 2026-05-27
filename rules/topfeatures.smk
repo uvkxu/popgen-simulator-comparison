@@ -175,3 +175,30 @@ rule detect_source_allele:
         --input_dir2 {params.input_dir_2} \
         --output_file {output.output_file}
         """
+
+
+#---------------Statistical Tests-----------------
+
+rule pairwise_statistical_test:
+    output:
+        output_file = f"{STATISTICS_RESULTS_DIR}/{{config}}/{{mode}}/{{group_string}}_feature_comparison.csv"
+    params:
+        args_group=lambda wildcards: ",".join(
+            wildcards.group_string.split("_")
+        ),
+        input_dir_allel=lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/",
+        input_dir_tree=lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/",
+        err_file=lambda wildcards: f"{STATISTICS_RESULTS_DIR}/{wildcards.config}/{wildcards.mode}/{wildcards.group_string}.err"
+    conda:
+        "../envs/stats-test-env.yaml"
+    shell:
+        """
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/models/statistical_tests.py \
+        --input_folder_tree {params.input_dir_tree} \
+        --input_folder_allel {params.input_dir_allel} \
+        --output_file {output.output_file} \
+        --grouped_by {wildcards.mode} \
+        --simulators {params.args_group}
+        """
+    

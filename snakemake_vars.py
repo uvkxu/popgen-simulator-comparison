@@ -38,6 +38,7 @@ CLEAN_DIR = DATA_DIR / "cleaned"
 
 PLOTS_RESULTS_DIR = RESULTS_DIR / "plots"
 TOPFEATURES_RESULTS_DIR = RESULTS_DIR/ "top_features"
+STATISTICS_RESULTS_DIR = RESULTS_DIR / "statistics"
 
 ALLEL_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "allele"
 ALLELFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "allele"
@@ -67,7 +68,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["ms", "msms", "msprime"] #msms_ms behaves the same as just msms , 
+SIMULATORS = ["ms", "msms", "msprime"] #msms_ms behaves the same as just msms , , "msprime"
 REPS = 200
 NUM_REPLICATES = 2
 PRECISION = 17
@@ -544,7 +545,7 @@ def format_classifier_importance_plot(classifier, group):
 # simulator_groups = list(combinations(SIMULATORS, 2))
 simulator_groups = []
 simulator_groups.append(tuple(SIMULATORS))
-simulator_groups = list(dict.fromkeys(simulator_groups))
+# simulator_groups = list(dict.fromkeys(simulator_groups))
 # simulator_groups.append(("msms", "msprime", "ms"))
 
 def get_topfeatures_input(config, mode, feature_type, group=None, combo=None):
@@ -849,6 +850,15 @@ ALL_PLOTS = [
 
 COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES + ALL_PLOTS
 
+STATS_RESULTS = [
+    f"{STATISTICS_RESULTS_DIR}/{config}/{mode}/{group_string}_feature_comparison.csv"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for group_string in [
+        "_".join(group) for group in simulator_groups
+    ]
+]
+
 
 MEAN_SAMPLE_SIZE_OUTPUT_TREE = [
     path
@@ -1006,3 +1016,4 @@ MERGED_STATS_OVERALL = [
     for config in all_configs
     for simulator in ["ms", "msms"]
 ]
+

@@ -119,7 +119,7 @@ def collect_and_merge_tree_allele_features(
 def comparison(
     tree_csv_files,
     allel_csv_files,
-    output_dir, 
+    output_file, 
     simulator_a, 
     simulator_b):
     results = []
@@ -215,9 +215,7 @@ def comparison(
 
     df = df.sort_values("p_corrected")
 
-    out_file = output_dir / f"{simulator_a}_vs_{simulator_b}.csv"
-
-    df.to_csv(out_file, index=False)
+    df.to_csv(output_file, index=False)
 
 
 def csv_list(s: str) -> list[str]:
@@ -261,7 +259,7 @@ def parse_args():
 
     parser.add_argument("--input_folder_tree", type=Path, required=True, help="Input folder containing result files")
     parser.add_argument("--input_folder_allel", type=Path, required=True, help="Input folder containing result files")
-    parser.add_argument("--output_folder", type=Path, required=True, help="Output folder path")
+    parser.add_argument("--output_file", type=Path, required=True, help="Output file path")
 
     parser.add_argument(
         "--simulators",
@@ -297,7 +295,7 @@ def main():
 
     input_folder_tree = args.input_folder_tree
     input_folder_allel = args.input_folder_allel
-    output_folder = args.output_folder
+    output_file = args.output_file
     simulator_group = args.simulators
     grouped_by = args.grouped_by
 
@@ -330,7 +328,7 @@ def main():
 
     grouped_by = set(normalized_grouped_by)
 
-    output_folder.mkdir(parents=True, exist_ok=True)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
     tree_csv_files = get_csv_files_mode(input_folder_tree, grouped_by, seq_len_group, sample_size_group)
     allel_csv_files = get_csv_files_mode(input_folder_allel, grouped_by, seq_len_group, sample_size_group)
 
@@ -339,7 +337,7 @@ def main():
     comparison(
         tree_csv_files,
         allel_csv_files,
-        output_folder, 
+        output_file, 
         simulator_a, 
         simulator_b
     )
