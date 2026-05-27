@@ -17,7 +17,7 @@ CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
 DATA_DIR = Path("/hits/fast/cme/kuchve/with_recombination/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/with_recombination/results")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/with_recombination/results_mspms")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -65,7 +65,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["mspms", "msprime"] #"msms", "msprime", "ms"
+SIMULATORS = ["ms", "msms", "mspms"] #"msms", "msprime", "ms"
 REPS = 200
 NUM_REPLICATES = 2
 PRECISION = 17
