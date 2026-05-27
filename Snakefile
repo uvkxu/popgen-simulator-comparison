@@ -8,5 +8,5 @@ include: "rules/effective_pop_size.smk"
 
 rule all:
     input:
-        ALL_TOGETHER_TOPFEATURES
+        ALL_FEATURES
 # ALL_ALLEL_TOPFEATURES, ALL_TOGETHER_TOPFEATURES, TOPFEATURES_ACCURACY
