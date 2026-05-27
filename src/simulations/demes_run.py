@@ -233,7 +233,8 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
         params = {
             "samples": msprime_samples, 
             "demography": demography, 
-            "num_replicates": nreps}
+            "num_replicates": nreps,
+            "discrete_genome": False}
         if graph.recombination_rate:
             params["recombination_rate"] = graph.recombination_rate
         if graph.sequence_length:
