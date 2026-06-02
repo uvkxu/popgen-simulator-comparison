@@ -17,8 +17,8 @@ CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
-DATA_DIR = Path("/hits/fast/cme/kuchve/slim_comparison/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/slim_comparison/results")
+DATA_DIR = Path("/hits/fast/cme/kuchve/slim_comparison/burn_in_50/data")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/slim_comparison/burn_in_50/results")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -80,8 +80,9 @@ LR_STR = "logistic_regression"
 CLASSIFIERS = [XGB_STR]
 
 
-all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
-all_configs.remove("freedman_wolf")
+#all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
+#all_configs.remove("freedman_wolf")
+all_configs = ["one_population"]
 
 VALID_GROUPING_MODES = [
     "precision_applied", "precision_skipped",

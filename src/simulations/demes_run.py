@@ -129,7 +129,8 @@ def run_slim_stdpopsim(graph, model_id, species_name, samples, nreps, output_fil
             contig=contig,
             samples=msprime_samples,
             slim_path=slim_path,
-            slim_scaling_factor=scaling_factor
+            slim_scaling_factor=scaling_factor,
+            slim_burn_in=50
         ) 
         end_time = time.time()
         elapsed = end_time - start_time
