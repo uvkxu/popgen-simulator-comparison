@@ -294,7 +294,19 @@ if (!is.na(copy_tree_file) && !is.na(copy_clean_file) &&
 
   # 2) Recompute pigot_rho per tree from raw tree file in the SAME order
   is_tree_line <- function(line) {
-    grepl("\\(", line) && grepl(";+", line) &&
+    has_paren <- grepl("\\(", line)
+
+    if (has_paren && !grepl(";\\s*$", line)) {
+      stop(
+        sprintf(
+          "Malformed tree line: contains '(' but does not end with ';'\nLine: %s",
+          line
+        )
+      )
+    }
+
+    has_paren &&
+      grepl(";+", line) &&
       !grepl("^\\s*//", line) &&
       !grepl("^\\s*segsites", line, ignore.case = TRUE) &&
       !grepl("^\\s*positions", line, ignore.case = TRUE)

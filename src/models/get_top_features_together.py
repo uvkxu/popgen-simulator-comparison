@@ -86,7 +86,7 @@ def count_trees_per_replicate(cleaned_output: Path) -> list[int]:
                     counts.append(current)
                 in_rep = False
 
-            elif in_rep and "(" in line and not line.startswith("segsites"):
+            elif in_rep and is_tree_line(line):
                 current += 1
 
     return counts
@@ -954,6 +954,23 @@ def assert_non_empty(csv_files, mode):
             f"No CSV files found for mode '{mode}'. "
             "This indicates an inconsistent input directory or configuration."
         )
+
+
+def is_tree_line(line: str) -> bool:
+    line = line.strip()
+
+    if "(" in line and not line.endswith(";"):
+        raise ValueError(
+            f"Malformed tree line: contains '(' but does not end with ';'\n{line}"
+        )
+
+    return (
+        "(" in line
+        and ";" in line
+        and not line.startswith("//")
+        and not line.lower().startswith("segsites")
+        and not line.lower().startswith("positions")
+    )
 
 
 def main():
