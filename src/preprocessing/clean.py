@@ -17,9 +17,25 @@ from snakemake_vars import FILE_FORMATS, PRECISION, SIMULATORS
 def clean_sim_output(input_file, output_file, sequence_length,
                             branch_decimals=None, position_decimals=None,
                             factor=1.0, branches_already_scaled=False):
+    def scale_branch(m):
+                    val = float(m.group(1))
+                    if branches_already_scaled:
+                        if branch_decimals is not None:
+                            val = (val / factor)
+                            val = round(val, branch_decimals)
+                            val *= factor
+                        return f":{val:.{branch_decimals if branch_decimals else 6}f}"
+                    else:
+                        if branch_decimals is not None:
+                            val = round(val, branch_decimals)
+                        val *= factor
+                        return f":{val:.{branch_decimals if branch_decimals else 6}f}"
 
     with open(input_file, "r") as fin, open(output_file, "w") as fout:
         lines_buffer = []
+        prev_tree = None
+        prev_span = None
+
         while True:
             line = fin.readline()
             if not line:
@@ -90,25 +106,67 @@ def clean_sim_output(input_file, output_file, sequence_length,
 
             # --- Handle tree lines with branch lengths ---
             elif "(" in line and ":" in line:
-                def scale_branch(m):
-                    val = float(m.group(1))
-                    if branches_already_scaled:
-                        if branch_decimals is not None:
-                            val = (val / factor)
-                            val = round(val, branch_decimals)
-                            val *= factor
-                        return f":{val:.{branch_decimals if branch_decimals else 6}f}"
-                    else:
-                        if branch_decimals is not None:
-                            val = round(val, branch_decimals)
-                        val *= factor
-                        return f":{val:.{branch_decimals if branch_decimals else 6}f}"
-                scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, line) if factor != 1 else line
-                fout.write(scaled_line + "\n")
+                span, tree = parse_tree_line(line)
 
+                if tree is None:
+                    raise ValueError(f"Could not parse tree line: {line}")
+                elif prev_tree is None:
+                    prev_tree = tree
+                    prev_span = span
+                elif tree == prev_tree and prev_span is not None:
+                    assert span is not None, "Current span must be defined for identical trees"
+                    prev_span += span
+                else:
+                    if prev_span is None:
+                        reconstruct_line = prev_tree
+                    else:
+                        reconstruct_line = f"[{prev_span}] {prev_tree}"
+
+                    scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, reconstruct_line) if factor != 1 else reconstruct_line
+                    fout.write(scaled_line + "\n")
+                    prev_tree = tree
+                    prev_span = span
             else:
+                if prev_tree is not None:
+                    if prev_span is None:
+                        reconstruct_line = prev_tree
+                    else:
+                        reconstruct_line = f"[{prev_span}] {prev_tree}"
+
+                    scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, reconstruct_line) if factor != 1 else reconstruct_line
+                    fout.write(scaled_line + "\n")
+                    prev_tree = None
+                    prev_span = None
                 fout.write(line + "\n")
 
+        if prev_tree is not None:
+            if prev_span is None:
+                reconstruct_line = prev_tree
+            else:
+                reconstruct_line = f"[{prev_span}] {prev_tree}"
+
+            scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, reconstruct_line) if factor != 1 else reconstruct_line
+            fout.write(scaled_line + "\n")
+            prev_tree = None
+            prev_span = None
+
+
+def parse_tree_line(line):
+    line = line.strip()
+
+    TREE_LINE_RE = re.compile(r"^\[(\d+)\]\s*(.+)$")
+    m = TREE_LINE_RE.match(line)
+
+    if m:
+        span = int(m.group(1))
+        tree = m.group(2)
+        return span, tree
+
+    # Baum ohne [span]
+    if "(" in line and line.endswith(";"):
+        return None, line
+
+    return None, None
 
 
 def main():
