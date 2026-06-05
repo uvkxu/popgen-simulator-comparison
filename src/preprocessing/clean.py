@@ -44,6 +44,17 @@ def clean_sim_output(input_file, output_file, sequence_length,
 
             # --- Handle segsites + positions + haplotypes ---
             if line.startswith("segsites:"):
+                if prev_tree is not None:
+                    if prev_span is None:
+                        reconstruct_line = prev_tree
+                    else:
+                        reconstruct_line = f"[{prev_span}] {prev_tree}"
+
+                    scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, reconstruct_line) if factor != 1 else reconstruct_line
+                    fout.write(scaled_line + "\n")
+                    prev_tree = None
+                    prev_span = None
+                    
                 segsites = int(line.split()[1])
                 if segsites == 0:
                     fout.write(line + "\n")
