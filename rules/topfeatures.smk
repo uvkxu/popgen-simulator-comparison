@@ -26,6 +26,19 @@ rule copy_combo_yaml_allel_features:
         Path(output.copy_file).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(params.input, output.copy_file)
 
+
+rule copy_combo_yaml_allel_features:
+    output:
+        copy_file = f"{CLEAN_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+    params:
+        input = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+    run:
+        from pathlib import Path
+        import shutil
+
+        Path(output.copy_file).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(params.input, output.copy_file)
+
     
 rule compute_tree_topfeatures_grouped_by_mode:
     output:

@@ -851,33 +851,33 @@ def get_csv_files_mode(input_folder, grouped_by, seq_len_group=None, sample_size
     csv_my_mode = []
 
     for root, _, files in os.walk(input_folder):
-            root_path = Path(root)
+        root_path = Path(root)
 
-            combo_yamls = [f for f in files if f.endswith(".yaml") or f.endswith(".yml")]
-            if not combo_yamls:
-                continue
+        combo_yamls = [f for f in files if f.endswith(".yaml") or f.endswith(".yml")]
+        if not combo_yamls:
+            continue
 
-            combo_yaml_path = root_path / combo_yamls[0]
-            with open(combo_yaml_path, "r") as f:
-                combo_params = yaml.safe_load(f)
+        combo_yaml_path = root_path / combo_yamls[0]
+        with open(combo_yaml_path, "r") as f:
+            combo_params = yaml.safe_load(f)
 
-            usePrecision = bool(combo_params.get("usePrecision"))
-            recombination_rate = float(combo_params.get("recombination_rate") or 0)
-            sample_size = int(combo_params["sample_structure"][0])
-            seq_len = int(combo_params["sequence_length"])
+        usePrecision = bool(combo_params.get("usePrecision"))
+        recombination_rate = float(combo_params.get("recombination_rate") or 0)
+        sample_size = int(combo_params["sample_structure"][0])
+        seq_len = int(combo_params["sequence_length"])
 
-            if (
-                (("precision_applied" not in grouped_by) or usePrecision)
-                and (("precision_skipped" not in grouped_by) or (not usePrecision))
-                and (("recombination_applied" not in grouped_by) or (recombination_rate > 0))
-                and (("recombination_skipped" not in grouped_by) or (recombination_rate == 0))
-                and (("sample_size" not in grouped_by) or (sample_size == sample_size_group and usePrecision))
-                and (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
-            ):
-                if "cleaned" in input_folder.parts:
-                    csv_my_mode += list(input_folder.rglob("*_output.txt"))
-                else:
-                    csv_my_mode += collect_csv_files(root_path)
+        if (
+            (("precision_applied" not in grouped_by) or usePrecision)
+            and (("precision_skipped" not in grouped_by) or (not usePrecision))
+            and (("recombination_applied" not in grouped_by) or (recombination_rate > 0))
+            and (("recombination_skipped" not in grouped_by) or (recombination_rate == 0))
+            and (("sample_size" not in grouped_by) or (sample_size == sample_size_group and usePrecision))
+            and (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
+        ):
+            if "cleaned" in input_folder.parts:
+                csv_my_mode += list(input_folder.rglob("*_output.txt"))
+            else:
+                csv_my_mode += collect_csv_files(root_path)
 
     return csv_my_mode
 
