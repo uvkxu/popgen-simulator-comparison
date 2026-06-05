@@ -164,15 +164,17 @@ def collect_and_merge_tree_allele_features(
         df_allele = df_allele.drop(columns=["simulator"], errors="ignore")
 
         if len(df_tree_block) != len(df_allele):
-            print(f"\nFILE: {cleaned_file}")
-            print("len(df_tree)      =", len(df_tree))
-            print("sum(counts)       =", sum(counts))
-            print("len(counts)       =", len(counts))
-            print("len(df_tree_block)=", len(df_tree_block))
-            print("len(df_allele)    =", len(df_allele))
-            print("first counts      =", counts[:10])
-            print("last counts       =", counts[-10:])
-            raise ValueError("Block mismatch between tree and allele features")
+            raise ValueError(
+                f"Block mismatch between tree and allele features\n"
+                f"FILE: {cleaned_file}\n"
+                f"len(df_tree)       = {len(df_tree)}\n"
+                f"sum(counts)        = {sum(counts)}\n"
+                f"len(counts)        = {len(counts)}\n"
+                f"len(df_tree_block) = {len(df_tree_block)}\n"
+                f"len(df_allele)     = {len(df_allele)}\n"
+                f"first counts       = {counts[:10]}\n"
+                f"last counts        = {counts[-10:]}"
+            )
 
         sim_col = pd.Series([sim_name] * len(df_tree_block), name="simulator")
         merged_dfs.append(pd.concat([sim_col, df_tree_block, df_allele], axis=1))
