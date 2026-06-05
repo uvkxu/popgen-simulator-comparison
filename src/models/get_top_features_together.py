@@ -76,7 +76,7 @@ def count_trees_per_replicate(cleaned_output: Path) -> list[int]:
 
             if is_tree_line(line):
                 current += 1
-            elif current != 0:
+            elif current > 0:
                 counts.append(current)
                 current = 0
 
