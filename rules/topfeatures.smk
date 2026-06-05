@@ -27,7 +27,7 @@ rule copy_combo_yaml_allel_features:
         shutil.copy(params.input, output.copy_file)
 
 
-rule copy_combo_yaml_allel_features:
+rule copy_combo_yaml_cleaned:
     output:
         copy_file = f"{CLEAN_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     params:
