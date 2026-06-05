@@ -69,25 +69,16 @@ def count_trees_per_replicate(cleaned_output: Path) -> list[int]:
     """
     counts = []
     current = 0
-    in_rep = False
 
     with open(cleaned_output, "r") as f:
         for line in f:
             line = line.strip()
 
-            if line.startswith("//"):
-                if in_rep:
-                    counts.append(current)
-                current = 0
-                in_rep = True
-
-            elif line.startswith("segsites"):
-                if in_rep:
-                    counts.append(current)
-                in_rep = False
-
-            elif in_rep and is_tree_line(line):
+            if is_tree_line(line):
                 current += 1
+            else:
+                counts.append(current)
+                current = 0
 
     return counts
 
