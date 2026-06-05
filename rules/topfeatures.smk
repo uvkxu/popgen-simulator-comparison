@@ -161,7 +161,7 @@ rule compute_together_topfeatures_grouped_by_mode:
         ),
         input_dir_allel = lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/",
         input_dir_tree = lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/",
-        input_dir_raw = lambda wildcards: f"{RAW_DATA_DIR}/{wildcards.config}/",
+        input_dir_cleaned = lambda wildcards: f"{CLEAN_DIR}/{wildcards.config}/",
         output_dir = lambda wildcards: f"{TOGETHER_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}",
         err_file = lambda wildcards: f"{TOGETHER_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}/errorlog.err"
     conda:
@@ -172,7 +172,7 @@ rule compute_together_topfeatures_grouped_by_mode:
         python src/models/get_top_features_together.py \
         --input_folder_tree {params.input_dir_tree} \
         --input_folder_allel {params.input_dir_allel} \
-        --input_folder_raw {params.input_dir_raw} \
+        --input_folder_cleaned {params.input_dir_cleaned} \
         --output_folder {params.output_dir} \
         --simulators {params.args_group} \
         --grouped_by {wildcards.mode}

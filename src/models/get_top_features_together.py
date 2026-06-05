@@ -95,11 +95,11 @@ def count_trees_per_replicate(cleaned_output: Path) -> list[int]:
 def collect_and_merge_tree_allele_features(
     tree_csv_files: list[Path],
     allele_csv_files: list[Path],
-    raw_csv_files: list[Path],
+    cleaned_csv_files: list[Path],
     simulators: list[str],
     suffix_tree: str = "_tree_features.csv",
     suffix_allele: str = "_allel_features.csv",
-    suffix_raw: str = "_output.txt",
+    suffix_cleaned: str = "_cleaned_output.txt",
 ) -> list[pd.DataFrame]:
 
     """
@@ -116,11 +116,11 @@ def collect_and_merge_tree_allele_features(
         allele_lookup[key] = a
 
     # --- build raw lookup ---
-    raw_lookup: dict[Path, Path] = {}
-    for r in raw_csv_files:
-        rel = _relative_after_dir(r, "raw")
-        key = rel.with_name(rel.name.replace(suffix_raw, ""))
-        raw_lookup[key] = r
+    cleaned_lookup: dict[Path, Path] = {}
+    for r in cleaned_csv_files:
+        rel = _relative_after_dir(r, "cleaned")
+        key = rel.with_name(rel.name.replace(suffix_cleaned, ""))
+        cleaned_lookup[key] = r
 
     merged_dfs: list[pd.DataFrame] = []
 
@@ -134,19 +134,19 @@ def collect_and_merge_tree_allele_features(
 
         if key not in allele_lookup:
             raise FileNotFoundError(f"No matching allele CSV for {tree_csv}")
-        if key not in raw_lookup:
-            raise FileNotFoundError(f"No matching raw_output.txt for {tree_csv}")
+        if key not in cleaned_lookup:
+            raise FileNotFoundError(f"No matching cleaned_output.txt for {tree_csv}")
 
         df_tree = pd.read_csv(tree_csv)
         df_allele = pd.read_csv(allele_lookup[key])
-        raw_file = raw_lookup[key]
+        cleaned_file = cleaned_lookup[key]
 
-        counts = count_trees_per_replicate(raw_file)
+        counts = count_trees_per_replicate(cleaned_file)
 
         if sum(counts) != len(df_tree):
             raise ValueError(
                 f"Tree count mismatch for {tree_csv}: "
-                f"sum(raw)={sum(counts)} vs tree_rows={len(df_tree)}"
+                f"sum(cleaned)={sum(counts)} vs tree_rows={len(df_tree)}"
             )
 
         # --- aggregate trees per replicate ---
@@ -488,7 +488,7 @@ def run_feature_evaluation(
     simulator_group,
     tree_csv_files,
     allel_csv_files,
-    raw_csv_files,
+    cleaned_csv_files,
     output_dir,
     use_optuna: bool = False,
     optuna_trials: int = 50,
@@ -501,7 +501,7 @@ def run_feature_evaluation(
     all_dfs = collect_and_merge_tree_allele_features(
         tree_csv_files=tree_csv_files,
         allele_csv_files=allel_csv_files,
-        raw_csv_files=raw_csv_files,
+        cleaned_csv_files=cleaned_csv_files,
         simulators=simulator_group
     )
     data = pd.concat(all_dfs, ignore_index=True)
@@ -874,7 +874,7 @@ def get_csv_files_mode(input_folder, grouped_by, seq_len_group=None, sample_size
                 and (("sample_size" not in grouped_by) or (sample_size == sample_size_group and usePrecision))
                 and (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
             ):
-                if "raw" in input_folder.parts:
+                if "cleaned" in input_folder.parts:
                     csv_my_mode += list(input_folder.rglob("*_output.txt"))
                 else:
                     csv_my_mode += collect_csv_files(root_path)
@@ -888,10 +888,10 @@ def parse_args():
     parser.add_argument("--input_folder_tree", type=Path, required=True, help="Input folder containing result files")
     parser.add_argument("--input_folder_allel", type=Path, required=True, help="Input folder containing result files")
     parser.add_argument(
-        "--input_folder_raw",
+        "--input_folder_cleaned",
         type=Path,
         required=True,
-        help="Input folder containing raw / cleaned simulator output files",
+        help="Input folder containing cleaned simulator output files",
     )
     parser.add_argument("--output_folder", type=Path, required=True, help="Output folder path")
 
@@ -978,7 +978,7 @@ def main():
 
     input_folder_tree = args.input_folder_tree
     input_folder_allel = args.input_folder_allel
-    input_folder_raw = args.input_folder_raw
+    input_folder_cleaned = args.input_folder_cleaned
 
     output_folder = args.output_folder
     simulator_group = args.simulators
@@ -1017,7 +1017,7 @@ def main():
     output_folder.mkdir(parents=True, exist_ok=True)
     tree_csv_files = get_csv_files_mode(input_folder_tree, grouped_by, seq_len_group, sample_size_group)
     allel_csv_files = get_csv_files_mode(input_folder_allel, grouped_by, seq_len_group, sample_size_group)
-    raw_csv_files = get_csv_files_mode(input_folder_raw, grouped_by, seq_len_group, sample_size_group)
+    cleaned_csv_files = get_csv_files_mode(input_folder_cleaned, grouped_by, seq_len_group, sample_size_group)
 
     assert len(tree_csv_files) == len(allel_csv_files)
     # assert len(raw_csv_files) == len(allel_csv_files)
@@ -1026,7 +1026,7 @@ def main():
         simulator_group=simulator_group,
         tree_csv_files=tree_csv_files,
         allel_csv_files=allel_csv_files,
-        raw_csv_files=raw_csv_files,
+        cleaned_csv_files=cleaned_csv_files,
         output_dir=output_folder,
         use_optuna=use_optuna,
         optuna_trials=optuna_trials,
