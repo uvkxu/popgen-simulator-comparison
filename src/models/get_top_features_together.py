@@ -62,15 +62,11 @@ def aggregate_tree_block(block: pd.DataFrame) -> dict:
     return agg
 
 
-def count_trees_per_replicate(cleaned_output: Path) -> list[int]:
-    """
-    Parse <sim>_cleaned_output.txt and return number of marginal trees
-    per replicate (block).
-    """
+def count_trees_per_replicate(cleaned_output):
     counts = []
     current = 0
 
-    with open(cleaned_output, "r") as f:
+    with open(cleaned_output) as f:
         for line in f:
             line = line.strip()
 
@@ -79,6 +75,9 @@ def count_trees_per_replicate(cleaned_output: Path) -> list[int]:
             elif current > 0:
                 counts.append(current)
                 current = 0
+
+    if current > 0:
+        counts.append(current)
 
     return counts
 
