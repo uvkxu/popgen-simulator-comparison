@@ -35,9 +35,14 @@ def clean_sim_output(input_file, output_file, sequence_length,
         lines_buffer = []
         prev_tree = None
         prev_span = None
+        pending_line = None
 
         while True:
-            line = fin.readline()
+            if pending_line is not None:
+                line = pending_line
+                pending_line = None
+            else:
+                line = fin.readline()
             if not line:
                 break
             line = line.strip()
@@ -69,11 +74,18 @@ def clean_sim_output(input_file, output_file, sequence_length,
                 haplotypes = []
                 while True:
                     hapline = fin.readline()
+
                     if not hapline:  # EOF
                         break
+
                     hapline = hapline.strip()
-                    if not hapline or not hapline.isdigit():
-                        break  # Ende des Blocks
+
+                    if not hapline:
+                        break
+
+                    if not hapline.isdigit():
+                        pending_line = hapline
+                        break
                     haplotypes.append(list(map(int, hapline)))
 
                 haplotypes = np.array(haplotypes, dtype=int)
@@ -149,17 +161,6 @@ def clean_sim_output(input_file, output_file, sequence_length,
                     prev_tree = None
                     prev_span = None
                 fout.write(line + "\n")
-
-        if prev_tree is not None:
-            if prev_span is None:
-                reconstruct_line = prev_tree
-            else:
-                reconstruct_line = f"[{prev_span}] {prev_tree}"
-
-            scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, reconstruct_line) if factor != 1 else reconstruct_line
-            fout.write(scaled_line + "\n")
-            prev_tree = None
-            prev_span = None
 
 
 def parse_tree_line(line):
