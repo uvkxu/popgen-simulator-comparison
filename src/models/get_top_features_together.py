@@ -384,9 +384,13 @@ def plot_feature_performance(
     for col in df.columns[1:]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    special = ["CHANCE_BASELINE", "ALL_FEATURES", "PASSED_FEATURES"]
+    special = [
+        "CHANCE_BASELINE",
+        "ALL_FEATURES",
+        "TOP_FEATURES",
+    ]
     df_special = df[df["feature"].isin(special)]
-    df_regular = df[~df["feature"].isin(special + ["OVERALL_MEAN"])]
+    df_regular = df[~df["feature"].isin(special)]
     df_features = pd.concat([df_special, df_regular], ignore_index=True)
 
     features_acc = df_features["feature"].astype(str)
@@ -680,6 +684,7 @@ def run_feature_evaluation(
     class_counts = np.bincount(y)
     majority_prop = class_counts.max() / class_counts.sum()
 
+    """
     # permutation importance = drop in accuracy (use best iteration only)
     mean_drop, std_drop, baseline_acc = permutation_importance_accuracy(
         clf=clf,
@@ -735,6 +740,34 @@ def run_feature_evaluation(
         passed_acc = accuracy_score(y_valid, passed_preds)
     else:
         passed_acc = np.nan
+    """
+
+    single_feature_scores = single_feature_accuracy(
+        X_train=X_train,
+        X_valid=X_valid,
+        y_train=y_train,
+        y_valid=y_valid,
+        feature_names=feature_names,
+        xgb_params=xgb_params,
+        es_rounds=es_rounds,
+    )
+
+    feature_records = []
+
+    for feature, acc in single_feature_scores.items():
+        feature_records.append(
+            {
+                "feature": feature,
+                "max_accuracy": float(acc),
+                XGB_STR: float(acc),
+            }
+        )
+
+    feature_records_sorted = sorted(
+        feature_records,
+        key=lambda d: d["max_accuracy"],
+        reverse=True,
+    )
 
     # ---------------------------------------------------------
     # Evaluate with fixed TOP_FEATURES: retrain once
@@ -796,6 +829,7 @@ def run_feature_evaluation(
         }
     )
 
+    """
     summary_records.append(
         {
             "feature": "PASSED_FEATURES",
@@ -803,6 +837,7 @@ def run_feature_evaluation(
             XGB_STR: float(passed_acc) if not np.isnan(passed_acc) else np.nan,
         }
     )
+    """
 
     summary_records.append(
         {
@@ -812,6 +847,14 @@ def run_feature_evaluation(
         }
     )
 
+    if feature_records_sorted:
+        summary_records.append(
+            {k: np.nan for k in feature_records_sorted[0].keys()}
+        )
+
+    summary_records.extend(feature_records_sorted)
+
+    """
     if feature_records_sorted:
         summary_records.append({k: np.nan for k in feature_records_sorted[0].keys()})
 
@@ -833,6 +876,7 @@ def run_feature_evaluation(
             XGB_STR: overall_mean_acc,
         }
     )
+    """
 
     df_summary = pd.DataFrame(summary_records)
     cols = ["feature", "max_accuracy", XGB_STR]
@@ -966,6 +1010,48 @@ def is_tree_line(line: str, file_path: str | Path | None = None) -> bool:
         and not line.lower().startswith("segsites")
         and not line.lower().startswith("positions")
     )
+
+
+def single_feature_accuracy(
+    X_train,
+    X_valid,
+    y_train,
+    y_valid,
+    feature_names,
+    xgb_params,
+    es_rounds,
+):
+    results = {}
+
+    for feature in feature_names:
+        Xf_train = X_train[[feature]]
+        Xf_valid = X_valid[[feature]]
+
+        clf = xgb.XGBClassifier(**xgb_params)
+
+        best_iter = _fit_xgb_with_early_stopping(
+            clf=clf,
+            X_train=Xf_train,
+            y_train=y_train,
+            X_val=Xf_valid,
+            y_val=y_valid,
+            early_stopping_rounds=es_rounds,
+            verbose=False,
+        )
+
+        proba = clf.predict_proba(
+            Xf_valid,
+            iteration_range=_iter_range(best_iter),
+        )
+
+        preds = _pred_labels_from_proba(proba)
+
+        acc = accuracy_score(y_valid, preds)
+
+        results[feature] = acc
+
+    return results
+
 
 
 def main():
