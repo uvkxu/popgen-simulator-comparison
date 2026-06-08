@@ -70,7 +70,7 @@ def count_trees_per_replicate(cleaned_output):
         for line in f:
             line = line.strip()
 
-            if is_tree_line(line):
+            if is_tree_line(line, cleaned_output):
                 current += 1
             elif current > 0:
                 counts.append(current)
