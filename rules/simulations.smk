@@ -26,8 +26,7 @@ rule run_config_combo_rep_simulation_demes:
             --simulator {wildcards.simulator} \
             --combo '{params.combo_json}' \
             --nreps {NUM_REPLICATES} \
-            --output_file {output.output_file} \
-            --copy_file {params.copy_file}
+            --output_file {output.output_file}
         """
 
 

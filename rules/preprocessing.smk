@@ -19,8 +19,7 @@ rule clean_single_file:
             --input {input.raw} \
             --output {output.cleaned} \
             --combo_yaml {input.combo_yaml} \
-            --sim {wildcards.simulator} \
-            --copy_file {params.copy_file}
+            --sim {wildcards.simulator}
         """
     
 rule compute_allel_features_single_file:
@@ -46,8 +45,7 @@ rule compute_allel_features_single_file:
         python src/preprocessing/calc_allelstatistics.py \
             --input {input.cleaned} \
             --output {output.allelstats} \
-            --combo_yaml {input.combo_yaml} \
-            --copy_file {params.copy_file}
+            --combo_yaml {input.combo_yaml}
         """
 
 
