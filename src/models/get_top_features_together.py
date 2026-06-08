@@ -956,13 +956,19 @@ def assert_non_empty(csv_files, mode):
         )
 
 
-def is_tree_line(line: str) -> bool:
+def is_tree_line(line: str, file_path: str | Path | None = None) -> bool:
     line = line.strip()
 
     if "(" in line and not line.endswith(";"):
-        raise ValueError(
-            f"Malformed tree line: contains '(' but does not end with ';'\n{line}"
+        msg = (
+            f"Malformed tree line: contains '(' but does not end with ';'\n"
+            f"{line}"
         )
+
+        if file_path is not None:
+            msg = f"{msg}\nFile: {file_path}"
+
+        raise ValueError(msg)
 
     return (
         "(" in line
