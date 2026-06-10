@@ -65,7 +65,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["ms", "msms", "msprime"] #"msms", "msprime", "ms"
+SIMULATORS = ["mspms"] #["ms", "msms", "msprime"] #"msms", "msprime", "ms"
 REPS = 200
 NUM_REPLICATES = 2
 PRECISION = 17
@@ -82,12 +82,12 @@ RF_STR = "random_forest"
 LR_STR = "logistic_regression"
 CLASSIFIERS = [XGB_STR]
 
-'''
+
 all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
 all_configs.remove("lavretsky_ducks")
 all_configs.remove("li_african3epoch")
-'''
-all_configs = ["one_population"]
+
+#all_configs = ["one_population"]
 
 VALID_GROUPING_MODES = [
     "precision_applied", "precision_skipped",
