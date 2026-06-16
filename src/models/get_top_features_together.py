@@ -929,13 +929,26 @@ def get_csv_files_mode(input_folder, grouped_by, seq_len_group=None, sample_size
 def parse_args():
     parser = argparse.ArgumentParser(description="Extract top features from simulation results.")
 
-    parser.add_argument("--input_folder_tree", type=Path, required=True, help="Input folder containing result files")
-    parser.add_argument("--input_folder_allel", type=Path, required=True, help="Input folder containing result files")
+    parser.add_argument(
+        "--input_folder_tree",
+        type=Path,
+        nargs="+",
+        required=True,
+        help="One or more tree input folders",
+    )
+    parser.add_argument(
+        "--input_folder_allel",
+        type=Path,
+        nargs="+",
+        required=True,
+        help="One or more allele input folders",
+    )
     parser.add_argument(
         "--input_folder_cleaned",
         type=Path,
+        nargs="+",
         required=True,
-        help="Input folder containing cleaned simulator output files",
+        help="One or more cleaned input folders",
     )
     parser.add_argument("--output_folder", type=Path, required=True, help="Output folder path")
 
@@ -1096,9 +1109,18 @@ def main():
     grouped_by = set(normalized_grouped_by)
 
     output_folder.mkdir(parents=True, exist_ok=True)
-    tree_csv_files = get_csv_files_mode(input_folder_tree, grouped_by, seq_len_group, sample_size_group)
-    allel_csv_files = get_csv_files_mode(input_folder_allel, grouped_by, seq_len_group, sample_size_group)
-    cleaned_csv_files = get_csv_files_mode(input_folder_cleaned, grouped_by, seq_len_group, sample_size_group)
+    tree_csv_files = []
+    allel_csv_files = []
+    cleaned_csv_files = []
+
+    for tree_folder in input_folder_tree:
+        tree_csv_files += get_csv_files_mode(tree_folder, grouped_by, seq_len_group, sample_size_group)
+
+    for allel_folder in input_folder_allel:
+        allel_csv_files += get_csv_files_mode(allel_folder, grouped_by, seq_len_group, sample_size_group)
+
+    for cleaned_folder in input_folder_cleaned:
+        cleaned_csv_files += get_csv_files_mode(cleaned_folder, grouped_by, seq_len_group, sample_size_group)
 
     assert len(tree_csv_files) == len(allel_csv_files)
     # assert len(raw_csv_files) == len(allel_csv_files)

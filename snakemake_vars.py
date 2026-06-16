@@ -16,8 +16,8 @@ CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
 CMD_DIR = ROOT_DIR / "commands"
 LOG_DIR = ROOT_DIR / "logs"
 
-DATA_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genome/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genome/results")
+DATA_DIR = Path("/hits/fast/cme/kuchve/with_recombination/data")
+RESULTS_DIR = Path("/hits/fast/cme/kuchve/with_recombination/results")
 
 DEFAULT_MS_PATH = BIN_DIR / "ms"
 DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
@@ -30,6 +30,11 @@ RAW_DATA_DIR = DATA_DIR / "raw"
 FEATURES_DIR = DATA_DIR / "features"
 TREE_FEATURES_DIR = FEATURES_DIR / "tree"
 ALLEL_FEATURES_DIR = FEATURES_DIR / "allele"
+
+MSPMS_ALLEL_FEATURES_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genom/data/allele")
+MSPMS_TREE_FEATURES_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genom/data/tree")
+MSPMS_CLEAN_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genom/data/cleaned")
+
 
 PIGOT_RHO_DIR = FEATURES_DIR / "pigot_rho"
 
