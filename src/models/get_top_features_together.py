@@ -678,6 +678,15 @@ def run_feature_evaluation(
     # overall accuracy on the same validation set (best iteration only)
     base_proba = clf.predict_proba(X_valid, iteration_range=ir)
     baseline_preds = _pred_labels_from_proba(base_proba)
+    raise RuntimeError(
+        f"""
+        num_class={num_class}
+        X_valid.shape={X_valid.shape}
+        y_valid.shape={y_valid.shape}
+        base_proba.shape={np.asarray(base_proba).shape}
+        baseline_preds.shape={np.asarray(baseline_preds).shape}
+        """
+        )
     all_features_acc = accuracy_score(y_valid, baseline_preds)
 
     # chance baseline (majority class proportion)
