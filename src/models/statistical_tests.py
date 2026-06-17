@@ -397,6 +397,8 @@ def main():
 
     if not mspms_tree:
         raise ValueError(
+            f"Input folders:\n" +
+            "\n".join(str(f) for f in input_folder_tree) +
             f"No mspms tree files found.\n"
             f"Total tree files: {len(tree_csv_files)}\n"
             f"First 20 files:\n" +
