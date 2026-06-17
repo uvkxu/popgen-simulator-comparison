@@ -125,7 +125,7 @@ def collect_and_merge_tree_allele_features(
         if key not in allele_lookup:
             raise FileNotFoundError(f"No matching allele CSV for {tree_csv}")
         if key not in cleaned_lookup:
-            raise FileNotFoundError(f"No matching cleaned_output.txt for {tree_csv}")
+            raise FileNotFoundError(f"No matching cleaned_output.txt for {tree_csv} \n Looking for key: {key}\nAvailable keys in cleaned_lookup: {list(cleaned_lookup.keys())}")
 
         df_tree = pd.read_csv(tree_csv)
         df_allele = pd.read_csv(allele_lookup[key])
