@@ -44,101 +44,20 @@ def _relative_after_dir(p: Path, anchor: str) -> Path:
     idx = parts.index(anchor)
     return Path(*parts[idx + 1:])
 
-def collect_and_merge_tree_allele_features(
-    tree_csv_files: list[Path],
-    allele_csv_files: list[Path],
-    simulators: list[str],
-    suffix_tree: str = "_tree_features.csv",
-    suffix_allele: str = "_allel_features.csv",
-) -> list[pd.DataFrame]:
-    """
-    Merge tree and allele feature CSVs.
-    Paths are assumed identical below `tree/` vs `allele/`.
-    Feature names are NOT prefixed.
-    """
-
-    # --- build allele lookup: relative path below allele/ ---
-    allele_lookup: dict[Path, Path] = {}
-
-    for a in allele_csv_files:
-        key = _relative_after_dir(a, "allele")
-        allele_lookup[key] = a
-
-    merged_dfs: list[pd.DataFrame] = []
-
-    for tree_csv in tree_csv_files:
-        tree_key = _relative_after_dir(tree_csv, "tree")
-
-        allele_key = tree_key.with_name(
-            tree_csv.name.replace(suffix_tree, suffix_allele)
-        )
-
-        if allele_key not in allele_lookup:
-            raise FileNotFoundError(
-                f"No matching allele CSV for:\n{tree_csv}"
-            )
-
-        allele_csv = allele_lookup[allele_key]
-
-        df_tree = pd.read_csv(tree_csv)
-        df_allele = pd.read_csv(allele_csv)
-
-        if len(df_tree) != len(df_allele):
-            raise ValueError(
-                f"Row mismatch:\n{tree_csv}\n{allele_csv}"
-            )
-
-        # --- infer simulator from filename ---
-        simulator_name = detect_simulator_from_yaml(
-                input_file=tree_csv)
-
-        if simulator_name not in simulators:
-            continue
-
-        simulator_col = pd.Series(
-            [simulator_name] * len(df_tree),
-            name="simulator"
-        )
-
-        tree_feats = df_tree.drop(columns=["simulator"], errors="ignore")
-        allele_feats = df_allele.drop(columns=["simulator"], errors="ignore")
-
-        df_merged = pd.concat(
-            [simulator_col, tree_feats, allele_feats],
-            axis=1
-        )
-
-        merged_dfs.append(df_merged)
-
-    if not merged_dfs:
-        raise ValueError("No CSV pairs were merged.")
-
-    return merged_dfs
-
 
 def comparison(
     tree_csv_files,
     allel_csv_files,
-    output_file, 
-    simulator_a, 
-    simulator_b):
+    output_file,
+    simulator_a,
+    simulator_b,
+):
     results = []
-
-    # --- Load and label data ---
-    all_dfs =  collect_and_merge_tree_allele_features(
-        tree_csv_files=tree_csv_files,
-        allele_csv_files=allel_csv_files,
-        simulators=[simulator_a, simulator_b]
-    )
-    data = pd.concat(all_dfs, ignore_index=True)
-    del all_dfs
-
-    simA = data[data["simulator"] == simulator_a]
-    simB = data[data["simulator"] == simulator_b]
 
     FEATURES_TO_EXCLUDE = [
         "phylogenetic_div",
-        # --- stats_laplace (weighted = TRUE) ---
+
+        # stats_laplace (weighted = TRUE)
         "lap_max",
         "lap_fiedler",
         "lap_var",
@@ -156,7 +75,7 @@ def comparison(
         "ratio_neg_pos",
         "dist_char",
 
-        # --- stats_laplace (weighted = FALSE / unweighted) ---
+        # stats_laplace (weighted = FALSE)
         "lap_max_uw",
         "lap_fiedler_uw",
         "lap_var_uw",
@@ -168,7 +87,7 @@ def comparison(
         "lap_sum_uw",
         "tree_type_uw",
 
-        # --- compute_characteristic_features ---
+        # compute_characteristic_features
         "cut_weight",
         "conductance",
         "normalized_cut",
@@ -179,35 +98,117 @@ def comparison(
         "fiedler_sd",
     ]
 
-    feature_names = [
-        col for col in data.columns
-        if col != "simulator" and col not in FEATURES_TO_EXCLUDE
-    ]
+    # --------------------------------------------------
+    # TREE FEATURES
+    # --------------------------------------------------
+    tree_dfs = []
 
-    for feature in feature_names:
+    for tree_csv in tree_csv_files:
+        sim_name = detect_simulator_from_yaml(tree_csv)
 
-        x = simA[feature].dropna()
-        y = simB[feature].dropna()
+        if sim_name not in [simulator_a, simulator_b]:
+            continue
 
-        stat, p = mannwhitneyu(
-            x,
-            y,
-            alternative="two-sided"
+        df = pd.read_csv(tree_csv)
+        df["simulator"] = sim_name
+
+        tree_dfs.append(df)
+
+    if tree_dfs:
+        tree_data = pd.concat(tree_dfs, ignore_index=True)
+
+        simA = tree_data[tree_data["simulator"] == simulator_a]
+        simB = tree_data[tree_data["simulator"] == simulator_b]
+
+        for feature in tree_data.columns:
+
+            if feature == "simulator":
+                continue
+
+            if feature in FEATURES_TO_EXCLUDE:
+                continue
+
+            x = simA[feature].dropna()
+            y = simB[feature].dropna()
+
+            if len(x) == 0 or len(y) == 0:
+                continue
+
+            stat, p = mannwhitneyu(
+                x,
+                y,
+                alternative="two-sided"
+            )
+
+            delta = (2 * stat) / (len(x) * len(y)) - 1
+
+            results.append({
+                "feature": f"tree::{feature}",
+                "p_value": p,
+                "effect_size": delta,
+                "median_A": x.median(),
+                "median_B": y.median(),
+            })
+
+    # --------------------------------------------------
+    # ALLELE FEATURES
+    # --------------------------------------------------
+    allele_dfs = []
+
+    for allele_csv in allel_csv_files:
+        sim_name = detect_simulator_from_yaml(allele_csv)
+
+        if sim_name not in [simulator_a, simulator_b]:
+            continue
+
+        df = pd.read_csv(allele_csv)
+        df["simulator"] = sim_name
+
+        allele_dfs.append(df)
+
+    if allele_dfs:
+        allele_data = pd.concat(allele_dfs, ignore_index=True)
+
+        simA = allele_data[allele_data["simulator"] == simulator_a]
+        simB = allele_data[allele_data["simulator"] == simulator_b]
+
+        for feature in allele_data.columns:
+
+            if feature == "simulator":
+                continue
+
+            if feature in FEATURES_TO_EXCLUDE:
+                continue
+
+            x = simA[feature].dropna()
+            y = simB[feature].dropna()
+
+            if len(x) == 0 or len(y) == 0:
+                continue
+
+            stat, p = mannwhitneyu(
+                x,
+                y,
+                alternative="two-sided"
+            )
+
+            delta = (2 * stat) / (len(x) * len(y)) - 1
+
+            results.append({
+                "feature": f"allele::{feature}",
+                "p_value": p,
+                "effect_size": delta,
+                "median_A": x.median(),
+                "median_B": y.median(),
+            })
+
+    if not results:
+        raise ValueError(
+            f"No comparable features found for {simulator_a} vs {simulator_b}"
         )
-
-        delta = (2 * stat) / (len(x) * len(y)) - 1
-
-        results.append({
-            "feature": feature,
-            "p_value": p,
-            "effect_size": delta,
-            "median_A": x.median(),
-            "median_B": y.median(),
-        })
 
     df = pd.DataFrame(results)
 
-    # multiple testing correction
     df["p_corrected"] = multipletests(
         df["p_value"],
         method="fdr_bh"
@@ -215,6 +216,7 @@ def comparison(
 
     df = df.sort_values("p_corrected")
 
+    output_file.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_file, index=False)
 
 
@@ -257,8 +259,20 @@ def get_csv_files_mode(input_folder, grouped_by, seq_len_group=None, sample_size
 def parse_args():
     parser = argparse.ArgumentParser(description="Extract top features from simulation results.")
 
-    parser.add_argument("--input_folder_tree", type=Path, required=True, help="Input folder containing result files")
-    parser.add_argument("--input_folder_allel", type=Path, required=True, help="Input folder containing result files")
+    parser.add_argument(
+        "--input_folder_tree",
+        type=Path,
+        nargs="+",
+        required=True,
+        help="One or more tree input folders",
+    )
+    parser.add_argument(
+        "--input_folder_allel",
+        type=Path,
+        nargs="+",
+        required=True,
+        help="One or more allele input folders",
+    )
     parser.add_argument("--output_file", type=Path, required=True, help="Output file path")
 
     parser.add_argument(
@@ -329,8 +343,15 @@ def main():
     grouped_by = set(normalized_grouped_by)
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    tree_csv_files = get_csv_files_mode(input_folder_tree, grouped_by, seq_len_group, sample_size_group)
-    allel_csv_files = get_csv_files_mode(input_folder_allel, grouped_by, seq_len_group, sample_size_group)
+    tree_csv_files = []
+    allel_csv_files = []
+
+    for tree_folder in input_folder_tree:
+        tree_csv_files += get_csv_files_mode(tree_folder, grouped_by, seq_len_group, sample_size_group)
+
+    for allel_folder in input_folder_allel:
+        allel_csv_files += get_csv_files_mode(allel_folder, grouped_by, seq_len_group, sample_size_group)
+
 
     assert len(tree_csv_files) == len(allel_csv_files)
 

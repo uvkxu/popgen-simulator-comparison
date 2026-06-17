@@ -31,9 +31,9 @@ FEATURES_DIR = DATA_DIR / "features"
 TREE_FEATURES_DIR = FEATURES_DIR / "tree"
 ALLEL_FEATURES_DIR = FEATURES_DIR / "allele"
 
-MSPMS_ALLEL_FEATURES_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genom/data/allele")
-MSPMS_TREE_FEATURES_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genom/data/tree")
-MSPMS_CLEAN_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genom/data/cleaned")
+MSPMS_ALLEL_FEATURES_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genome/data/allele")
+MSPMS_TREE_FEATURES_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genome/data/tree")
+MSPMS_CLEAN_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genome/data/cleaned")
 
 
 PIGOT_RHO_DIR = FEATURES_DIR / "pigot_rho"
@@ -444,7 +444,7 @@ def format_classifier_importance_plot(classifier, group):
 simulator_groups = list(combinations(SIMULATORS, 2))
 # simulator_groups = []
 # simulator_groups.append(tuple(SIMULATORS))
-simulator_groups = list(dict.fromkeys(simulator_groups))
+# simulator_groups = list(dict.fromkeys(simulator_groups))
 # simulator_groups.append(("msms", "msprime", "ms"))
 
 def get_topfeatures_input(config, mode, feature_type, group=None, combo=None):
@@ -773,4 +773,13 @@ COLLECT_FEATURES = [
     f"{COLLECT_DIR}/{type_}/{config}/simulator_feature_values.csv"
         for type_ in ("tree", "tree_block")
         for config in all_configs
+]
+
+STATS_RESULTS = [
+    f"{STATISTICS_RESULTS_DIR}/{config}/{mode}/{group_string}_feature_comparison.csv"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for group_string in [
+        "_".join(group) for group in simulator_groups
+    ]
 ]
