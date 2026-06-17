@@ -106,6 +106,17 @@ def comparison(
     for tree_csv in tree_csv_files:
         sim_name = detect_simulator_from_yaml(tree_csv)
 
+        if "mspms" in str(tree_csv):
+            raise ValueError(
+                f"""
+                FILE:
+                {tree_csv}
+
+                DETECTED:
+                {sim_name}
+                """
+            )
+
         if sim_name not in [simulator_a, simulator_b]:
             continue
 
