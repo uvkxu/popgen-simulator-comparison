@@ -391,6 +391,7 @@ def main():
 
 
     assert len(tree_csv_files) == len(allel_csv_files)
+    assert len(tree_csv_files) == 400, f"Expected 400 tree CSV files, found {len(tree_csv_files)}"
 
     comparison(
         tree_csv_files,
