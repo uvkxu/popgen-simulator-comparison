@@ -444,7 +444,7 @@ def format_classifier_importance_plot(classifier, group):
             
 simulator_groups = list(combinations(SIMULATORS, 2))
 # simulator_groups = []
-# simulator_groups.append(tuple(SIMULATORS))
+simulator_groups.append(tuple(SIMULATORS))
 # simulator_groups = list(dict.fromkeys(simulator_groups))
 # simulator_groups.append(("msms", "msprime", "ms"))
 
