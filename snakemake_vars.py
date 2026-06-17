@@ -31,8 +31,8 @@ FEATURES_DIR = DATA_DIR / "features"
 TREE_FEATURES_DIR = FEATURES_DIR / "tree"
 ALLEL_FEATURES_DIR = FEATURES_DIR / "allele"
 
-MSPMS_ALLEL_FEATURES_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genome/data/allele")
-MSPMS_TREE_FEATURES_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genome/data/tree")
+MSPMS_ALLEL_FEATURES_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genome/data/features/allele")
+MSPMS_TREE_FEATURES_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genome/data/features/tree")
 MSPMS_CLEAN_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genome/data/cleaned")
 
 
