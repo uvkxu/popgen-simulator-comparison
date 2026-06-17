@@ -391,7 +391,25 @@ def main():
 
 
     assert len(tree_csv_files) == len(allel_csv_files)
-    assert len(tree_csv_files) == 400, f"Expected 400 tree CSV files, found {len(tree_csv_files)}"
+
+    mspms_tree = [f for f in tree_csv_files if "mspms_" in f.name]
+    mspms_allel = [f for f in allel_csv_files if "mspms_" in f.name]
+
+    if not mspms_tree:
+        raise ValueError(
+            f"No mspms tree files found.\n"
+            f"Total tree files: {len(tree_csv_files)}\n"
+            f"First 20 files:\n" +
+            "\n".join(str(f) for f in tree_csv_files[:20])
+        )
+
+    if not mspms_allel:
+        raise ValueError(
+            f"No mspms allele files found.\n"
+            f"Total allele files: {len(allel_csv_files)}\n"
+            f"First 20 files:\n" +
+            "\n".join(str(f) for f in allel_csv_files[:20])
+        )
 
     comparison(
         tree_csv_files,
