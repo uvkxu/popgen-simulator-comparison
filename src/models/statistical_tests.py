@@ -106,17 +106,6 @@ def comparison(
     for tree_csv in tree_csv_files:
         sim_name = detect_simulator_from_yaml(tree_csv)
 
-        if "mspms" in str(tree_csv):
-            raise ValueError(
-                f"""
-                FILE:
-                {tree_csv}
-
-                DETECTED:
-                {sim_name}
-                """
-            )
-
         if sim_name not in [simulator_a, simulator_b]:
             continue
 
@@ -391,27 +380,6 @@ def main():
 
 
     assert len(tree_csv_files) == len(allel_csv_files)
-
-    mspms_tree = [f for f in tree_csv_files if "mspms_" in f.name]
-    mspms_allel = [f for f in allel_csv_files if "mspms_" in f.name]
-
-    if not mspms_tree:
-        raise ValueError(
-            f"Input folders:\n" +
-            "\n".join(str(f) for f in input_folder_tree) +
-            f"No mspms tree files found.\n"
-            f"Total tree files: {len(tree_csv_files)}\n"
-            f"First 20 files:\n" +
-            "\n".join(str(f) for f in tree_csv_files[:20])
-        )
-
-    if not mspms_allel:
-        raise ValueError(
-            f"No mspms allele files found.\n"
-            f"Total allele files: {len(allel_csv_files)}\n"
-            f"First 20 files:\n" +
-            "\n".join(str(f) for f in allel_csv_files[:20])
-        )
 
     comparison(
         tree_csv_files,

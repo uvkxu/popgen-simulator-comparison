@@ -248,8 +248,17 @@ rule pairwise_statistical_test:
         args_group=lambda wildcards: ",".join(
             wildcards.group_string.split("_")
         ),
-        input_dir_allel=lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/",
-        input_dir_tree=lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/",
+        args_group=lambda wildcards: ",".join(
+            wildcards.group_string.split("_")
+        ),
+         input_dir_allel=lambda wc: [
+            f"{ALLEL_FEATURES_DIR}/{wc.config}/",
+            f"{MSPMS_ALLEL_FEATURES_DIR}/{wc.config}/",
+        ],
+        input_dir_tree=lambda wc: [
+            f"{TREE_FEATURES_DIR}/{wc.config}/",
+            f"{MSPMS_TREE_FEATURES_DIR}/{wc.config}/",
+        ],
         err_file=lambda wildcards: f"{STATISTICS_RESULTS_DIR}/{wildcards.config}/{wildcards.mode}/{wildcards.group_string}.err"
     conda:
         "../envs/stats-test-env.yaml"
