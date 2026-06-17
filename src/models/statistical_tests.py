@@ -203,9 +203,23 @@ def comparison(
             })
 
     if not results:
-        raise ValueError(
-            f"No comparable features found for {simulator_a} vs {simulator_b}"
-        )
+    raise ValueError(
+        f"""
+        No comparable features found for {simulator_a} vs {simulator_b}
+
+        tree_dfs={len(tree_dfs)}
+        allele_dfs={len(allele_dfs)}
+
+        tree_simulators=
+        {tree_data['simulator'].value_counts() if tree_dfs else 'NO TREE DATA'}
+
+        allele_simulators=
+        {allele_data['simulator'].value_counts() if allele_dfs else 'NO ALLELE DATA'}
+
+        simulator_a={simulator_a}
+        simulator_b={simulator_b}
+        """
+            )
 
     df = pd.DataFrame(results)
 
