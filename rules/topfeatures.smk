@@ -248,9 +248,6 @@ rule pairwise_statistical_test:
         args_group=lambda wildcards: ",".join(
             wildcards.group_string.split("_")
         ),
-        args_group=lambda wildcards: ",".join(
-            wildcards.group_string.split("_")
-        ),
          input_dir_allel=lambda wc: [
             f"{ALLEL_FEATURES_DIR}/{wc.config}/",
             f"{MSPMS_ALLEL_FEATURES_DIR}/{wc.config}/",
