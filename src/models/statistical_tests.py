@@ -361,7 +361,19 @@ def main():
     allel_csv_files = []
 
     for tree_folder in input_folder_tree:
-        tree_csv_files += get_csv_files_mode(tree_folder, grouped_by, seq_len_group, sample_size_group)
+        files = get_csv_files_mode(
+            tree_folder,
+            grouped_by,
+            seq_len_group,
+            sample_size_group
+        )
+
+        tree_csv_files += files
+
+        if not files:
+            raise ValueError(
+                f"No tree files found in {tree_folder}"
+            )
 
     for allel_folder in input_folder_allel:
         allel_csv_files += get_csv_files_mode(allel_folder, grouped_by, seq_len_group, sample_size_group)
