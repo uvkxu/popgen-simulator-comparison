@@ -16,7 +16,7 @@ from snakemake_vars import FILE_FORMATS, PRECISION, SIMULATORS
 
 def clean_sim_output(input_file, output_file, sequence_length,
                             branch_decimals=None, position_decimals=None,
-                            factor=1.0, branches_already_scaled=False):
+                            factor=1.0, branches_already_scaled=False, merge_identical_trees=False):
     def scale_branch(m):
                     val = float(m.group(1))
                     if branches_already_scaled:
@@ -38,7 +38,7 @@ def clean_sim_output(input_file, output_file, sequence_length,
         pending_line = None
 
         while True:
-            if pending_line is not None:
+            if pending_line is not None and merge_identical_trees:
                 line = pending_line
                 pending_line = None
             else:
@@ -129,10 +129,20 @@ def clean_sim_output(input_file, output_file, sequence_length,
 
             # --- Handle tree lines with branch lengths ---
             elif "(" in line and ":" in line:
+                if not merge_identical_trees:
+                    scaled_line = (
+                        re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, line)
+                        if factor != 1
+                        else line
+                    )
+                    fout.write(scaled_line + "\n")
+                    continue
+
                 span, tree = parse_tree_line(line)
 
                 if tree is None:
                     raise ValueError(f"Could not parse tree line: {line}")
+
                 elif prev_tree is None:
                     prev_tree = tree
                     prev_span = span
@@ -229,6 +239,12 @@ def main():
         help="If raw file is just wished to be copied, put it here"
     )
 
+    parser.add_argument(
+        "--merge_identical_trees",
+        action="store_true",
+        help="Merge consecutive identical trees."
+    )
+
     args = parser.parse_args()
     output_file = args.output
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -265,7 +281,8 @@ def main():
         branch_decimals=precision,
         position_decimals=precision,
         factor=factor,
-        branches_already_scaled=(sim == "msprime" or sim == "slim" or "slim" in sim)
+        branches_already_scaled=(sim == "msprime" or sim == "slim" or "slim" in sim),
+        merge_identical_trees=args.merge_identical_trees
     )
 
 if __name__ == "__main__":
