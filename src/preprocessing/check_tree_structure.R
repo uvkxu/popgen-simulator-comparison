@@ -89,6 +89,12 @@ close(con)
 
 df <- do.call(rbind, results)
 
+output_dir <- dirname(output_file)
+
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+}
+
 write.csv(
   df,
   output_file,

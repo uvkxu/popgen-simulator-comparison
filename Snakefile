@@ -7,5 +7,5 @@ include: "rules/plots.smk"
 
 rule all:
     input:
-        STATS_RESULTS
+        TREE_CHECK
         

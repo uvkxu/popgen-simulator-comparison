@@ -89,3 +89,18 @@ rule compute_pigot_rho_stats_ms:
     
 
 
+rule check_tree_structure:
+    output:
+        check_file = f"{DATA_CHECK_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_tree_check.csv"
+    params:
+        err_file = lambda w: f"{DATA_CHECK_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
+        cleaned = f"{CLEAN_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_cleaned_output.txt",
+        combo_yaml = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+    conda:
+        "../envs/treestats-env.yaml"
+    shell:
+        """
+        scripts/run_with_errorlog.sh {params.err_file} \
+        Rscript src/preprocessing/check_tree_structure.R \
+            {params.cleaned} {params.combo_yaml} {output.check_file}
+        """
