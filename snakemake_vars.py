@@ -1020,7 +1020,7 @@ MERGED_STATS_OVERALL = [
 DATA_CHECK_DIR = Path(DATA_DIR) / "check_tree"
 
 TREE_CHECK = [
-    f"{DATA_CHECK_DIR}/{config}/{combo}/rep{rep}/{simulator}_tree_check.csv",
+    f"{DATA_CHECK_DIR}/{config}/{combo}/rep{rep}/{simulator}_tree_check.csv"
     for config in all_configs
     for combo in combinations_by_config[config]
     for rep in range(1, REPS + 1)
