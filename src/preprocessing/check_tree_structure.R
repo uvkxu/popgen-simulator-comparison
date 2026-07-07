@@ -89,6 +89,34 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
   height_difference <-
     tree_height_uw - max_depth_ape
 
+  lens <- c(
+    tree_id = length(tree_id),
+    expected_leaves = length(expected_leaves),
+    observed_leaves = length(n_leaves),
+    leaves_ok = length(n_leaves == expected_leaves),
+    expected_branches = length(expected_branches),
+    observed_branches = length(n_branches),
+    observed_branches_pd = length(n_branches_pd),
+    branch_difference = length(branch_difference),
+    n_unary_nodes = length(n_unary_nodes),
+    n_multifurcations = length(n_multifurcations),
+    unary_matches_difference =
+      length(branch_difference == n_unary_nodes),
+    tree_height_uw = length(tree_height_uw),
+    max_depth_ape = length(max_depth_ape),
+    branch_pd_difference = length(branch_pd_difference),
+    height_difference = length(height_difference)
+  )
+
+  if (any(lens != 1)) {
+    stop(
+      paste0(
+        "Invalid lengths for tree_id=", tree_id, "\n",
+        paste(names(lens), lens, sep = "=", collapse = "\n")
+      )
+    )
+  }
+
   results[[tree_id]] <- data.frame(
     tree_id = tree_id,
     expected_leaves = expected_leaves,
@@ -104,10 +132,8 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
       branch_difference == n_unary_nodes,
     tree_height_uw = tree_height_uw,
     max_depth_ape = max_depth_ape,
-    branch_pd_difference =
-      branch_pd_difference,
-    height_difference =
-      height_difference
+    branch_pd_difference = branch_pd_difference,
+    height_difference = height_difference
   )
 
   tree_id <- tree_id + 1
