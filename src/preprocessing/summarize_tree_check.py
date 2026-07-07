@@ -63,7 +63,9 @@ def main():
 
     args = parser.parse_args()
 
-    files = list(args.input_dir.rglob("tree_check.csv"))
+    files = list(
+        args.input_dir.rglob("*_tree_check.csv")
+    )
 
     print(f"Found {len(files)} tree_check files.")
     print(f"Using {args.n_jobs} workers.")
