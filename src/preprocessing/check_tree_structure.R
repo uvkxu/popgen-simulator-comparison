@@ -1,5 +1,6 @@
 library(ape)
 library(yaml)
+library(treestats)
 
 args <- commandArgs(trailingOnly = TRUE)
 
@@ -52,11 +53,18 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
     next
   }
 
+  tr_unweighted <- tr
+  tr_unweighted$edge.length <- rep(1, nrow(tr_unweighted$edge))
+
   n_leaves <- length(tr$tip.label)
 
   n_nodes <- length(unique(as.vector(tr$edge)))
 
   n_branches <- nrow(tr$edge)
+
+  n_branches_pd <- treestats::phylogenetic_diversity(
+    tr_unweighted
+  )
 
   expected_branches <- 2 * expected_leaves - 2
 
@@ -68,6 +76,19 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
 
   n_multifurcations <- sum(child_counts > 2)
 
+  tree_height_uw <- treestats::tree_height(
+    tr_unweighted
+  )
+  max_depth_ape <- max(
+    node.depth(tr_unweighted)
+  )
+
+  branch_pd_difference <-
+    n_branches_pd - n_branches
+
+  height_difference <-
+    tree_height_uw - max_depth_ape
+
   results[[tree_id]] <- data.frame(
     tree_id = tree_id,
     expected_leaves = expected_leaves,
@@ -75,11 +96,18 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
     leaves_ok = n_leaves == expected_leaves,
     expected_branches = expected_branches,
     observed_branches = n_branches,
+    observed_branches_pd = n_branches_pd,
     branch_difference = branch_difference,
     n_unary_nodes = n_unary_nodes,
     n_multifurcations = n_multifurcations,
     unary_matches_difference =
-      branch_difference == n_unary_nodes
+      branch_difference == n_unary_nodes,
+    tree_height_uw = tree_height_uw,
+    max_depth_ape = max_depth_ape,
+    branch_pd_difference =
+      branch_pd_difference,
+    height_difference =
+      height_difference,
   )
 
   tree_id <- tree_id + 1
