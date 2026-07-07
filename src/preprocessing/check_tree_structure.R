@@ -107,7 +107,7 @@ while (length(line <- readLines(con, n = 1, warn = FALSE)) > 0) {
     branch_pd_difference =
       branch_pd_difference,
     height_difference =
-      height_difference,
+      height_difference
   )
 
   tree_id <- tree_id + 1
