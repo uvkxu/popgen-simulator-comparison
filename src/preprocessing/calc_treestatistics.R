@@ -169,8 +169,8 @@ calculate_all_treestats <- function(phylo, normalize = FALSE, weighted = TRUE) {
   } else {
     stats <- list()
 
-    stats$tree_height_uw <- try_stat(phylo, treestats::tree_height)
-    stats$num_branches   <- try_stat(phylo, treestats::phylogenetic_diversity)
+    stats$tree_height_uw <- max(node.depth(phylo))
+    stats$num_branches <- nrow(phylo$edge)
 
     temp_stats <- tryCatch(expr = { treestats::laplacian_spectrum(phylo) },
                            error = function(e) { return(NA) })

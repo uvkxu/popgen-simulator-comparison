@@ -52,6 +52,8 @@ COLLECT_DIR = RESULTS_DIR / "collected"
 ALLELFEATURES_COLLECT_DIR = COLLECT_DIR / "allele"
 TREEFEATURES_COLLECT_DIR = COLLECT_DIR / "tree"
 
+PATCHED_TREE_FEATURES_DIR = FEATURES_DIR / "patched_tree"
+
 #-------COPY-FILE---------------
 COPY_DIR = Path("/hits/fast/cme/kuchve/run2/data")
 COPY_RAW_DATA_DIR = COPY_DIR/ "raw"
@@ -1025,4 +1027,13 @@ TREE_CHECK = [
     for combo in combinations_by_config[config]
     for rep in range(1, REPS + 1)
     for simulator in SIMULATORS
+]
+
+
+TREE_PATCHED = [
+    f"{PATCHED_TREE_DIR}/{config}/{combo}/rep{rep}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for rep in range(1, REPS + 1)
+    for sim in SIMULATORS
 ]
