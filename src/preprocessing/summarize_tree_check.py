@@ -15,21 +15,52 @@ def process_file(file):
 
         return {
             "file": str(file),
+            "simulator": file.name.replace("_tree_check.csv", ""),
+
             "n_trees": len(df),
+
             "n_wrong_leaves":
                 int((~df["leaves_ok"]).sum()),
+
             "n_branch_mismatch":
                 int((df["branch_difference"] != 0).sum()),
+
             "n_unary_trees":
                 int((df["n_unary_nodes"] > 0).sum()),
-            "max_unary_nodes":
-                int(df["n_unary_nodes"].max()),
-            "max_branch_difference":
-                int(df["branch_difference"].max()),
-            "min_branch_difference":
-                int(df["branch_difference"].min()),
+
             "n_polytomies":
                 int((df["n_multifurcations"] > 0).sum()),
+
+            # -------- neue Checks --------
+
+            "n_pd_branch_mismatch":
+                int((df["observed_branches"] !=
+                    df["observed_branches_pd"]).sum()),
+
+            "n_height_mismatch":
+                int((df["tree_height_uw"] !=
+                    df["max_depth_ape"]).sum()),
+
+            "max_unary_nodes":
+                int(df["n_unary_nodes"].max()),
+
+            "max_branch_difference":
+                int(df["branch_difference"].max()),
+
+            "min_branch_difference":
+                int(df["branch_difference"].min()),
+
+            "max_height_difference":
+                float(df["height_difference"].max()),
+
+            "min_height_difference":
+                float(df["height_difference"].min()),
+
+            "max_pd_branch_difference":
+                float(df["branch_pd_difference"].max()),
+
+            "min_pd_branch_difference":
+                float(df["branch_pd_difference"].min()),
         }
 
     except Exception as e:
@@ -139,6 +170,15 @@ def main():
         (summary["n_polytomies"] > 0).sum()
         if "n_polytomies" in summary.columns
         else 0,
+    )
+    print(
+    "Files with PD branch mismatch:",
+    (summary["n_pd_branch_mismatch"] > 0).sum()
+    )
+
+    print(
+        "Files with height mismatch:",
+        (summary["n_height_mismatch"] > 0).sum()
     )
 
 
