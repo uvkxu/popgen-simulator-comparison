@@ -52,7 +52,7 @@ COLLECT_DIR = RESULTS_DIR / "collected"
 ALLELFEATURES_COLLECT_DIR = COLLECT_DIR / "allele"
 TREEFEATURES_COLLECT_DIR = COLLECT_DIR / "tree"
 
-PATCHED_TREE_FEATURES_DIR = FEATURES_DIR / "patched_tree"
+PATCHED_TREE_DIR = FEATURES_DIR / "patched_tree"
 
 #-------COPY-FILE---------------
 COPY_DIR = Path("/hits/fast/cme/kuchve/run2/data")
