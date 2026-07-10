@@ -71,7 +71,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["mspms"] #["ms", "msms", "msprime"] #"msms", "msprime", "ms" "ms", "msms", 
+SIMULATORS = ["ms", "msms"] #["ms", "msms", "msprime"] #"msms", "msprime", "ms" "ms", "msms", 
 REPS = 200
 NUM_REPLICATES = 2
 PRECISION = 17
@@ -783,4 +783,14 @@ STATS_RESULTS = [
     for group_string in [
         "_".join(group) for group in simulator_groups
     ]
+]
+
+PATCHED_TREE_DIR = FEATURES_DIR / "patched_tree"
+
+TREE_PATCHED = [
+    f"{PATCHED_TREE_DIR}/{config}/{combo}/rep{rep}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for rep in range(1, REPS + 1)
+    for sim in SIMULATORS
 ]
