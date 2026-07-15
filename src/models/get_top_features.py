@@ -418,6 +418,20 @@ def run_feature_evaluation(
         "lap_entropy_uw",
         "lap_sum_uw",
         "tree_type_uw",
+        "min_laplace_uw",
+        "max_laplace_uw",
+        "laplace_spectrum_a_uw",
+        "laplace_spectrum_p_uw",
+        "laplace_spectrum_e_uw",
+        "laplace_spectrum_g_uw",
+        "mpd_uw",
+        "psv_uw",
+        "vpd_uw",
+        "mntd_uw",
+        "j_stat_uw",
+        "wiener_uw",
+        "treeness_uw",
+        "eigen_centralityW_uw"
 
         # --- compute_characteristic_features ---
         "cut_weight",
@@ -429,7 +443,7 @@ def run_feature_evaluation(
         "modularity",
         "fiedler_sd",
     ]
-
+    
     feature_names = [
         col for col in data.columns
         if col != dep_var and col not in FEATURES_TO_EXCLUDE
