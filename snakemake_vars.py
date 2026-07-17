@@ -71,7 +71,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["mspms"] #["ms", "msms", "msprime"] #"msms", "msprime", "ms" "ms", "msms", 
+SIMULATORS = ["ms", "msms", "mspms"] #["ms", "msms", "msprime"] #"msms", "msprime", "ms" "ms", "msms", 
 REPS = 200
 NUM_REPLICATES = 2
 PRECISION = 17
