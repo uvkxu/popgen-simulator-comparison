@@ -1122,8 +1122,10 @@ def main():
     for cleaned_folder in input_folder_cleaned:
         cleaned_csv_files += get_csv_files_mode(cleaned_folder, grouped_by, seq_len_group, sample_size_group)
 
-    assert len(tree_csv_files) == len(allel_csv_files)
-    # assert len(raw_csv_files) == len(allel_csv_files)
+    assert len(tree_csv_files) == len(allel_csv_files), (
+        f"Number of tree files ({len(tree_csv_files)}) does not match "
+        f"number of allele files ({len(allel_csv_files)})."
+    )
 
     run_feature_evaluation(
         simulator_group=simulator_group,
