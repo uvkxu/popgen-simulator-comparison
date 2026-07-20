@@ -1122,6 +1122,22 @@ def main():
     for cleaned_folder in input_folder_cleaned:
         cleaned_csv_files += get_csv_files_mode(cleaned_folder, grouped_by, seq_len_group, sample_size_group)
 
+    if simulator_group is not None:
+        tree_csv_files = [
+            f for f in tree_csv_files
+            if detect_simulator_from_yaml(f) in simulator_group
+        ]
+
+        allel_csv_files = [
+            f for f in allel_csv_files
+            if detect_simulator_from_yaml(f) in simulator_group
+        ]
+
+        cleaned_csv_files = [
+            f for f in cleaned_csv_files
+            if detect_simulator_from_yaml(f) in simulator_group
+        ]
+
     tree_set = {
         _relative_after_dir(f, "tree").with_name(
             _relative_after_dir(f, "tree").name.replace("_tree_features.csv", "")
