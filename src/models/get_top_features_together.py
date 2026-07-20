@@ -1122,6 +1122,37 @@ def main():
     for cleaned_folder in input_folder_cleaned:
         cleaned_csv_files += get_csv_files_mode(cleaned_folder, grouped_by, seq_len_group, sample_size_group)
 
+    tree_set = {
+        _relative_after_dir(f, "tree").with_name(
+            _relative_after_dir(f, "tree").name.replace("_tree_features.csv", "")
+        )
+        for f in tree_csv_files
+    }
+
+    allel_set = {
+        _relative_after_dir(f, "allele").with_name(
+            _relative_after_dir(f, "allele").name.replace("_allel_features.csv", "")
+        )
+        for f in allel_csv_files
+    }
+
+    missing_tree = allel_set - tree_set
+    missing_allel = tree_set - allel_set
+
+    if missing_tree or missing_allel:
+        msg = (
+            f"Number of tree files:   {len(tree_csv_files)}\n"
+            f"Number of allele files: {len(allel_csv_files)}\n"
+        )
+
+        if missing_tree:
+            msg += f"\nExample allele file without matching tree file:\n  {next(iter(missing_tree))}\n"
+
+        if missing_allel:
+            msg += f"\nExample tree file without matching allele file:\n  {next(iter(missing_allel))}\n"
+
+        raise ValueError(msg)
+
     assert len(tree_csv_files) == len(allel_csv_files), (
         f"Number of tree files ({len(tree_csv_files)}) does not match "
         f"number of allele files ({len(allel_csv_files)})."
