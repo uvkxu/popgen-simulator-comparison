@@ -115,6 +115,8 @@ def collect_and_merge_tree_allele_features(
     merged_dfs: list[pd.DataFrame] = []
 
     for tree_csv in tree_csv_files:
+        sim_name = detect_simulator_from_yaml(tree_csv)
+
         rel_tree = _relative_after_dir(tree_csv, "tree")
         key = rel_tree.with_name(rel_tree.name.replace(suffix_tree, ""))
 
