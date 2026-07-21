@@ -1113,14 +1113,9 @@ def main():
     allel_csv_files = []
     cleaned_csv_files = []
 
-    for tree_folder in input_folder_tree:
-        tree_csv_files += get_csv_files_mode(tree_folder, grouped_by, seq_len_group, sample_size_group)
-
-    for allel_folder in input_folder_allel:
-        allel_csv_files += get_csv_files_mode(allel_folder, grouped_by, seq_len_group, sample_size_group)
-
-    for cleaned_folder in input_folder_cleaned:
-        cleaned_csv_files += get_csv_files_mode(cleaned_folder, grouped_by, seq_len_group, sample_size_group)
+    tree_csv_files += get_csv_files_mode(input_folder_tree, grouped_by, seq_len_group, sample_size_group)
+    allel_csv_files += get_csv_files_mode(input_folder_allel, grouped_by, seq_len_group, sample_size_group)
+    cleaned_csv_files += get_csv_files_mode(input_folder_cleaned, grouped_by, seq_len_group, sample_size_group)
 
     if simulator_group is not None:
         tree_csv_files = [
