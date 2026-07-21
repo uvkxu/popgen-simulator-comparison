@@ -133,8 +133,10 @@ def collect_and_merge_tree_allele_features(
 
         if sum(counts) != len(df_tree):
             raise ValueError(
-                f"Tree count mismatch for {tree_csv}: "
-                f"sum(cleaned)={sum(counts)} vs tree_rows={len(df_tree)}"
+                f"Tree count mismatch for: \n"
+                f"sum(cleaned)={sum(counts)} vs tree_rows={len(df_tree)}\n"
+                f"Tree file: {tree_csv}\n"
+                f"Cleaned file: {cleaned_file}\n"
             )
 
         # --- aggregate trees per replicate ---
