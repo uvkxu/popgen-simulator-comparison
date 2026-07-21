@@ -169,18 +169,9 @@ rule compute_together_topfeatures_grouped_by_mode:
     resources:
         mem_mb=lambda wildcards, input: estimate_mem_mb_classification(input_folder=f"{ALLEL_FEATURES_DIR}/{wildcards.config}/", config=wildcards.config, group=wildcards.group_string, mode=wildcards.mode)
     params:
-        input_dir_allel=lambda wc: [
-            f"{ALLEL_FEATURES_DIR}/{wc.config}/",
-            f"{MSPMS_ALLEL_FEATURES_DIR}/{wc.config}/",
-        ],
-        input_dir_tree=lambda wc: [
-            f"{TREE_FEATURES_DIR}/{wc.config}/",
-            f"{MSPMS_TREE_FEATURES_DIR}/{wc.config}/",
-        ],
-        input_dir_cleaned=lambda wc: [
-            f"{CLEAN_DIR}/{wc.config}/",
-            f"{MSPMS_CLEAN_DIR}/{wc.config}/",
-        ],
+        input_dir_allel=lambda wc: f"{ALLEL_FEATURES_DIR}/{wc.config}/",
+        input_dir_tree=lambda wc: f"{TREE_FEATURES_DIR}/{wc.config}/",
+        input_dir_cleaned=lambda wc: f"{CLEAN_DIR}/{wc.config}/",
         args_group=lambda wildcards: ",".join(
             wildcards.group_string.split("_")
         ),
