@@ -932,23 +932,20 @@ def parse_args():
     parser.add_argument(
         "--input_folder_tree",
         type=Path,
-        nargs="+",
         required=True,
-        help="One or more tree input folders",
+        help="Tree input folder",
     )
     parser.add_argument(
         "--input_folder_allel",
         type=Path,
-        nargs="+",
         required=True,
-        help="One or more allele input folders",
+        help="Allele input folder",
     )
     parser.add_argument(
         "--input_folder_cleaned",
         type=Path,
-        nargs="+",
         required=True,
-        help="One or more cleaned input folders",
+        help="Cleaned input folder",
     )
     parser.add_argument("--output_folder", type=Path, required=True, help="Output folder path")
 
