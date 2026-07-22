@@ -5,6 +5,8 @@ rule run_config_combo_rep_simulation_demes:
         config_file = f"{CONFIG_DIR}/{{config}}.yaml"
     output:
         output_file = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_output.txt"
+    wildcard_constraints:
+        simulator=r"(ms|msms|mspms|msprime|slim)"
     params:
         combo_json=lambda w: combo_folder_to_json[w.combo],
         err_file=lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
@@ -48,4 +50,25 @@ rule create_combo_yaml_file:
         --combo '{params.combo_json}' \
         --output_file {output.output_file} \
         --nreps {NUM_REPLICATES}
+        """
+
+
+rule run_slim_with_coalescent_burn_in:
+    input:
+        config_file = f"{CONFIG_DIR}/one_population.yaml"
+    output:
+        output_file = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/rep{{rep}}/slim_s{{coalescent_samples}}_g{{slim_generations}}_output.txt"
+    params:
+        combo_json=lambda w: combo_folder_to_json[w.combo],
+        err_file=lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/slim_s{{coalescent_samples}}_g{{slim_generations}}.err",
+    shell:
+        r"""
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/simulations/slim_and_coalescent_run.py \
+        --config_path {input.config_file} \
+        --combo '{params.combo_json}' \
+        --nreps {NUM_REPLICATES} \
+        --output_file {output.output_file} \
+        --coalescent_samples {wildcards.coalescent_samples} \
+        --slim_generations {wildcards.slim_generations}
         """

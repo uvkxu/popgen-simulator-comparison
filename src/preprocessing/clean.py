@@ -224,7 +224,7 @@ def main():
         branch_decimals=precision,
         position_decimals=precision,
         factor= 4 * combo_params["population_size"],
-        slim_scaling_factor=combo_params.get("slim_scaling_factor", None) if sim != "slim" else None,
+        slim_scaling_factor=combo_params.get("slim_scaling_factor", None) if not ("slim" in sim) else None,
         branches_already_scaled=(sim == "msprime" or sim == "slim" or "slim" in sim)
     )
 
