@@ -1,37 +1,22 @@
 include: "../snakemake_vars.py"
 
 
-rule copy_combo_yaml_tree_features:
+TARGET_DIRS = {
+    "tree_features": TREE_FEATURES_DIR,
+    "allel_features": ALLEL_FEATURES_DIR,
+    "cleaned": CLEAN_DIR,
+    "tree_block": TREEBLOCKFEATURES_COLLECT_DIR,
+}
+
+rule copy_combo_yaml:
     output:
-        copy_file = f"{TREE_FEATURES_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+        copy_file=lambda wc: (
+            f"{TARGET_DIRS[wc.target]}/{wc.config}/{wc.combo}/{COMBO_PARAMETERS_YAML}"
+        )
     params:
-        input = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
-    run:
-        from pathlib import Path
-        import shutil
-
-        Path(output.copy_file).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(params.input, output.copy_file)
-
-
-rule copy_combo_yaml_allel_features:
-    output:
-        copy_file = f"{ALLEL_FEATURES_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
-    params:
-        input = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
-    run:
-        from pathlib import Path
-        import shutil
-
-        Path(output.copy_file).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(params.input, output.copy_file)
-
-
-rule copy_combo_yaml_cleaned:
-    output:
-        copy_file = f"{CLEAN_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
-    params:
-        input = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+        input=lambda wc: (
+            f"{RAW_DATA_DIR}/{wc.config}/{wc.combo}/{COMBO_PARAMETERS_YAML}"
+        )
     run:
         from pathlib import Path
         import shutil
