@@ -104,3 +104,22 @@ rule patched_tree_features:
         Rscript src/preprocessing/patch_tree_structure_features.R \
             {params.feature_file} {params.clean_file} {output.patched_file}
         """
+
+
+rule check_features_tree:
+    output:
+        report = f"{RESULTS_DIR}/check_tree_features/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_report.txt"
+    params:
+        err_file = lambda w: f"{RESULTS_DIR}/check_tree_features/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
+        feature_file= lambda w: f"{TREE_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_tree_features.csv",
+        clean_file= lambda w: f"{CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_cleaned_output.txt"
+    conda:
+        "../envs/allelstats-env.yaml"
+    shell:
+        """
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/preprocessing/check_tree_file.py \
+            --tree_file {params.feature_file} \
+            --clean_file {params.clean_file} \
+            --output_file {output.report} \
+        """

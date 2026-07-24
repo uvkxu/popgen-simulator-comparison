@@ -796,3 +796,11 @@ TREE_PATCHED = [
     for rep in range(1, REPS + 1)
     for sim in SIMULATORS
 ]
+
+CHECK_TREE_FEATURES = [
+    f"{RESULTS_DIR}/check_tree_features/{config}/{combo}/rep{rep}/{simulator}_report.txt"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for rep in range(1, REPS + 1)
+    for simulator in ["ms", "msms", "mspms"]
+]

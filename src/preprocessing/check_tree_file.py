@@ -1,111 +1,171 @@
-from pathlib import Path
-import re
-from multiprocessing import Pool, cpu_count
-from tqdm import tqdm
+#!/usr/bin/env python3
+
 import argparse
+import io
+import math
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from Bio import Phylo
 
 
-def check_tree_format(file_path: Path):
-    problems = 0
-    trees = 0
+def is_tree_line(line: str) -> bool:
+    """Return True if a line contains a Newick tree."""
+    line = line.strip()
 
-    try:
-        with open(file_path, "r") as f:
-            for i, line in enumerate(f, 1):
-                line = line.strip()
-
-                if (
-                    not line
-                    or line.startswith("//")
-                    or line.startswith("segsites")
-                    or line.startswith("positions")
-                ):
-                    continue
-
-                if "(" in line:
-                    trees += 1
-
-                    norm = re.sub(r";+$", ";", line)
-
-                    if norm.count(";") != 1:
-                        problems += 1
-
-                    if not norm.endswith(";"):
-                        problems += 1
-
-                    if norm.count("(") != norm.count(")"):
-                        problems += 1
-
-        return (str(file_path), trees, problems)
-
-    except Exception as e:
-        return (str(file_path), 0, f"ERROR: {e}")
-
-
-def process_all_files(root_dir: Path, pattern="*.txt", n_workers=1, use_threads=True):
-    # 🔥 Generator statt Liste → kein RAM-Bottleneck
-    files = root_dir.rglob(pattern)
-
-    print(f"Scanning files in: {root_dir}")
-    print(f"Pattern: {pattern}")
-
-    total_trees = 0
-    total_problems = 0
-    processed_files = 0
-
-    # 👉 ThreadPool ist für I/O oft besser
-    if use_threads:
-        from multiprocessing.dummy import Pool  # ThreadPool
-        print("Using THREAD pool (I/O optimized)")
-    else:
-        from multiprocessing import Pool
-        print("Using PROCESS pool")
-
-    with Pool(n_workers) as pool:
-        for file, trees, problems in tqdm(
-            pool.imap_unordered(check_tree_format, files),
-            desc="Checking files",
-            smoothing=0.1
-        ):
-            processed_files += 1
-
-            if isinstance(problems, str):
-                print(f"{file}: {problems}")
-                continue
-
-            total_trees += trees
-            total_problems += problems
-
-            if problems > 0:
-                print(f"[BAD] {file}: {problems} problems")
-
-            # 🔥 optional: heartbeat für lange Runs
-            if processed_files % 10000 == 0:
-                print(f"Processed {processed_files} files...")
-
-    print("\n--- SUMMARY ---")
-    print(f"Processed files: {processed_files}")
-    print(f"Total trees: {total_trees}")
-    print(f"Total problems: {total_problems}")
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--n_workers",
-        type=int,
-        default=None,
-        help="Number of parallel workers (default: cpu_count() // 2)"
+    return (
+        "(" in line
+        and ";" in line
+        and not line.startswith("//")
+        and not line.lower().startswith("segsites")
+        and not line.lower().startswith("positions")
     )
-    parser.add_argument("--input_folder", type=Path, required=True, help="Input folder containing .txt files")
 
-    return parser.parse_args()
+
+def load_trees(clean_file: str | Path):
+    """Extract all Newick trees from a clean simulation output file."""
+    trees = []
+
+    with open(clean_file, "r") as f:
+        for line in f:
+            if is_tree_line(line):
+                tree = Phylo.read(io.StringIO(line.strip()), "newick")
+                trees.append(tree)
+
+    return trees
+
+
+def phylogenetic_diversity(tree):
+    """
+    Phylogenetic diversity = sum of all branch lengths.
+    """
+    return sum(
+        clade.branch_length or 0.0
+        for clade in tree.find_clades()
+    )
+
+
+def blum_index(tree):
+    """
+    Blum index of imbalance.
+
+    Sum of log(N - 1) over all internal nodes,
+    where N is the number of descendant tips.
+    """
+    score = 0.0
+
+    def count_tips(clade):
+        nonlocal score
+
+        if clade.is_terminal():
+            return 1
+
+        n = sum(count_tips(child) for child in clade.clades)
+
+        if n > 1:
+            score += math.log(n - 1)
+
+        return n
+
+    count_tips(tree.root)
+
+    return score
+
 
 def main():
-    args = parse_args()
-    n_workers = args.n_workers or max(1, cpu_count() // 2)
-    print(f"Using {n_workers} workers")
+    parser = argparse.ArgumentParser(
+        description="Validate phylogenetic diversity and Blum index."
+    )
+    parser.add_argument(
+        "--tree_file",
+        type=Path,
+        required=True,
+        help="CSV containing computed tree features.",
+    )
+    parser.add_argument(
+        "--clean_file",
+        type=Path,
+        required=True,
+        help="Clean simulation output containing Newick trees.",
+    )
+    parser.add_argument(
+        "--output_file",
+        type=Path,
+        required=True,
+        help="Output report."
+    )
+    parser.add_argument(
+        "--atol",
+        type=float,
+        default=1e-3,
+        help="Absolute tolerance for floating-point comparisons.",
+    )
 
-    process_all_files(args.input_folder, n_workers=n_workers)
+    args = parser.parse_args()
+
+    features = pd.read_csv(args.tree_file)
+    trees = load_trees(args.clean_file)
+
+    if len(features) != len(trees):
+        raise ValueError(
+            f"Number of feature rows ({len(features)}) "
+            f"does not match number of trees ({len(trees)})."
+        )
+
+    output_created = False
+    out = None
+    mismatches = 0
+
+    for i, tree in enumerate(trees):
+        expected_pd = features.loc[i, "phylogenetic_div"]
+        expected_blum = features.loc[i, "blum"]
+
+        calculated_pd = phylogenetic_diversity(tree)
+        calculated_blum = blum_index(tree)
+
+        pd_ok = np.isclose(calculated_pd, expected_pd, atol=args.atol, rtol=0)
+        blum_ok = np.isclose(calculated_blum, expected_blum, atol=args.atol, rtol=0)
+
+        if pd_ok and blum_ok:
+            continue
+
+        mismatches += 1
+
+        if not output_created:
+            args.output_file.parent.mkdir(parents=True, exist_ok=True)
+            out = open(args.output_file, "w")
+            out.write(
+                "Validation report for tree features\n"
+                "===================================\n\n"
+            )
+            output_created = True
+
+        out.write(f"Tree {i + 1}\n")
+
+        if not pd_ok:
+            out.write(
+                "  Phylogenetic diversity mismatch\n"
+                f"    expected   : {expected_pd:.12f}\n"
+                f"    calculated : {calculated_pd:.12f}\n"
+            )
+
+        if not blum_ok:
+            out.write(
+                "  Blum index mismatch\n"
+                f"    expected   : {expected_blum:.12f}\n"
+                f"    calculated : {calculated_blum:.12f}\n"
+            )
+
+        out.write("\n")
+
+    if output_created:
+        out.write(
+            "===================================\n"
+            f"Summary: {mismatches} of {len(trees)} trees contained mismatching values.\n"
+        )
+        out.close()
+
 
 if __name__ == "__main__":
     main()
