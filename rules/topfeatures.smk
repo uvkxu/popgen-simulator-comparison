@@ -40,7 +40,7 @@ rule copy_combo_yaml_cleaned:
         shutil.copy(params.input, output.copy_file)
 
 
-rule copy_combo_yaml_cleaned:
+rule copy_combo_yaml_tree_block:
     output:
         copy_file = f"{TREEBLOCKFEATURES_COLLECT_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     params:
