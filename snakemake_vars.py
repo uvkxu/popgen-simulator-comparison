@@ -760,7 +760,7 @@ ALL_COPY_COMBO_YAML = [
     for config in all_configs
     for combo in combinations_by_config[config]
 ] + [
-    f"{TREEBLOCKFEATURES_COLLECT_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+    f"{TREEBLOCK_FEATURES_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
     for config in all_configs
     for combo in combinations_by_config[config]
 ]
