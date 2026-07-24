@@ -42,7 +42,7 @@ rule copy_combo_yaml_cleaned:
 
 rule copy_combo_yaml_tree_block:
     output:
-        copy_file = f"{TREEBLOCKFEATURES_COLLECT_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+        copy_file = f"{TREEBLOCK_FEATURES_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     params:
         input = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     run:
@@ -253,7 +253,7 @@ rule pairwise_statistical_test:
             wildcards.group_string.split("_")
         ),
         input_dir_allel=lambda wc: f"{ALLEL_FEATURES_DIR}/{wc.config}/",
-        input_dir_tree=lambda wc: f"{TREEBLOCKFEATURES_COLLECT_DIR}/{wc.config}/",
+        input_dir_tree=lambda wc: f"{TREEBLOCK_FEATURES_DIR}/{wc.config}/",
         err_file=lambda wildcards: f"{STATISTICS_RESULTS_DIR}/{wildcards.config}/{wildcards.mode}/{wildcards.group_string}.err"
     conda:
         "../envs/stats-test-env.yaml"
