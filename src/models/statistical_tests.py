@@ -276,16 +276,14 @@ def parse_args():
     parser.add_argument(
         "--input_folder_tree",
         type=Path,
-        nargs="+",
         required=True,
-        help="One or more tree input folders",
+        help="Tree input folder",
     )
     parser.add_argument(
         "--input_folder_allel",
         type=Path,
-        nargs="+",
         required=True,
-        help="One or more allele input folders",
+        help="Allele input folder",
     )
     parser.add_argument("--output_file", type=Path, required=True, help="Output file path")
 
@@ -357,27 +355,25 @@ def main():
     grouped_by = set(normalized_grouped_by)
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    tree_csv_files = []
-    allel_csv_files = []
 
-    for tree_folder in input_folder_tree:
-        files = get_csv_files_mode(
-            tree_folder,
-            grouped_by,
-            seq_len_group,
-            sample_size_group
+    tree_csv_files = get_csv_files_mode(
+        input_folder_tree,
+        grouped_by,
+        seq_len_group,
+        sample_size_group
+    )
+
+    if not tree_csv_files:
+        raise ValueError(
+            f"No tree files found in {input_folder_tree}"
         )
 
-        tree_csv_files += files
-
-        if not files:
-            raise ValueError(
-                f"No tree files found in {tree_folder}"
-            )
-
-    for allel_folder in input_folder_allel:
-        allel_csv_files += get_csv_files_mode(allel_folder, grouped_by, seq_len_group, sample_size_group)
-
+    allel_csv_files = get_csv_files_mode(
+        input_folder_allel,
+        grouped_by,
+        seq_len_group,
+        sample_size_group
+    )
 
     assert len(tree_csv_files) == len(allel_csv_files)
 

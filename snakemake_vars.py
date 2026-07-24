@@ -31,10 +31,6 @@ FEATURES_DIR = DATA_DIR / "features"
 TREE_FEATURES_DIR = FEATURES_DIR / "tree"
 ALLEL_FEATURES_DIR = FEATURES_DIR / "allele"
 
-MSPMS_ALLEL_FEATURES_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genome/data/features/allele")
-MSPMS_TREE_FEATURES_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genome/data/features/tree")
-MSPMS_CLEAN_DIR = Path("/hits/fast/cme/kuchve/with_recombination/msprime_indiscrete_genome/data/cleaned")
-
 
 PIGOT_RHO_DIR = FEATURES_DIR / "pigot_rho"
 
@@ -71,7 +67,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["ms", "msms", "mspms"] #["ms", "msms", "msprime"] #"msms", "msprime", "ms" "ms", "msms", 
+SIMULATORS = ["ms", "msms", "mspms", "msprime"] #["ms", "msms", "msprime"] #"msms", "msprime", "ms" "ms", "msms", 
 REPS = 200
 NUM_REPLICATES = 2
 PRECISION = 17
@@ -441,10 +437,11 @@ def format_feature_ranking_barplot(group):
 
 def format_classifier_importance_plot(classifier, group):
     return f"feature_importance_{'_'.join(group)}_{classifier}.png"
-            
-simulator_groups = list(combinations(SIMULATORS, 2))
+
+simulator_interest = ["ms", "msms", "mspms"]             
+simulator_groups = list(combinations(simulator_interest, 2))
 # simulator_groups = []
-simulator_groups.append(tuple(SIMULATORS))
+simulator_groups.append(tuple(simulator_interest))
 # simulator_groups = list(dict.fromkeys(simulator_groups))
 # simulator_groups.append(("msms", "msprime", "ms"))
 
