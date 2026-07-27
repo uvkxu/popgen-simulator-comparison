@@ -86,24 +86,7 @@ rule compute_pigot_rho_stats_ms:
         Rscript src/preprocessing/check_ultrametric.R \
             {params.cleaned} {output.pigotrhostats} {params.combo_yaml}
         """
-    
 
-
-rule patched_tree_features:
-    output:
-        patched_file = f"{PATCHED_TREE_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_tree_features.csv"
-    params:
-        err_file = lambda w: f"{PATCHED_TREE_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
-        feature_file= lambda w: f"{TREE_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_tree_features.csv",
-        clean_file= lambda w: f"{CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_cleaned_output.txt"
-    conda:
-        "../envs/treestats-env.yaml"
-    shell:
-        """
-        scripts/run_with_errorlog.sh {params.err_file} \
-        Rscript src/preprocessing/patch_tree_structure_features.R \
-            {params.feature_file} {params.clean_file} {output.patched_file}
-        """
 
 
 rule check_features_tree:
@@ -122,4 +105,23 @@ rule check_features_tree:
             --tree_file {params.feature_file} \
             --clean_file {params.clean_file} \
             --output_file {output.report} \
+        """
+
+
+rule fix_blum_phylo_tree:
+    output:
+        patched_file = f"{PATCHED_TREE_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_tree_features.csv"
+    params:
+        err_file = lambda w: f"{PATCHED_TREE_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
+        feature_file= lambda w: f"{TREE_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_tree_features.csv",
+        clean_file= lambda w: f"{CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_cleaned_output.txt"
+    conda:
+        "../envs/treestats-env.yaml"
+    shell:
+        """
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/preprocessing/replace_blum_phylogenetic_div.py \
+            --tree_file {params.feature_file} \
+            --clean_file {params.clean_file} \
+            --output_file {output.patched_file} \
         """
