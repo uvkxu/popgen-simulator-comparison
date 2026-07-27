@@ -116,7 +116,7 @@ rule fix_blum_phylo_tree:
         feature_file= lambda w: f"{TREE_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_tree_features.csv",
         clean_file= lambda w: f"{CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_cleaned_output.txt"
     conda:
-        "../envs/treestats-env.yaml"
+        "../envs/allelstats-env.yaml"
     shell:
         """
         scripts/run_with_errorlog.sh {params.err_file} \
