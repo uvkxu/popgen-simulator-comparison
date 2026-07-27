@@ -794,7 +794,7 @@ TREE_PATCHED = [
     for config in all_configs
     for combo in combinations_by_config[config]
     for rep in range(1, REPS + 1)
-    for sim in SIMULATORS
+    for sim in simulator_interest
 ]
 
 CHECK_TREE_FEATURES = [
@@ -802,5 +802,5 @@ CHECK_TREE_FEATURES = [
     for config in all_configs
     for combo in combinations_by_config[config]
     for rep in range(1, REPS + 1)
-    for simulator in ["ms", "msms", "mspms"]
+    for simulator in simulator_interest
 ]
