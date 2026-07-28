@@ -502,7 +502,7 @@ def run_feature_evaluation(
 
     feature_names = [
         col for col in data.columns
-        if col != dep_var and col not in FEATURES_TO_EXCLUDE
+        if col != dep_var and not any(excluded in col for excluded in FEATURES_TO_EXCLUDE)
     ]
 
     # If this is a tree-only run, restrict to predefined tree feature list
