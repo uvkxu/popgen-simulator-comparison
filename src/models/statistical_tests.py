@@ -186,7 +186,7 @@ def comparison(
             if feature == "simulator":
                 continue
 
-            if any(feature.startswith(excluded) for excluded in FEATURES_TO_EXCLUDE):
+            if any(feature in excluded for excluded in FEATURES_TO_EXCLUDE):
                 continue
 
             x = simA[feature].dropna()
