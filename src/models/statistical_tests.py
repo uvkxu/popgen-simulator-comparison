@@ -25,66 +25,66 @@ from snakemake_vars import (
 from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
 
-    FEATURES_TO_EXCLUDE = [
-        # --- stats_laplace (weighted = TRUE) ---
-        "lap_max",
-        "lap_fiedler",
-        "lap_var",
-        "lap_skew",
-        "lap_mean",
-        "lap_kurt",
-        "lap_second_min",
-        "lap_entropy",
-        "lap_sum",
-        "tree_type",
-        "cut_edge_weight",
-        "share_pos",
-        "share_neg",
-        "share_zero",
-        "ratio_neg_pos",
-        "dist_char",
+FEATURES_TO_EXCLUDE = [
+    # --- stats_laplace (weighted = TRUE) ---
+    "lap_max",
+    "lap_fiedler",
+    "lap_var",
+    "lap_skew",
+    "lap_mean",
+    "lap_kurt",
+    "lap_second_min",
+    "lap_entropy",
+    "lap_sum",
+    "tree_type",
+    "cut_edge_weight",
+    "share_pos",
+    "share_neg",
+    "share_zero",
+    "ratio_neg_pos",
+    "dist_char",
 
-        # --- stats_laplace (weighted = FALSE / unweighted) ---
-        "lap_max_uw",
-        "lap_fiedler_uw",
-        "lap_var_uw",
-        "lap_skew_uw",
-        "lap_mean_uw",
-        "lap_kurt_uw",
-        "lap_second_min_uw",
-        "lap_entropy_uw",
-        "lap_sum_uw",
-        "tree_type_uw",
-        "laplace_spectrum_a_uw",
-        "laplace_spectrum_p_uw",
-        "laplace_spectrum_e_uw",
-        "laplace_spectrum_g_uw",
-        "min_laplace_uw",
-        "max_laplace_uw",
-        "min_adj_uw",
-        "max_adj_uw",
-        "mpd_uw",
-        "psv_uw",
-        "vpd_uw",
-        "mntd_uw",
-        "j_stat_uw",
-        "wiener_uw",
-        "max_closenessW_uw",
-        "eigen_centralityW_uw",
-        "treeness_uw"
+    # --- stats_laplace (weighted = FALSE / unweighted) ---
+    "lap_max_uw",
+    "lap_fiedler_uw",
+    "lap_var_uw",
+    "lap_skew_uw",
+    "lap_mean_uw",
+    "lap_kurt_uw",
+    "lap_second_min_uw",
+    "lap_entropy_uw",
+    "lap_sum_uw",
+    "tree_type_uw",
+    "laplace_spectrum_a_uw",
+    "laplace_spectrum_p_uw",
+    "laplace_spectrum_e_uw",
+    "laplace_spectrum_g_uw",
+    "min_laplace_uw",
+    "max_laplace_uw",
+    "min_adj_uw",
+    "max_adj_uw",
+    "mpd_uw",
+    "psv_uw",
+    "vpd_uw",
+    "mntd_uw",
+    "j_stat_uw",
+    "wiener_uw",
+    "max_closenessW_uw",
+    "eigen_centralityW_uw",
+    "treeness_uw"
 
-        # --- compute_characteristic_features ---
-        "cut_weight",
-        "conductance",
-        "normalized_cut",
-        "bottleneck_strength",
-        "density_pos",
-        "density_neg",
-        "modularity",
-        "fiedler_sd",
-    ]
+    # --- compute_characteristic_features ---
+    "cut_weight",
+    "conductance",
+    "normalized_cut",
+    "bottleneck_strength",
+    "density_pos",
+    "density_neg",
+    "modularity",
+    "fiedler_sd",
+]
 
-    
+
 def _relative_after_dir(p: Path, anchor: str) -> Path:
     """
     Return path relative to the directory named `anchor`
