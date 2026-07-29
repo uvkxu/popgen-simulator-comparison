@@ -591,7 +591,7 @@ def run_feature_evaluation(
     feature_names = [
         col for col in data.columns
         if col != dep_var
-        and not any(col == f or col.startswith(f + "_") for f in FEATURES_TO_EXCLUDE)
+        and not any(f in col or col.startswith(f + "_") for f in FEATURES_TO_EXCLUDE)
     ]
 
     y = LabelEncoder().fit_transform(data[dep_var])
@@ -700,7 +700,6 @@ def run_feature_evaluation(
     class_counts = np.bincount(y)
     majority_prop = class_counts.max() / class_counts.sum()
 
-    """
     # permutation importance = drop in accuracy (use best iteration only)
     mean_drop, std_drop, baseline_acc = permutation_importance_accuracy(
         clf=clf,
@@ -756,34 +755,7 @@ def run_feature_evaluation(
         passed_acc = accuracy_score(y_valid, passed_preds)
     else:
         passed_acc = np.nan
-    """
 
-    single_feature_scores = single_feature_accuracy(
-        X_train=X_train,
-        X_valid=X_valid,
-        y_train=y_train,
-        y_valid=y_valid,
-        feature_names=feature_names,
-        xgb_params=xgb_params,
-        es_rounds=es_rounds,
-    )
-
-    feature_records = []
-
-    for feature, acc in single_feature_scores.items():
-        feature_records.append(
-            {
-                "feature": feature,
-                "max_accuracy": float(acc),
-                XGB_STR: float(acc),
-            }
-        )
-
-    feature_records_sorted = sorted(
-        feature_records,
-        key=lambda d: d["max_accuracy"],
-        reverse=True,
-    )
 
     # ---------------------------------------------------------
     # Evaluate with fixed TOP_FEATURES: retrain once
@@ -1077,6 +1049,60 @@ def single_feature_accuracy(
         results[feature] = acc
 
     return results
+
+
+# -----------------------------
+# Permutation-importance helpers
+# -----------------------------
+def permutation_importance_accuracy(
+    clf: xgb.XGBClassifier,
+    X_valid: pd.DataFrame,
+    y_valid: np.ndarray,
+    feature_names: list[str],
+    n_repeats: int = 1,
+    seed: int = 0,
+    iteration_range: tuple[int, int] | None = None,
+) -> tuple[dict[str, float], dict[str, float], float]:
+    """
+    Computes permutation importance w.r.t. accuracy on a *fixed* trained model.
+
+    Returns:
+      mean_drop: dict feature -> mean(baseline_acc - permuted_acc)
+      std_drop:  dict feature -> std(baseline_acc - permuted_acc)
+      baseline_acc: accuracy on unpermuted X_valid
+    """
+    rng = np.random.default_rng(seed)
+
+    baseline_proba = clf.predict_proba(X_valid, iteration_range=iteration_range)
+    baseline_preds = _pred_labels_from_proba(baseline_proba)
+    baseline_acc = accuracy_score(y_valid, baseline_preds)
+
+    mean_drop: dict[str, float] = {}
+    std_drop: dict[str, float] = {}
+
+    Xv = X_valid.copy()
+
+    for f in feature_names:
+        drops = []
+        original = Xv[f].to_numpy(copy=True)
+
+        for _ in range(n_repeats):
+            shuffled = original.copy()
+            rng.shuffle(shuffled)
+            Xv[f] = shuffled
+
+            proba_perm = clf.predict_proba(Xv, iteration_range=iteration_range)
+            preds_perm = _pred_labels_from_proba(proba_perm)
+            acc_perm = accuracy_score(y_valid, preds_perm)
+            drops.append(baseline_acc - acc_perm)
+
+        # restore
+        Xv[f] = original
+
+        mean_drop[f] = float(np.mean(drops))
+        std_drop[f] = float(np.std(drops, ddof=0))
+
+    return mean_drop, std_drop, float(baseline_acc)
 
 
 
