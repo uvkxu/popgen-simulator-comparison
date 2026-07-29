@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, log_loss
+from sklearn.model_selection import GroupShuffleSplit
 
 import optuna
 import optuna.logging
@@ -32,7 +33,7 @@ from snakemake_vars import (
     format_classifier_importance_plot,
     XGB_STR,
 )
-from utils.io_helpers import collect_csv_files, assign_simulator_labels
+from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
 
 TOP_TREE_FEATURES = [
@@ -45,6 +46,7 @@ TOP_ALLEL_FEATURES = [
     "difficulty",
     "bollback_multinomial",
 ]
+
 
 features = [
     "min_laplace",
@@ -99,6 +101,29 @@ features = [
     "max_adj",
 ]
 
+def assign_simulator_labels(csv_files, selected_simulators, simulator_id=True):
+    """
+    Load CSVs and add a 'simulator' column based on filename.
+    Expects a list of Path objects.
+    """
+    if csv_files is None:
+        return []
+
+    all_dfs = []
+
+    for sim_id, csv_file in enumerate(csv_files):
+        df = pd.read_csv(csv_file)
+        sim = detect_simulator_from_yaml(
+                input_file=csv_file
+            )
+
+        if sim in selected_simulators:
+            df['simulator'] = sim
+            if simulator_id:
+                df["simulation_id"] = sim_id
+            all_dfs.append(df)
+
+    return all_dfs
 
 def _pred_labels_from_proba(proba: np.ndarray) -> np.ndarray:
     """
@@ -419,7 +444,7 @@ def run_feature_evaluation(
     drop_threshold: float = 0.0,
 ):
     # --- Load and label data ---
-    all_dfs = assign_simulator_labels(csv_files, simulator_group)
+    all_dfs = assign_simulator_labels(csv_files, simulator_group, simulator_id="tree" in str(output_dir))
     data = pd.concat(all_dfs, ignore_index=True)
     del all_dfs
 
@@ -502,12 +527,15 @@ def run_feature_evaluation(
 
     feature_names = [
         col for col in data.columns
-        if col != dep_var and not any(excluded in col for excluded in FEATURES_TO_EXCLUDE)
+        if col not in [dep_var, "simulation_id"]
+        and not any(excluded in col for excluded in FEATURES_TO_EXCLUDE)
     ]
 
     # If this is a tree-only run, restrict to predefined tree feature list
     if "tree" in str(output_dir):
         feature_names = [f for f in features if f in feature_names]
+
+    groups = data["simulation_id"] if "simulation_id" in data.columns else None
 
     y = LabelEncoder().fit_transform(data[dep_var])
     X = data[feature_names].copy()
@@ -604,9 +632,31 @@ def run_feature_evaluation(
     else:
         raise ValueError(f"Neither tree nor allel in outputdir name: {output_dir}")
 
-    X_train, X_valid, y_train, y_valid = train_test_split(
-        X, y, stratify=y, test_size=0.2, random_state=0
-    )
+    if groups is not None:
+        gss = GroupShuffleSplit(
+            n_splits=1,
+            test_size=0.2,
+            random_state=0,
+        )
+
+        train_idx, valid_idx = next(
+            gss.split(X, y, groups=groups)
+        )
+
+        X_train = X.iloc[train_idx].copy()
+        X_valid = X.iloc[valid_idx].copy()
+        y_train = y[train_idx]
+        y_valid = y[valid_idx]
+
+    else:
+        X_train, X_valid, y_train, y_valid = train_test_split(
+            X,
+            y,
+            stratify=y,
+            test_size=0.2,
+            random_state=0,
+        )
+        
     if "difficulty" in X_train.columns:
         median_diff = X_train["difficulty"].median(skipna=True)
         X_train["difficulty"] = X_train["difficulty"].fillna(median_diff)
