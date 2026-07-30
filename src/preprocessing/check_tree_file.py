@@ -73,6 +73,40 @@ def blum_index(tree):
     return score
 
 
+def eigen_centrality(tree):
+    """
+    Compute the maximum eigenvector centrality of a Bio.Phylo tree.
+
+    Corresponds to:
+    max(treestats::eigen_centrality(tree, weight = FALSE)$eigenvector)
+    """
+
+    nodes = list(tree.find_clades(order="level"))
+    node_to_idx = {node: i for i, node in enumerate(nodes)}
+
+    n = len(nodes)
+    A = np.zeros((n, n), dtype=float)
+
+    # unweighted adjacency matrix
+    for parent in tree.find_clades(order="level"):
+        i = node_to_idx[parent]
+
+        for child in parent.clades:
+            j = node_to_idx[child]
+
+            A[i, j] = 1.0
+            A[j, i] = 1.0
+
+    eigvals, eigvecs = np.linalg.eigh(A)
+
+    # largest eigenvalue
+    idx = np.argmax(eigvals)
+
+    eigenvector = np.abs(eigvecs[:, idx])
+
+    return float(np.max(eigenvector))
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Validate phylogenetic diversity and Blum index."
@@ -120,14 +154,17 @@ def main():
     for i, tree in enumerate(trees):
         expected_pd = features.loc[i, "phylogenetic_div"]
         expected_blum = features.loc[i, "blum"]
+        expected_eigen = features.loc[i, "eigen_centrality"]
 
         calculated_pd = phylogenetic_diversity(tree)
         calculated_blum = blum_index(tree)
+        calculated_eigen = eigen_centrality(tree)
 
         pd_ok = np.isclose(calculated_pd, expected_pd, atol=args.atol, rtol=0)
         blum_ok = np.isclose(calculated_blum, expected_blum, atol=args.atol, rtol=0)
+        eigen_ok = np.isclose(calculated_eigen, expected_eigen, atol=args.atol, rtol=0)
 
-        if pd_ok and blum_ok:
+        if pd_ok and blum_ok and eigen_ok:
             continue
 
         mismatches += 1
