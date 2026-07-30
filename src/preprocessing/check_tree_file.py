@@ -202,6 +202,9 @@ def main():
             f"Summary: {mismatches} of {len(trees)} trees contained mismatching values.\n"
         )
         out.close()
+    else:
+        args.output_file.parent.mkdir(parents=True, exist_ok=True)
+        args.output_file.touch()
 
 
 if __name__ == "__main__":
