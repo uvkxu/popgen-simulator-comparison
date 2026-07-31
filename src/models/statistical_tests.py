@@ -137,7 +137,6 @@ def comparison(
     simB = data[data["simulator"] == simulator_b]
 
     FEATURES_TO_EXCLUDE = [
-        "phylogenetic_div",
         # --- stats_laplace (weighted = TRUE) ---
         "lap_max",
         "lap_fiedler",
@@ -167,6 +166,23 @@ def comparison(
         "lap_entropy_uw",
         "lap_sum_uw",
         "tree_type_uw",
+        "laplace_spectrum_a_uw",
+        "laplace_spectrum_p_uw",
+        "laplace_spectrum_e_uw",
+        "laplace_spectrum_g_uw",
+        "min_laplace_uw",
+        "max_laplace_uw",
+        "min_adj_uw",
+        "max_adj_uw",
+        "mpd_uw",
+        "psv_uw",
+        "vpd_uw",
+        "mntd_uw",
+        "j_stat_uw",
+        "wiener_uw",
+        "max_closenessW_uw",
+        "eigen_centralityW_uw",
+        "treeness_uw"
 
         # --- compute_characteristic_features ---
         "cut_weight",
