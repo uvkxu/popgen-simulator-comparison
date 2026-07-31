@@ -133,6 +133,21 @@ def comparison(
     data = pd.concat(all_dfs, ignore_index=True)
     del all_dfs
 
+    MAX_NAN_FRAC = 0.05
+
+    for col in list(data.columns):
+        if col == "simulator":
+            continue
+
+        frac_nan = data[col].isna().mean()
+
+        if frac_nan >= MAX_NAN_FRAC:
+            print(
+                f"Dropped feature '{col}' "
+                f"({frac_nan:.2%} NaNs >= {MAX_NAN_FRAC:.2%})."
+            )
+            data = data.drop(columns=col)
+
     simA = data[data["simulator"] == simulator_a]
     simB = data[data["simulator"] == simulator_b]
 
