@@ -363,10 +363,32 @@ def main():
     tree_csv_files = get_csv_files_mode(input_folder_tree, grouped_by, seq_len_group, sample_size_group)
     allel_csv_files = get_csv_files_mode(input_folder_allel, grouped_by, seq_len_group, sample_size_group)
 
-    assert len(tree_csv_files) == len(allel_csv_files), (
-        f"Length mismatch: tree_csv_files={len(tree_csv_files)}, "
-        f"allel_csv_files={len(allel_csv_files)}"
-    )
+    if len(tree_csv_files) != len(allel_csv_files):
+        tree_keys = {
+            _relative_after_dir(p, "tree").with_name(
+                p.name.replace("_tree_features.csv", "_allel_features.csv")
+            )
+            for p in tree_csv_files
+        }
+
+        allele_lookup = {
+            _relative_after_dir(p, "allele"): p
+            for p in allel_csv_files
+        }
+
+        extra_allele_keys = allele_lookup.keys() - tree_keys
+
+        extra_allele_files = [
+            str(allele_lookup[key])
+            for key in sorted(extra_allele_keys)
+        ]
+
+        raise AssertionError(
+            f"Tree/allele file count mismatch: "
+            f"tree={len(tree_csv_files)}, allele={len(allel_csv_files)}\n"
+            f"Allele files without matching tree file:\n"
+            + "\n".join(extra_allele_files)
+        )
 
     comparison(
         tree_csv_files,
