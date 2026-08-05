@@ -363,7 +363,10 @@ def main():
     tree_csv_files = get_csv_files_mode(input_folder_tree, grouped_by, seq_len_group, sample_size_group)
     allel_csv_files = get_csv_files_mode(input_folder_allel, grouped_by, seq_len_group, sample_size_group)
 
-    assert len(tree_csv_files) == len(allel_csv_files)
+    assert len(tree_csv_files) == len(allel_csv_files), (
+        f"Length mismatch: tree_csv_files={len(tree_csv_files)}, "
+        f"allel_csv_files={len(allel_csv_files)}"
+    )
 
     comparison(
         tree_csv_files,
