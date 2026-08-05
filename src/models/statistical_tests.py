@@ -253,7 +253,7 @@ def csv_list(s: str) -> list[str]:
     return [x.strip() for x in s.split(",") if x.strip()]
 
 
-def get_csv_files_mode(input_folder, grouped_by, seq_len_group=None, sample_size_group=None):
+def get_csv_files_mode(input_folder, grouped_by, seq_len_group=None, sample_size_group=None, simulator_group=None):
     csv_my_mode = []
 
     for root, _, files in os.walk(input_folder):
@@ -280,7 +280,16 @@ def get_csv_files_mode(input_folder, grouped_by, seq_len_group=None, sample_size
                 and (("sample_size" not in grouped_by) or (sample_size == sample_size_group and usePrecision))
                 and (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
             ):
-                csv_my_mode += collect_csv_files(root_path)
+                csv_files = list(root_path.rglob("*.csv"))
+
+                if simulator_group is not None:
+                    csv_files = [
+                        csv_file
+                        for csv_file in csv_files
+                        if detect_simulator_from_yaml(csv_file) in simulator_group
+                    ]
+
+                csv_my_mode += csv_files
 
     return csv_my_mode
 
@@ -360,8 +369,8 @@ def main():
     grouped_by = set(normalized_grouped_by)
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    tree_csv_files = get_csv_files_mode(input_folder_tree, grouped_by, seq_len_group, sample_size_group)
-    allel_csv_files = get_csv_files_mode(input_folder_allel, grouped_by, seq_len_group, sample_size_group)
+    tree_csv_files = get_csv_files_mode(input_folder_tree, grouped_by, seq_len_group, sample_size_group, simulator_group)
+    allel_csv_files = get_csv_files_mode(input_folder_allel, grouped_by, seq_len_group, sample_size_group, simulator_group)
 
     if len(tree_csv_files) != len(allel_csv_files):
         tree_keys = {
