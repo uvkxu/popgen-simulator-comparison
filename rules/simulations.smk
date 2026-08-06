@@ -61,6 +61,8 @@ rule run_slim_with_coalescent_burn_in:
     params:
         combo_json=lambda w: combo_folder_to_json[w.combo],
         err_file=lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/slim_s{w.coalescent_samples}_g{w.slim_generations}.err",
+    conda:
+        "../envs/simulations-env.yaml"
     shell:
         r"""
         scripts/run_with_errorlog.sh {params.err_file} \
