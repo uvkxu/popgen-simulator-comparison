@@ -43,7 +43,7 @@ def run_slim_and_coalescent(
     L = combo["sequence_lengths"]
 
     if "mutation_rate" in config:
-        mu = combo["mutation_rate"]
+        mu = config["mutation_rate"]
     else:
         mu = 0
 
