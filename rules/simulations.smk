@@ -60,7 +60,7 @@ rule run_slim_with_coalescent_burn_in:
         output_file = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/rep{{rep}}/slim_s{{coalescent_samples}}_g{{slim_generations}}_output.txt"
     params:
         combo_json=lambda w: combo_folder_to_json[w.combo],
-        err_file=lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/slim_s{{coalescent_samples}}_g{{slim_generations}}.err",
+        err_file=lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/slim_s{w.coalescent_samples}_g{w.slim_generations}.err",
     shell:
         r"""
         scripts/run_with_errorlog.sh {params.err_file} \
