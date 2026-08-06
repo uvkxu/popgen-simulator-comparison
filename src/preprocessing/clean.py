@@ -136,7 +136,6 @@ def main():
         "--sim",
         type=str,
         required=True,
-        choices=SIMULATORS,
         help="Simulator used to generate the input files"
     )
 
