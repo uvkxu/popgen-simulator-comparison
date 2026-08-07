@@ -538,7 +538,7 @@ def format_classifier_importance_plot(classifier, group):
             
 simulator_interest = ["slim", "slim_s1000_g100"]
 # simulator_groups = list(combinations(simulator_interest, 2))
-simulator_groups = [tuple("slim", "slim_s1000_g100")]
+simulator_groups = [tuple(simulator_interest)]
 '''
 simulator_groups = []
 for sim in simulator_interest:
