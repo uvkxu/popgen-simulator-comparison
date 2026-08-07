@@ -62,7 +62,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["msms", "msprime", "ms", "slim"] #msms_ms behaves the same as just msms 
+SIMULATORS = ["msms", "msprime", "ms", "slim", "slim_s1000_g100"] #msms_ms behaves the same as just msms 
 REPS = 200
 NUM_REPLICATES = 2
 PRECISION = 17
@@ -537,12 +537,15 @@ def format_classifier_importance_plot(classifier, group):
     return f"feature_importance_{'_'.join(group)}_{classifier}.png"
             
 # simulator_groups = list(combinations(SIMULATORS, 2))
-simulator_groups = []
+simulator_interest = ["slim_s1000_g100", "msprime"]
+simulator_groups = list(combinations(simulator_interest, 2))
+'''
 simulator_groups.append(tuple(SIMULATORS))
 for sim in SIMULATORS:
     if sim != "slim":
         simulator_groups.append((sim, "slim"))
 simulator_groups = list(dict.fromkeys(simulator_groups))
+'''
 # simulator_groups.append(("msms", "msprime", "ms"))
 
 def get_topfeatures_input(config, mode, feature_type, group=None, combo=None):
