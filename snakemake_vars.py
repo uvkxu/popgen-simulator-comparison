@@ -62,7 +62,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["msms", "msprime", "ms", "slim", "slim_s1000_g100"] #msms_ms behaves the same as just msms 
+SIMULATORS = ["msms", "msprime", "ms", "slim", "slim-s1000-g100"] #msms_ms behaves the same as just msms 
 REPS = 200
 NUM_REPLICATES = 2
 PRECISION = 17
@@ -536,7 +536,7 @@ def format_feature_ranking_barplot(group):
 def format_classifier_importance_plot(classifier, group):
     return f"feature_importance_{'_'.join(group)}_{classifier}.png"
             
-simulator_interest = ["slim", "slim_s1000_g100"]
+simulator_interest = ["slim", "slim-s1000-g100"]
 # simulator_groups = list(combinations(simulator_interest, 2))
 simulator_groups = [tuple(simulator_interest)]
 '''
@@ -677,13 +677,13 @@ ALL_FEATURES = [
     f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
     for config in all_configs
     for combo in combinations_by_config[config]
-    for sim in ["slim_s1000_g100"]
+    for sim in ["slim-s1000-g100"]
     for i in range(REPS)
 ] + [
     f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
     for config in all_configs
     for combo in combinations_by_config[config]
-    for sim in ["slim_s1000_g100"]
+    for sim in ["slim-s1000-g100"]
     for i in range(REPS)
 ]
 
