@@ -7,4 +7,4 @@ include: "rules/plots.smk"
 
 rule all:
     input:
-        ALL_FEATURES
+        STATS_RESULTS

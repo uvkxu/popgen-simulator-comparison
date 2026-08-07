@@ -536,16 +536,13 @@ def format_feature_ranking_barplot(group):
 def format_classifier_importance_plot(classifier, group):
     return f"feature_importance_{'_'.join(group)}_{classifier}.png"
             
-# simulator_groups = list(combinations(SIMULATORS, 2))
-simulator_interest = ["slim_s1000_g100", "msprime"]
-simulator_groups = list(combinations(simulator_interest, 2))
-'''
-simulator_groups.append(tuple(SIMULATORS))
-for sim in SIMULATORS:
-    if sim != "slim":
+simulator_interest = ["slim", "msprime", "msms", "ms"]
+# simulator_groups = list(combinations(simulator_interest, 2))
+simulator_groups = []
+for sim in simulator_interest:
+    if not "slim" in sim:
         simulator_groups.append((sim, "slim"))
-simulator_groups = list(dict.fromkeys(simulator_groups))
-'''
+# simulator_groups = list(dict.fromkeys(simulator_groups))
 # simulator_groups.append(("msms", "msprime", "ms"))
 
 def get_topfeatures_input(config, mode, feature_type, group=None, combo=None):
@@ -958,3 +955,15 @@ def combo_yamls_tree(config):
 
 def combo_yamls_allel(config):
     return [f"{ALLEL_FEATURES_DIR}/{config}/{c}/{COMBO_PARAMETERS_YAML}" for c in combinations_by_config[config]]
+
+
+STATISTICS_RESULTS_DIR = RESULTS_DIR / "statistics"
+
+STATS_RESULTS = [
+    f"{STATISTICS_RESULTS_DIR}/{config}/{mode}/{group_string}_feature_comparison.csv"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for group_string in [
+        "_".join(group) for group in simulator_groups
+    ]
+]
