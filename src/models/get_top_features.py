@@ -405,6 +405,8 @@ def run_feature_evaluation(
         "share_zero",
         "ratio_neg_pos",
         "dist_char",
+        "eigen_centrality",
+        "eigen_centralityW",
 
         # --- stats_laplace (weighted = FALSE / unweighted) ---
         "lap_max_uw",
