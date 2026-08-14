@@ -34,7 +34,7 @@ from snakemake_vars import (
 )
 from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
-FEATURES_TO_EXCLUDE = {
+EXCLUDE_FEATURES = {
     # topology
     "non_binary_nodes",
     "non_binary_nodes_frac",
