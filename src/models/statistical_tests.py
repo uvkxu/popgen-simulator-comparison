@@ -131,6 +131,8 @@ def comparison(
         simA = tree_data[tree_data["simulator"] == simulator_a]
         simB = tree_data[tree_data["simulator"] == simulator_b]
 
+        used_tree_features = []
+
         for feature in tree_data.columns:
 
             if feature == "simulator":
@@ -144,6 +146,8 @@ def comparison(
 
             if len(x) == 0 or len(y) == 0:
                 continue
+
+            used_tree_features.append(feature)
 
             stat, p = mannwhitneyu(
                 x,
@@ -160,6 +164,9 @@ def comparison(
                 "median_A": x.median(),
                 "median_B": y.median(),
             })
+        
+        print(f"Tree features used: {len(used_tree_features)}")
+        print(sorted(used_tree_features))
 
     # --------------------------------------------------
     # ALLELE FEATURES
@@ -183,6 +190,8 @@ def comparison(
         simA = allele_data[allele_data["simulator"] == simulator_a]
         simB = allele_data[allele_data["simulator"] == simulator_b]
 
+        used_allele_features = []
+
         for feature in allele_data.columns:
 
             if feature == "simulator":
@@ -196,6 +205,8 @@ def comparison(
 
             if len(x) == 0 or len(y) == 0:
                 continue
+
+            used_allele_features.append(feature)
 
             stat, p = mannwhitneyu(
                 x,
@@ -212,6 +223,9 @@ def comparison(
                 "median_A": x.median(),
                 "median_B": y.median(),
             })
+    
+        print(f"Allele features used: {len(used_allele_features)}")
+        print(sorted(used_allele_features))
 
     if not results:
         raise ValueError(
