@@ -34,22 +34,36 @@ from snakemake_vars import (
 )
 from utils.io_helpers import collect_csv_files, assign_simulator_labels
 
-EXCLUDE_FEATURES = {
-    "non_binary_nodes", "non_binary_nodes_frac",
+FEATURES_TO_EXCLUDE = {
+    # topology
+    "non_binary_nodes",
+    "non_binary_nodes_frac",
 
-    # Laplacian spectrum outputs
+    # Laplacian spectrum
     "laplace_spectrum_a",
     "laplace_spectrum_p",
     "laplace_spectrum_e",
     "laplace_spectrum_g",
 
-    # min/max of laplacian/adjacency derived from (binary-resolved) matrices
+    # Laplacian spectrum (unweighted)
+    "laplace_spectrum_a_uw",
+    "laplace_spectrum_p_uw",
+    "laplace_spectrum_e_uw",
+    "laplace_spectrum_g_uw",
+
+    # adjacency / laplacian extrema
     "min_laplace",
     "max_laplace",
     "min_adj",
     "max_adj",
 
-    # stats_laplace(...) outputs (highly sensitive to added nodes/edges)
+    # adjacency / laplacian extrema (unweighted)
+    "min_laplace_uw",
+    "max_laplace_uw",
+    "min_adj_uw",
+    "max_adj_uw",
+
+    # weighted Laplacian stats
     "lap_max",
     "lap_fiedler",
     "lap_var",
@@ -60,7 +74,7 @@ EXCLUDE_FEATURES = {
     "lap_entropy",
     "lap_sum",
 
-    # unweighted variants
+    # unweighted Laplacian stats
     "lap_max_uw",
     "lap_fiedler_uw",
     "lap_var_uw",
@@ -80,7 +94,7 @@ EXCLUDE_FEATURES = {
     "normalized_cut",
     "bottleneck_strength",
 
-    # partition / density features
+    # partition / density
     "density_pos",
     "density_neg",
     "modularity",
@@ -91,13 +105,24 @@ EXCLUDE_FEATURES = {
     "ratio_neg_pos",
     "dist_char",
 
-    # graph centrality / distance measures
+    # centrality / graph metrics
     "max_betweenness",
     "max_closeness",
     "max_closenessW",
     "eigen_centrality",
     "eigen_centralityW",
     "diameter",
+
+    # unweighted distance / diversity metrics
+    "mpd_uw",
+    "psv_uw",
+    "vpd_uw",
+    "mntd_uw",
+    "j_stat_uw",
+    "wiener_uw",
+    "max_closenessW_uw",
+    "eigen_centralityW_uw",
+    "treeness_uw",
 }
 
 # -----------------------------
@@ -441,6 +466,9 @@ def run_feature_evaluation(
 
     # Features: everything except label, and also not in EXCLUDE_FEATURES (belt & suspenders)
     feature_names = [c for c in data.columns if c != dep_var and c not in EXCLUDE_FEATURES]
+
+    print(f"Features used: {len(feature_names)}")
+    print(sorted(feature_names))
 
     y = LabelEncoder().fit_transform(data[dep_var])
     X_all = data.drop(columns=[dep_var])

@@ -24,11 +24,95 @@ from snakemake_vars import (
 )
 from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
 
-EXCLUDE_FEATURES = {
-    "phylogenetic_div", "lap_max", "lap_fiedler", "lap_var", "lap_skew", "lap_mean",
-        "lap_kurt", "lap_second_min", "lap_entropy", "lap_sum",
-        "cut_weight", "conductance", "normalized_cut", "bottleneck_strength",
-        "density_pos", "density_neg", "modularity", "fiedler_sd"
+FEATURES_TO_EXCLUDE = {
+    # topology
+    "non_binary_nodes",
+    "non_binary_nodes_frac",
+
+    # Laplacian spectrum
+    "laplace_spectrum_a",
+    "laplace_spectrum_p",
+    "laplace_spectrum_e",
+    "laplace_spectrum_g",
+
+    # Laplacian spectrum (unweighted)
+    "laplace_spectrum_a_uw",
+    "laplace_spectrum_p_uw",
+    "laplace_spectrum_e_uw",
+    "laplace_spectrum_g_uw",
+
+    # adjacency / laplacian extrema
+    "min_laplace",
+    "max_laplace",
+    "min_adj",
+    "max_adj",
+
+    # adjacency / laplacian extrema (unweighted)
+    "min_laplace_uw",
+    "max_laplace_uw",
+    "min_adj_uw",
+    "max_adj_uw",
+
+    # weighted Laplacian stats
+    "lap_max",
+    "lap_fiedler",
+    "lap_var",
+    "lap_skew",
+    "lap_mean",
+    "lap_kurt",
+    "lap_second_min",
+    "lap_entropy",
+    "lap_sum",
+
+    # unweighted Laplacian stats
+    "lap_max_uw",
+    "lap_fiedler_uw",
+    "lap_var_uw",
+    "lap_skew_uw",
+    "lap_mean_uw",
+    "lap_kurt_uw",
+    "lap_second_min_uw",
+    "lap_entropy_uw",
+    "lap_sum_uw",
+
+    # tree / cut structure
+    "tree_type",
+    "tree_type_uw",
+    "cut_edge_weight",
+    "cut_weight",
+    "conductance",
+    "normalized_cut",
+    "bottleneck_strength",
+
+    # partition / density
+    "density_pos",
+    "density_neg",
+    "modularity",
+    "fiedler_sd",
+    "share_pos",
+    "share_neg",
+    "share_zero",
+    "ratio_neg_pos",
+    "dist_char",
+
+    # centrality / graph metrics
+    "max_betweenness",
+    "max_closeness",
+    "max_closenessW",
+    "eigen_centrality",
+    "eigen_centralityW",
+    "diameter",
+
+    # unweighted distance / diversity metrics
+    "mpd_uw",
+    "psv_uw",
+    "vpd_uw",
+    "mntd_uw",
+    "j_stat_uw",
+    "wiener_uw",
+    "max_closenessW_uw",
+    "eigen_centralityW_uw",
+    "treeness_uw",
 }
 
 
