@@ -536,15 +536,15 @@ def format_feature_ranking_barplot(group):
 def format_classifier_importance_plot(classifier, group):
     return f"feature_importance_{'_'.join(group)}_{classifier}.png"
             
-simulator_interest = ["slim", "slim-s1000-g100"]
+simulator_interest = ["slim", "ms", "msms", "mspms"]
 # simulator_groups = list(combinations(simulator_interest, 2))
-simulator_groups = [tuple(simulator_interest)]
-'''
+# simulator_groups = [tuple(simulator_interest)]
+
 simulator_groups = []
 for sim in simulator_interest:
     if not "slim" in sim:
         simulator_groups.append((sim, "slim"))
-'''
+
 # simulator_groups = list(dict.fromkeys(simulator_groups))
 # simulator_groups.append(("msms", "msprime", "ms"))
 
