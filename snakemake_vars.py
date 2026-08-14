@@ -62,7 +62,7 @@ CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
 
-SIMULATORS = ["msms", "msprime", "ms", "slim", "slim-s1000-g100"] #msms_ms behaves the same as just msms 
+SIMULATORS = ["msms", "msprime", "ms", "slim", "mspms"] #msms_ms behaves the same as just msms 
 REPS = 200
 NUM_REPLICATES = 2
 PRECISION = 17
@@ -677,13 +677,13 @@ ALL_FEATURES = [
     f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
     for config in all_configs
     for combo in combinations_by_config[config]
-    for sim in ["slim-s1000-g100"]
+    for sim in ["mspms"]
     for i in range(REPS)
 ] + [
     f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
     for config in all_configs
     for combo in combinations_by_config[config]
-    for sim in ["slim-s1000-g100"]
+    for sim in ["mspms"]
     for i in range(REPS)
 ]
 
