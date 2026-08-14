@@ -608,8 +608,20 @@ def run_feature_evaluation(
     )
     ir_all = _iter_range(best_iter_all)
     proba_all = clf_all.predict_proba(X_valid_all, iteration_range=ir_all)
+
+    print("Simulator group:", simulator_group)
+    print("Classes:", np.unique(y))
+    print("Number classes:", len(np.unique(y)))
+
+    print("X_all shape:", X_all.shape)
+    print("X_valid_all shape:", X_valid_all.shape)
+    print("y_valid shape:", y_valid.shape)
+
     preds_all = _pred_labels_from_proba(proba_all)
     all_features_acc = accuracy_score(y_valid, preds_all)
+
+    print("preds_all shape:", np.shape(preds_all))
+    print("preds_all[:10]:", preds_all[:10])
 
     # --- Single-feature evaluation ---
     records = []
