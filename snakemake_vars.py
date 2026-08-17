@@ -951,6 +951,14 @@ CREATE_COMBO_PARAMETERS_YAML = [
     f"{ALLEL_FEATURES_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
     for config in all_configs
     for combo in combinations_by_config[config]
+] + [
+    f"{RAW_DATA_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+] + [
+    f"{CLEAN_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
 ]
 
 def combo_yamls_tree(config):
@@ -982,10 +990,11 @@ TREE_PATCHED = [
     for sim in simulator_interest
 ]
 
-
+"""
 missing = [p for p in CLEAN_INPUTS if not Path(p).exists()]
 
 with open("missing_raw_inputs.txt", "w") as f:
     f.write("\n".join(missing))
 
 print(f"{len(missing)} files missing.")
+"""
