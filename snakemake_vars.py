@@ -970,3 +970,14 @@ STATS_RESULTS = [
         "_".join(group) for group in simulator_groups
     ]
 ]
+
+
+PATCHED_TREE_DIR = FEATURES_DIR / "patched_tree"
+
+TREE_PATCHED = [
+    f"{PATCHED_TREE_DIR}/{config}/{combo}/rep{rep}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for rep in range(1, REPS + 1)
+    for sim in simulator_interest
+]

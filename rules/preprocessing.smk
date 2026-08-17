@@ -87,3 +87,20 @@ rule compute_pigot_rho_stats_ms:
     
 
 
+rule replace_tree_features:
+    output:
+        patched_file = f"{PATCHED_TREE_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_tree_features.csv"
+    params:
+        err_file = lambda w: f"{PATCHED_TREE_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
+        feature_file= lambda w: f"{TREE_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_tree_features.csv",
+        clean_file= lambda w: f"{CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_cleaned_output.txt"
+    conda:
+        "../envs/allelstats-env.yaml"
+    shell:
+        """
+        scripts/run_with_errorlog.sh {params.err_file} \
+        python src/preprocessing/replace_tree_features.py \
+            --tree_file {params.feature_file} \
+            --clean_file {params.clean_file} \
+            --output_file {output.patched_file} \
+        """
