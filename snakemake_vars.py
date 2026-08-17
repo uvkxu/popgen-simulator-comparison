@@ -981,3 +981,11 @@ TREE_PATCHED = [
     for rep in range(1, REPS + 1)
     for sim in simulator_interest
 ]
+
+
+missing = [p for p in RAW_INPUTS if not Path(p).exists()]
+
+with open("missing_raw_inputs.txt", "w") as f:
+    f.write("\n".join(missing))
+
+print(f"{len(missing)} files missing.")
