@@ -647,7 +647,7 @@ RAW_INPUTS = [
     f"{RAW_DATA_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
     for config in all_configs
     for combo in combinations_by_config[config]
-    for sim in SIMULATORS
+    for sim in simulator_interest
     for i in range(REPS)
 ]
 
