@@ -6,7 +6,7 @@ rule clean_single_file:
         cleaned = f"{CLEAN_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_cleaned_output.txt"
     params:
         raw = lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_output.txt",
-        combo_yaml = lambda w: f"/{w.config}/{w.combo}/{COMBO_PARAMETERS_YAML}",
+        combo_yaml = lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/{COMBO_PARAMETERS_YAML}",
         err_file= lambda w: f"{CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
         copy_file= lambda w: f"{COPY_CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_cleaned_output.txt",
     conda:
