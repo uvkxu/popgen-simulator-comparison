@@ -983,7 +983,7 @@ TREE_PATCHED = [
 ]
 
 
-missing = [p for p in RAW_INPUTS if not Path(p).exists()]
+missing = [p for p in CLEAN_INPUTS if not Path(p).exists()]
 
 with open("missing_raw_inputs.txt", "w") as f:
     f.write("\n".join(missing))
