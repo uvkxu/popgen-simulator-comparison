@@ -677,13 +677,13 @@ ALL_FEATURES = [
     f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
     for config in all_configs
     for combo in combinations_by_config[config]
-    for sim in ["mspms"]
+    for sim in ["slim"]
     for i in range(REPS)
 ] + [
     f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
     for config in all_configs
     for combo in combinations_by_config[config]
-    for sim in ["mspms"]
+    for sim in ["slim"]
     for i in range(REPS)
 ]
 

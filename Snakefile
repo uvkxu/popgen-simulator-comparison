@@ -7,4 +7,4 @@ include: "rules/plots.smk"
 
 rule all:
     input:
-        TREE_PATCHED
+        ALL_FEAtURES
