@@ -2,12 +2,11 @@ include: "../snakemake_vars.py"
 
 
 rule clean_single_file:
-    input:
-        raw = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_output.txt",
-        combo_yaml = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     output:
         cleaned = f"{CLEAN_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_cleaned_output.txt"
     params:
+        raw = lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_output.txt",
+        combo_yaml = lambda w: f"/{w.config}/{w.combo}/rep{w.rep}/{COMBO_PARAMETERS_YAML}"
         err_file= lambda w: f"{CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
         copy_file= lambda w: f"{COPY_CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_cleaned_output.txt",
     conda:
@@ -16,9 +15,9 @@ rule clean_single_file:
         """
         scripts/run_with_errorlog.sh {params.err_file} \
         python src/preprocessing/clean.py \
-            --input {input.raw} \
+            --input {params.raw} \
             --output {output.cleaned} \
-            --combo_yaml {input.combo_yaml} \
+            --combo_yaml {params.combo_yaml} \
             --sim {wildcards.simulator}
         """
     
