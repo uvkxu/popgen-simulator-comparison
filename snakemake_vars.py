@@ -955,11 +955,7 @@ CREATE_COMBO_PARAMETERS_YAML = [
     f"{RAW_DATA_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
     for config in all_configs
     for combo in combinations_by_config[config]
-] + [
-    f"{CLEAN_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-]
+] 
 
 def combo_yamls_tree(config):
     return [f"{TREE_FEATURES_DIR}/{config}/{c}/{COMBO_PARAMETERS_YAML}" for c in combinations_by_config[config]]
