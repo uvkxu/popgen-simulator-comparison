@@ -817,11 +817,9 @@ def main():
     output_folder.mkdir(parents=True, exist_ok=True)
     tree_csv_files = []
     allel_csv_files = []
-    cleaned_csv_files = []
 
     tree_csv_files += get_csv_files_mode(input_folder_tree, grouped_by, seq_len_group, sample_size_group)
     allel_csv_files += get_csv_files_mode(input_folder_allel, grouped_by, seq_len_group, sample_size_group)
-    cleaned_csv_files += get_csv_files_mode(input_folder_cleaned, grouped_by, seq_len_group, sample_size_group)
 
     if simulator_group is not None:
         tree_csv_files = [
@@ -831,11 +829,6 @@ def main():
 
         allel_csv_files = [
             f for f in allel_csv_files
-            if detect_simulator_from_yaml(f) in simulator_group
-        ]
-
-        cleaned_csv_files = [
-            f for f in cleaned_csv_files
             if detect_simulator_from_yaml(f) in simulator_group
         ]
 
