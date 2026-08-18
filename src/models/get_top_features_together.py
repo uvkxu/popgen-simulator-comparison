@@ -815,10 +815,65 @@ def main():
     grouped_by = set(normalized_grouped_by)
 
     output_folder.mkdir(parents=True, exist_ok=True)
-    tree_csv_files = get_csv_files_mode(input_folder_tree, grouped_by, seq_len_group, sample_size_group)
-    allel_csv_files = get_csv_files_mode(input_folder_allel, grouped_by, seq_len_group, sample_size_group)
+    tree_csv_files = []
+    allel_csv_files = []
+    cleaned_csv_files = []
 
-    assert len(tree_csv_files) == len(allel_csv_files)
+    tree_csv_files += get_csv_files_mode(input_folder_tree, grouped_by, seq_len_group, sample_size_group)
+    allel_csv_files += get_csv_files_mode(input_folder_allel, grouped_by, seq_len_group, sample_size_group)
+    cleaned_csv_files += get_csv_files_mode(input_folder_cleaned, grouped_by, seq_len_group, sample_size_group)
+
+    if simulator_group is not None:
+        tree_csv_files = [
+            f for f in tree_csv_files
+            if detect_simulator_from_yaml(f) in simulator_group
+        ]
+
+        allel_csv_files = [
+            f for f in allel_csv_files
+            if detect_simulator_from_yaml(f) in simulator_group
+        ]
+
+        cleaned_csv_files = [
+            f for f in cleaned_csv_files
+            if detect_simulator_from_yaml(f) in simulator_group
+        ]
+
+    tree_set = {
+        _relative_after_dir(f, "tree").with_name(
+            _relative_after_dir(f, "tree").name.replace("_tree_features.csv", "")
+        )
+        for f in tree_csv_files
+    }
+
+    allel_set = {
+        _relative_after_dir(f, "allele").with_name(
+            _relative_after_dir(f, "allele").name.replace("_allel_features.csv", "")
+        )
+        for f in allel_csv_files
+    }
+
+    missing_tree = allel_set - tree_set
+    missing_allel = tree_set - allel_set
+
+    if missing_tree or missing_allel:
+        msg = (
+            f"Number of tree files:   {len(tree_csv_files)}\n"
+            f"Number of allele files: {len(allel_csv_files)}\n"
+        )
+
+        if missing_tree:
+            msg += f"\nExample allele file without matching tree file:\n  {next(iter(missing_tree))}\n"
+
+        if missing_allel:
+            msg += f"\nExample tree file without matching allele file:\n  {next(iter(missing_allel))}\n"
+
+        raise ValueError(msg)
+
+    assert len(tree_csv_files) == len(allel_csv_files), (
+        f"Number of tree files ({len(tree_csv_files)}) does not match "
+        f"number of allele files ({len(allel_csv_files)})."
+    )
 
     run_feature_evaluation(
         simulator_group=simulator_group,
