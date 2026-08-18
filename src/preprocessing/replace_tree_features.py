@@ -7,7 +7,15 @@ from pathlib import Path
 
 import pandas as pd
 from Bio import Phylo
+import re
 
+def clean_tree_line(line: str) -> str:
+    line = line.strip()
+
+    # ;;;; -> ;
+    line = re.sub(r";+$", ";", line)
+
+    return line
 
 def is_tree_line(line: str) -> bool:
     line = line.strip()
@@ -26,12 +34,17 @@ def load_trees(clean_file: str | Path):
 
     with open(clean_file, "r") as f:
         for line in f:
-            if is_tree_line(line):
-                tree = Phylo.read(
-                    io.StringIO(line.strip()),
-                    "newick"
-                )
-                trees.append(tree)
+            if not is_tree_line(line):
+                continue
+
+            line = clean_tree_line(line)
+
+            tree = Phylo.read(
+                io.StringIO(line),
+                "newick"
+            )
+
+            trees.append(tree)
 
     return trees
 
