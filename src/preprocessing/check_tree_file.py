@@ -179,54 +179,45 @@ def symmetry_nodes(tree):
 
 def max_betweenness(tree):
     """
-    Maximum betweenness centrality over all nodes.
+    treestats::max_betweenness equivalent
     """
 
-    nodes = list(tree.find_clades())
+    subtree_nodes = {}
 
-    subtree_sizes = {}
+    def count_nodes(clade):
+        n = 1
 
-    def count_tips(clade):
-        if clade.is_terminal():
-            subtree_sizes[clade] = 1
-            return 1
+        for child in clade.clades:
+            n += count_nodes(child)
 
-        n = sum(count_tips(c) for c in clade.clades)
-
-        subtree_sizes[clade] = n
+        subtree_nodes[clade] = n
         return n
 
-    total_tips = count_tips(tree.root)
+    N = count_nodes(tree.root)
 
-    parent = {}
+    best = -1.0
 
-    for p in tree.find_clades():
-        for c in p.clades:
-            parent[c] = p
+    for node in tree.find_clades():
 
-    best = 0
+        child_sizes = [
+            subtree_nodes[child]
+            for child in node.clades
+        ]
 
-    for node in nodes:
+        q = sum(child_sizes)
 
-        components = []
+        sum_sq = sum(s * s for s in child_sizes)
 
-        for child in node.clades:
-            components.append(subtree_sizes[child])
+        child_pairs = (q * q - sum_sq) / 2.0
 
-        if node is not tree.root:
-            components.append(
-                total_tips - subtree_sizes[node]
-            )
+        local_b = child_pairs + q * (N - 1 - q)
 
-        score = 0
-
-        for i in range(len(components)):
-            for j in range(i + 1, len(components)):
-                score += components[i] * components[j]
-
-        best = max(best, score)
+        best = max(best, local_b)
 
     return float(best)
+
+
+
 
 
 def min_adj(tree):
