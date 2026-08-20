@@ -308,7 +308,7 @@ def main():
         expected_min_adj = features.loc[i, "min_adj"]
 
         calculated_stairs = stairs_index(tree)
-        calculated_sym = symmetry_nodes(tree)
+        calculated_sym = symmetry_nodes(tree) + 1
         calculated_bet = max_betweenness(tree)
         calculated_min_adj = min_adj(tree)
         calculated_pd = phylogenetic_diversity(tree)
