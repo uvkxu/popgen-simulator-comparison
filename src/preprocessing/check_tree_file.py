@@ -106,6 +106,156 @@ def eigen_centrality(tree):
 
     return float(np.max(eigenvector))
 
+def stairs_index(tree):
+    """
+    Stairs index.
+
+    Fraction of internal nodes whose two daughter
+    subtrees contain a different number of tips.
+    """
+
+    imbalanced = 0
+    internal = 0
+
+    def tip_count(clade):
+        if clade.is_terminal():
+            return 1
+
+        counts = [tip_count(c) for c in clade.clades]
+
+        nonlocal imbalanced, internal
+
+        if len(counts) == 2:
+            internal += 1
+
+            if counts[0] != counts[1]:
+                imbalanced += 1
+
+        return sum(counts)
+
+    tip_count(tree.root)
+
+    if internal == 0:
+        return 0.0
+
+    return imbalanced / internal
+
+def symmetry_nodes(tree):
+    """
+    Count internal nodes that are NOT symmetric.
+    """
+
+    nonsymmetric = 0
+
+    def depth_sum(clade, depth=0):
+        total = depth
+
+        for child in clade.clades:
+            total += depth_sum(child, depth + 1)
+
+        return total
+
+    def traverse(clade):
+        nonlocal nonsymmetric
+
+        if clade.is_terminal():
+            return
+
+        if len(clade.clades) == 2:
+            left, right = clade.clades
+
+            s_left = depth_sum(left, 0)
+            s_right = depth_sum(right, 0)
+
+            if s_left != s_right:
+                nonsymmetric += 1
+
+        for child in clade.clades:
+            traverse(child)
+
+    traverse(tree.root)
+
+    return nonsymmetric
+
+def max_betweenness(tree):
+    """
+    Maximum betweenness centrality over all nodes.
+    """
+
+    nodes = list(tree.find_clades())
+
+    subtree_sizes = {}
+
+    def count_tips(clade):
+        if clade.is_terminal():
+            subtree_sizes[clade] = 1
+            return 1
+
+        n = sum(count_tips(c) for c in clade.clades)
+
+        subtree_sizes[clade] = n
+        return n
+
+    total_tips = count_tips(tree.root)
+
+    parent = {}
+
+    for p in tree.find_clades():
+        for c in p.clades:
+            parent[c] = p
+
+    best = 0
+
+    for node in nodes:
+
+        components = []
+
+        for child in node.clades:
+            components.append(subtree_sizes[child])
+
+        if node is not tree.root:
+            components.append(
+                total_tips - subtree_sizes[node]
+            )
+
+        score = 0
+
+        for i in range(len(components)):
+            for j in range(i + 1, len(components)):
+                score += components[i] * components[j]
+
+        best = max(best, score)
+
+    return float(best)
+
+
+def min_adj(tree):
+    """
+    Minimum eigenvalue of weighted adjacency matrix.
+    """
+
+    nodes = list(tree.find_clades(order="level"))
+    node_to_idx = {node: i for i, node in enumerate(nodes)}
+
+    n = len(nodes)
+
+    A = np.zeros((n, n), dtype=float)
+
+    for parent in tree.find_clades(order="level"):
+        i = node_to_idx[parent]
+
+        for child in parent.clades:
+            j = node_to_idx[child]
+
+            w = child.branch_length or 0.0
+
+            A[i, j] = w
+            A[j, i] = w
+
+    eigvals = np.linalg.eigvalsh(A)
+
+    return float(np.min(eigvals))
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -155,7 +305,15 @@ def main():
         expected_pd = features.loc[i, "phylogenetic_div"]
         expected_blum = features.loc[i, "blum"]
         expected_eigen = features.loc[i, "eigen_centrality"]
+        expected_stairs = features.loc[i, "stairs"]
+        expected_sym = features.loc[i, "sym_nodes"]
+        expected_bet = features.loc[i, "max_betweenness"]
+        expected_min_adj = features.loc[i, "min_adj"]
 
+        calculated_stairs = stairs_index(tree)
+        calculated_sym = symmetry_nodes(tree)
+        calculated_bet = max_betweenness(tree)
+        calculated_min_adj = min_adj(tree)
         calculated_pd = phylogenetic_diversity(tree)
         calculated_blum = blum_index(tree)
         calculated_eigen = eigen_centrality(tree)
@@ -163,8 +321,12 @@ def main():
         pd_ok = np.isclose(calculated_pd, expected_pd, atol=args.atol, rtol=0)
         blum_ok = np.isclose(calculated_blum, expected_blum, atol=args.atol, rtol=0)
         eigen_ok = np.isclose(calculated_eigen, expected_eigen, atol=args.atol, rtol=0)
+        sym_ok = np.isclose(calculated_sym, expected_sym, atol=args.atol, rtol=0)
+        bet_ok = np.isclose(calculated_bet, expected_bet, atol=args.atol, rtol=0)
+        stairs_ok = np.isclose(calculated_stairs, expected_stairs, atol=args.atol, rtol=0)
+        min_adj_ok = np.isclose(calculated_min_adj, expected_min_adj, atol=args.atol, rtol=0)
 
-        if pd_ok and blum_ok and eigen_ok:
+        if pd_ok and blum_ok and eigen_ok and sym_ok and bet_ok and stairs_ok and min_adj_ok:
             continue
 
         mismatches += 1
@@ -192,6 +354,34 @@ def main():
                 "  Blum index mismatch\n"
                 f"    expected   : {expected_blum:.12f}\n"
                 f"    calculated : {calculated_blum:.12f}\n"
+            )
+
+        if not sym_ok:
+            out.write(
+                "  Symmetry nodes mismatch\n"
+                f"    expected   : {expected_sym:.12f}\n"
+                f"    calculated : {calculated_sym:.12f}\n"
+            )
+
+        if not bet_ok:
+            out.write(
+                "  Maximum betweenness mismatch\n"
+                f"    expected   : {expected_bet:.12f}\n"
+                f"    calculated : {calculated_bet:.12f}\n"
+            )
+
+        if not stairs_ok:
+            out.write(
+                "  Stairs index mismatch\n"
+                f"    expected   : {expected_stairs:.12f}\n"
+                f"    calculated : {calculated_stairs:.12f}\n"
+            )
+
+        if not min_adj_ok:
+            out.write(
+                "  Minimum adjacency eigenvalue mismatch\n"
+                f"    expected   : {expected_min_adj:.12f}\n"
+                f"    calculated : {calculated_min_adj:.12f}\n"
             )
 
         out.write("\n")
