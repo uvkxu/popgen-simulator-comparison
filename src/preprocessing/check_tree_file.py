@@ -306,7 +306,7 @@ def main():
         expected_blum = features.loc[i, "blum"]
         expected_eigen = features.loc[i, "eigen_centrality"]
         expected_stairs = features.loc[i, "stairs"]
-        expected_sym = features.loc[i, "sym_nodes"]
+        expected_sym = features.loc[i, "symmetry_nodes"]
         expected_bet = features.loc[i, "max_betweenness"]
         expected_min_adj = features.loc[i, "min_adj"]
 
