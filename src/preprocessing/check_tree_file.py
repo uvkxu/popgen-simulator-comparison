@@ -306,7 +306,7 @@ def main():
         pd_ok = np.isclose(calculated_pd, expected_pd, atol=args.atol, rtol=0)
         blum_ok = np.isclose(calculated_blum, expected_blum, atol=args.atol, rtol=0)
         eigen_ok = np.isclose(calculated_eigen, expected_eigen, atol=args.atol, rtol=0)
-        # sym_ok = np.isclose(calculated_sym, expected_sym, atol=args.atol, rtol=0)
+        sym_ok = np.isclose(calculated_sym, expected_sym, atol=args.atol, rtol=0)
         bet_ok = np.isclose(calculated_bet, expected_bet, atol=args.atol, rtol=0)
         stairs_ok = np.isclose(calculated_stairs, expected_stairs, atol=args.atol, rtol=0)
         min_adj_ok = np.isclose(calculated_min_adj, expected_min_adj, atol=args.atol, rtol=0)
