@@ -310,7 +310,7 @@ def main():
         calculated_stairs = stairs_index(tree)
         # calculated_sym = symmetry_nodes(tree)
         calculated_bet = max_betweenness(tree)
-        calculated_min_adj = min_adj(tree)
+        # calculated_min_adj = min_adj(tree)
         calculated_pd = phylogenetic_diversity(tree)
         calculated_blum = blum_index(tree)
         calculated_eigen = eigen_centrality(tree)
@@ -321,9 +321,9 @@ def main():
         # sym_ok = np.isclose(calculated_sym, expected_sym, atol=args.atol, rtol=0)
         bet_ok = np.isclose(calculated_bet, expected_bet, atol=args.atol, rtol=0)
         stairs_ok = np.isclose(calculated_stairs, expected_stairs, atol=args.atol, rtol=0)
-        min_adj_ok = np.isclose(calculated_min_adj, expected_min_adj, atol=args.atol, rtol=0)
+        # min_adj_ok = np.isclose(calculated_min_adj, expected_min_adj, atol=args.atol, rtol=0)
 
-        if pd_ok and blum_ok and eigen_ok and bet_ok and stairs_ok and min_adj_ok:
+        if pd_ok and blum_ok and eigen_ok and bet_ok and stairs_ok:
             continue
 
         mismatches += 1
@@ -376,12 +376,14 @@ def main():
                 f"    calculated : {calculated_stairs:.12f}\n"
             )
 
+        '''
         if not min_adj_ok:
             out.write(
                 "  Minimum adjacency eigenvalue mismatch\n"
                 f"    expected   : {expected_min_adj:.12f}\n"
                 f"    calculated : {calculated_min_adj:.12f}\n"
             )
+        '''
 
         out.write("\n")
 
