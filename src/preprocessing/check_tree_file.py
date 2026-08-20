@@ -222,14 +222,14 @@ def max_betweenness(tree):
 
 def min_adj(tree):
     """
-    Minimum eigenvalue of weighted adjacency matrix.
+    Smallest positive eigenvalue of weighted adjacency matrix.
+    Equivalent to treestats::minmax_adj(... )$min
     """
 
     nodes = list(tree.find_clades(order="level"))
     node_to_idx = {node: i for i, node in enumerate(nodes)}
 
     n = len(nodes)
-
     A = np.zeros((n, n), dtype=float)
 
     for parent in tree.find_clades(order="level"):
@@ -245,8 +245,14 @@ def min_adj(tree):
 
     eigvals = np.linalg.eigvalsh(A)
 
-    return float(np.min(eigvals))
+    eigvals = np.round(eigvals, 10)
 
+    positive = eigvals[eigvals > 0]
+
+    if len(positive) == 0:
+        return 0.0
+
+    return float(np.min(positive))
 
 def main():
     parser = argparse.ArgumentParser(
