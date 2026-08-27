@@ -48,7 +48,7 @@ def numeric_feature_means(df: pd.DataFrame) -> pd.Series:
     return df2.mean(axis=0, skipna=True)
 
 
-def compute_means_for_files(csv_files: List[Path], row_level: bool) -> Tuple[pd.Series, pd.Series, Dict[str, int]]:
+def compute_means_for_files(csv_files: List[Path], row_level: bool, allowed_sim) -> Tuple[pd.Series, pd.Series, Dict[str, int]]:
     """
     Compute feature means for forward (SLiM) and backward (all others)
     within ONE subgroup.
@@ -67,6 +67,9 @@ def compute_means_for_files(csv_files: List[Path], row_level: bool) -> Tuple[pd.
         for f in csv_files:
             try:
                 sim = detect_simulator_from_yaml(input_file=str(f))
+
+                if sim not in allowed_sim and sim != "slim":
+                    continue
             except Exception:
                 counts["skipped_files"] += 1
                 continue
@@ -113,6 +116,9 @@ def compute_means_for_files(csv_files: List[Path], row_level: bool) -> Tuple[pd.
     for f in csv_files:
         try:
             sim = detect_simulator_from_yaml(input_file=str(f))
+
+            if sim not in allowed_sim and sim != "slim":
+                    continue
         except Exception:
             counts["skipped_files"] += 1
             continue
@@ -196,6 +202,13 @@ def main() -> None:
         default=".csv",
         help="Comma-separated extensions to collect (default: .csv).",
     )
+    ap.add_argument(
+        "--coalescent-simulator",
+        nargs="+",
+        choices=["ms", "msms", "mspms"],
+        default=["ms", "msms", "mspms"],
+        help="Allowed coalescent simulators.",
+    )
 
     args = ap.parse_args()
     cfg_path = args.input_dir.expanduser().resolve()
@@ -219,7 +232,11 @@ def main() -> None:
         if not csvs:
             continue
 
-        mean_slim, mean_back, counts = compute_means_for_files(csvs, row_level=args.row_level)
+        mean_slim, mean_back, counts = compute_means_for_files(
+            csvs,
+            row_level=args.row_level,
+            allowed_sim=args.coalescent_simulator,
+        )
 
         if mean_slim.empty or mean_back.empty:
             # Still record that subgroup could not be computed (useful for debugging)
