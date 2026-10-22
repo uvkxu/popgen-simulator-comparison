@@ -1007,7 +1007,7 @@ MERGED_STATS = [
     for config in all_configs
     for combo in combinations_by_config[config]
     for i in range(REPS)
-    for simulator in ["ms", "msms"]
+    for simulator in ["ms", "msms", "mspms"]
 ]
 
 MERGED_STATS_OVERALL = [
