@@ -2,10 +2,10 @@ include: "snakemake_vars.py"
 include: "rules/simulations.smk"
 include: "rules/preprocessing.smk"
 include: "rules/topfeatures.smk"
-include: "rules/plots.smk"
+include: "rules/optuna.smk"
 
 
 rule all:
     input:
-        MERGED_STATS
+        ALL_TREE_OPTUNA, ALL_ALLEL_OPTUNA
         

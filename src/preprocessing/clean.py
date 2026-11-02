@@ -152,23 +152,9 @@ def main():
         help=f"Decimal precision for numerical outputs (default: {PRECISION})"
     )
 
-    parser.add_argument(
-        "--copy_file",
-        type=Path,
-        default=None,
-        help="If raw file is just wished to be copied, put it here"
-    )
-
     args = parser.parse_args()
     output_file = args.output
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    copy_file = args.copy_file
-
-    if copy_file is not None and copy_file.exists():
-        if not "zigzag" in str(output_file) and not "one_population" in str(output_file):
-            shutil.copy(copy_file, output_file)
-            print(f"Copied existing file {copy_file} -> {output_file}")
-            sys.exit(0) 
 
     sim = args.sim
 
@@ -183,7 +169,7 @@ def main():
     with combo_yaml.open("r") as f:
         combo_params = yaml.safe_load(f)
 
-    precision = args.precision if bool(combo_params["usePrecision"]) else None
+    precision = args.precision
     
     output_file = args.output
     if output_file.exists():

@@ -81,7 +81,7 @@ def parse_ms_like_output(output):
 # ============================================================
 from itertools import combinations
 
-def compute_stats(haps: allel.HaplotypeArray, positions, pops={}):
+def compute_stats(haps: allel.HaplotypeArray, positions):
     def choose_block_length(n_variants, target_blocks=10, min_blen=5):
         """
         Choose block length for block-jackknife.
@@ -252,52 +252,6 @@ def compute_stats(haps: allel.HaplotypeArray, positions, pops={}):
     results['pooled'] = stats_from(ac_all, hsub_all)
     results['num_segsites'] = len(positions)
 
-    if len(pops) > 1:
-        # Compute allele counts for each population for Patterson stats
-        ac_dict = {}
-        for pname, indices in pops.items():
-            ac, _ = ac_for(indices)
-            ac_dict[pname] = ac
-
-        # --- Compute per-population stats ---
-        results['per_population'] = {}
-        for pname, indices in pops.items():
-            ac, hsub = ac_for(indices)
-            results['per_population'][pname] = stats_from(ac, hsub)
-
-        # --- Compute Patterson statistics ---
-        pop_names = list(pops.keys())
-
-        # F2 for all pairs
-        for a, b in combinations(pop_names, 2):
-            ac_a, ac_b = ac_dict[a], ac_dict[b]
-            nvar = min(ac_a.shape[0], ac_b.shape[0])
-            blen = min(choose_block_length(nvar), nvar // 2)
-
-            if all(ac.shape[0] > 0 and ac.shape[1] == 2 for ac in [ac_a, ac_b]):
-                try:
-                    with np.errstate(divide='ignore', invalid='ignore'):
-                        fst, se, vb, vj = allel.average_hudson_fst(ac_a, ac_b, blen=blen)
-                    fst = np.nan_to_num(fst, nan=np.nan)
-                except Exception:
-                    fst = 0.0
-
-                f2 = allel.patterson_f2(ac_a, ac_b)
-                results[f"f2_{a}_{b}"] = float(np.mean(f2))
-                results[f"fst_{a}_{b}"] = float(fst)
-            else:
-                results[f"f2_{a}_{b}"] = 0.0
-                results[f"fst_{a}_{b}"] = 0.0
-
-        # F3* for all triplets
-        for c, a, b in combinations(pop_names, 3):
-            ac_c, ac_a, ac_b = ac_dict[c], ac_dict[a], ac_dict[b]
-            if all(ac.shape[0] > 0 and ac.shape[1] == 2 for ac in [ac_a, ac_b, ac_c]):
-                T, B = allel.patterson_f3(ac_c, ac_a, ac_b)
-                results[f"f3star_{c}_{a}_{b}"] = float(np.sum(T) / np.sum(B)) if np.sum(B) > 0 else 0.0
-            else:
-                results[f"f3star_{c}_{a}_{b}"] = 0.0
-
     return results
 
 
@@ -326,37 +280,10 @@ def calculate_block_stats(positions, genotypes, sample_sizes, per_pop_stats=Fals
         assert genotypes.size == 0, "Genotypes muss leer sein"
         assert positions.size == 0, f"Positions muss leer sein, wenn es keine mutation gab. Positions {positions}, position size {positions.size}"
 
-    # Flatten dictionary for CSV
-    flat = {}
-    if len(sample_sizes) > 1 and per_pop_stats:
-        pops = {}
-        start = 0
+    stats = compute_stats(haps, positions)
 
-        for i, s in enumerate(sample_sizes):
-            pops[f"pop{i+1}"] = list(range(start, start + s))
-            start += s
-        
-        for pname in list(pops.keys()):
-            pops[pname] = [i for i in pops[pname] if i < n_haps]
-
-        stats = compute_stats(haps, positions, pops)
-
-        for pname, vals in stats['per_population'].items():
-            for k, v in vals.items():
-                if isinstance(v, (list, dict)):
-                    v = json.dumps(v)
-                flat[f"{pname}_{k}"] = v
-    else:
-        stats = compute_stats(haps, positions)
-
-    for k, v in stats.items():
-            if k not in ['per_population', 'pooled']:
-                flat[k] = v
-
-    for k, v in stats['pooled'].items():
-        if isinstance(v, (list, dict)):
-            v = json.dumps(v)
-        flat[f"pooled_{k}"] = v
+    flat = stats.pop("pooled")
+    flat.update(stats)
 
     return flat
 
@@ -518,22 +445,8 @@ if __name__ == '__main__':
         help="Compute allele statistics separately for each population"
     )
 
-    parser.add_argument(
-        "--copy_file",
-        type=Path,
-        default=None,
-        help="If raw file is just wished to be copied, put it here"
-    )
-
     args = parser.parse_args()
     output_file = args.output
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    copy_file = args.copy_file
-
-    if copy_file is not None and copy_file.exists():
-        if not "zigzag" in str(output_file) and not "one_population" in str(output_file):
-            shutil.copy(copy_file, output_file)
-            print(f"Copied existing file {copy_file} -> {output_file}")
-            sys.exit(0)
 
     main(args.input, args.output, args.combo_yaml, args.per_pop_stats)

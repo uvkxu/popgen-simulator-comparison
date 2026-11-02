@@ -79,8 +79,7 @@ metadata = {
     "sample_structure": [s for s in samples if s > 0],
     "mutation_rate": config["mutation_rate"],
     "recombination_rate": float(combo.get("recombination_rates", 0)),
-    "config": str(config_path.name),
-    "usePrecision": bool(combo["usePrecision"])
+    "config": str(config_path.name)
 }
 
 output_file.parent.mkdir(parents=True, exist_ok=True)

@@ -9,7 +9,7 @@ import sys
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
 
-from snakemake_vars import simulator_groups, SIMULATORS
+from simulators import *
 
 
 def log_step(master_log_file, step_name, combo, simulator, success_inc, failed_inc, info: str = ""):

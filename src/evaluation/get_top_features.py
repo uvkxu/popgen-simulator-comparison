@@ -27,11 +27,9 @@ sys.path.append(UTILS_ROOT)
 
 from snakemake_vars import (
     VALID_GROUPING_MODES,
-    format_feature_ranking_file,
-    format_feature_ranking_barplot,
-    format_classifier_importance_plot,
-    XGB_STR,
+    format_feature_ranking_file
 )
+
 from utils.io_helpers import collect_csv_files, assign_simulator_labels
 
 
@@ -236,82 +234,6 @@ def get_feature_importance_xgb(model: xgb.XGBClassifier, feature_names: list[str
     return dict(zip(feature_names, importance))
 
 
-def plot_feature_performance(
-    feature_importance_dict: dict,
-    csv_path: Path,
-    group,
-    chance_baseline: float | None = None,
-):
-    """
-    Reads the evaluation CSV and produces:
-    - one accuracy bar plot
-    - one feature importance plot for XGB
-    """
-    df = pd.read_csv(csv_path)
-
-    df = df.dropna(how="all").dropna(axis=1, how="all")
-    for col in df.columns[1:]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    special = ["CHANCE_BASELINE", "ALL_FEATURES", "PASSED_FEATURES", "TOP_FEATURES"]
-    df_special = df[df["feature"].isin(special)]
-    df_regular = df[~df["feature"].isin(special + ["OVERALL_MEAN"])]
-    df_features = pd.concat([df_special, df_regular], ignore_index=True)
-
-    features_acc = df_features["feature"].astype(str)
-    metrics = ["max_accuracy", XGB_STR]
-    x = np.arange(len(features_acc))
-    width = 0.35
-
-    plt.figure(figsize=(12, 8))
-
-    if chance_baseline is not None:
-        plt.axhline(
-            y=chance_baseline,
-            linestyle="--",
-            linewidth=1.2,
-            label=f"Chance baseline: {chance_baseline:.2f}",
-        )
-
-    for i, metric in enumerate(metrics):
-        if metric in df_features.columns:
-            plt.bar(x + i * width, df_features[metric], width=width, label=metric)
-
-    plt.xticks(x + width * 0.5, features_acc, rotation=90, fontsize=6)
-    plt.ylabel("Accuracy / Accuracy drop proxy")
-    plt.xlabel("Feature")
-    plt.title("Model Performance per Feature")
-    plt.legend()
-    plt.tight_layout()
-
-    out_path = os.path.join(
-        os.path.dirname(str(csv_path)),
-        format_feature_ranking_barplot(group),
-    )
-    plt.savefig(out_path, dpi=300)
-    plt.close()
-
-    if XGB_STR in feature_importance_dict:
-        imp = feature_importance_dict[XGB_STR]
-        features = list(imp.keys())
-        values = [imp[f] for f in features]
-
-        plt.figure(figsize=(10, 6))
-        plt.bar(features, values)
-        plt.xticks(rotation=90, fontsize=7)
-        plt.ylabel("Feature Importance")
-        plt.xlabel("Feature")
-        plt.title(f"Feature Importance – {XGB_STR}")
-        plt.tight_layout()
-
-        out_path_single = os.path.join(
-            os.path.dirname(str(csv_path)),
-            format_classifier_importance_plot(XGB_STR, group),
-        )
-        plt.savefig(out_path_single, dpi=300)
-        plt.close()
-
-
 def clean_nan_data(
     data: pd.DataFrame,
     output_csv: Path,
@@ -387,70 +309,10 @@ def run_feature_evaluation(
     # --- Prepare features ---
     dep_var = "simulator"
     data = data[data[dep_var].isin(simulator_group)].copy()
-    FEATURES_TO_EXCLUDE = [
-        # --- stats_laplace (weighted = TRUE) ---
-        "lap_max",
-        "lap_fiedler",
-        "lap_var",
-        "lap_skew",
-        "lap_mean",
-        "lap_kurt",
-        "lap_second_min",
-        "lap_entropy",
-        "lap_sum",
-        "tree_type",
-        "cut_edge_weight",
-        "share_pos",
-        "share_neg",
-        "share_zero",
-        "ratio_neg_pos",
-        "dist_char",
-        "eigen_centrality",
-        "eigen_centralityW",
-
-        # --- stats_laplace (weighted = FALSE / unweighted) ---
-        "lap_max_uw",
-        "lap_fiedler_uw",
-        "lap_var_uw",
-        "lap_skew_uw",
-        "lap_mean_uw",
-        "lap_kurt_uw",
-        "lap_second_min_uw",
-        "lap_entropy_uw",
-        "lap_sum_uw",
-        "tree_type_uw",
-        "laplace_spectrum_a_uw",
-        "laplace_spectrum_p_uw",
-        "laplace_spectrum_e_uw",
-        "laplace_spectrum_g_uw",
-        "min_laplace_uw",
-        "max_laplace_uw",
-        "min_adj_uw",
-        "max_adj_uw",
-        "mpd_uw",
-        "psv_uw",
-        "vpd_uw",
-        "mntd_uw",
-        "j_stat_uw",
-        "wiener_uw",
-        "max_closenessW_uw",
-        "eigen_centralityW_uw",
-        "treeness_uw"
-
-        # --- compute_characteristic_features ---
-        "cut_weight",
-        "conductance",
-        "normalized_cut",
-        "bottleneck_strength",
-        "density_pos",
-        "density_neg",
-        "modularity",
-        "fiedler_sd",
-    ]
     
     feature_names = [
         col for col in data.columns
-        if col != dep_var and col not in FEATURES_TO_EXCLUDE
+        if col != "simulator"
     ]
 
     y = LabelEncoder().fit_transform(data[dep_var])
@@ -603,12 +465,11 @@ def run_feature_evaluation(
         feature_records.append(
             {
                 "feature": f,
-                "max_accuracy": float(perm_acc),
-                XGB_STR: float(perm_acc),
+                "accuracy": float(perm_acc)
             }
         )
 
-    feature_records_sorted = sorted(feature_records, key=lambda d: d["max_accuracy"], reverse=False)
+    feature_records_sorted = sorted(feature_records, key=lambda d: d["accuracy"], reverse=False)
 
     # Evaluate with passed features: retrain once
     if passed_features:
@@ -673,41 +534,34 @@ def run_feature_evaluation(
 
     overall_mean_acc = float(all_features_acc)
 
-    # feature importances from the trained overall model
-    importance_dict = {XGB_STR: get_feature_importance_xgb(clf, feature_names)}
-
     # --- Summary output ---
     summary_records = []
 
     summary_records.append(
         {
             "feature": "CHANCE_BASELINE",
-            "max_accuracy": float(majority_prop),
-            XGB_STR: np.nan,
+            "accuracy": float(majority_prop)
         }
     )
 
     summary_records.append(
         {
             "feature": "ALL_FEATURES",
-            "max_accuracy": float(all_features_acc),
-            XGB_STR: float(all_features_acc),
+            "accuracy": float(all_features_acc)
         }
     )
 
     summary_records.append(
         {
             "feature": "PASSED_FEATURES",
-            "max_accuracy": float(passed_acc) if not np.isnan(passed_acc) else np.nan,
-            XGB_STR: float(passed_acc) if not np.isnan(passed_acc) else np.nan,
+            "accuracy": float(passed_acc) if not np.isnan(passed_acc) else np.nan,
         }
     )
 
     summary_records.append(
         {
             "feature": "TOP_FEATURES",
-            "max_accuracy": float(top_acc) if not np.isnan(top_acc) else np.nan,
-            XGB_STR: float(top_acc) if not np.isnan(top_acc) else np.nan,
+            "accuracy": float(top_acc) if not np.isnan(top_acc) else np.nan
         }
     )
 
@@ -728,17 +582,14 @@ def run_feature_evaluation(
     summary_records.append(
         {
             "feature": "OVERALL_MEAN",
-            "max_accuracy": overall_mean_acc,
-            XGB_STR: overall_mean_acc,
+            "accuracy": overall_mean_acc
         }
     )
 
     df_summary = pd.DataFrame(summary_records)
-    cols = ["feature", "max_accuracy", XGB_STR]
+    cols = ["feature", "accuracy"]
     df_summary = df_summary[cols]
     df_summary.to_csv(csv_file, index=False)
-
-    plot_feature_performance(importance_dict, csv_file, simulator_group, chance_baseline=majority_prop)
 
 
 def csv_list(s: str) -> list[str]:
@@ -879,18 +730,15 @@ def main():
         with open(combo_yaml_path, "r") as f:
             combo_params = yaml.safe_load(f)
 
-        usePrecision = bool(combo_params.get("usePrecision"))
         recombination_rate = float(combo_params.get("recombination_rate") or 0)
         sample_size = int(combo_params["sample_structure"][0])
         seq_len = int(combo_params["sequence_length"])
 
         if (
-            (("precision_applied" not in grouped_by) or usePrecision)
-            and (("precision_skipped" not in grouped_by) or (not usePrecision))
-            and (("recombination_applied" not in grouped_by) or (recombination_rate > 0))
+            (("recombination_applied" not in grouped_by) or (recombination_rate > 0))
             and (("recombination_skipped" not in grouped_by) or (recombination_rate == 0))
-            and (("sample_size" not in grouped_by) or (sample_size == sample_size_group and usePrecision))
-            and (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
+            and (("sample_size" not in grouped_by) or (sample_size == sample_size_group))
+            and (("seq_len" not in grouped_by) or (seq_len == seq_len_group))
         ):
             csv_my_mode += collect_csv_files(root_path)
 

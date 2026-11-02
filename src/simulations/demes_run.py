@@ -13,18 +13,16 @@ import json
 import re
 import time
 import shutil
-from ms_runner import run_ms_simulation
-from msms_runner import run_msms_simulation
-from msprime_runner import run_mspms_simulation
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.append(PROJECT_ROOT)
 UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(UTILS_ROOT)
 
-from snakemake_vars import CONFIG_DIR, CMD_DIR, RAW_DATA_DIR, SIMULATORS, FILE_FORMATS, \
- DEFAULT_MS_PATH, DEFAULT_MSMS_PATH, DEFAULT_MS_MOD_PATH, DEFAULT_SLIM_PATH, PRECISION, \
- estimate_mem_mb
+from project_paths import DEM_MODELS_DIR, RAW_DATA_DIR, FILE_FORMATS, \
+ DEFAULT_MSMS_PATH, DEFAULT_MS_MOD_PATH, DEFAULT_SLIM_PATH
+from simulators import *
+from snakemake_vars import PRECISION, estimate_mem_mb
 from utils.io_helpers import log_step
 
 
@@ -41,7 +39,7 @@ def estimate_msms_heap_gb(
         config=config,
         combo=combo,
         func="simulate",
-        simulator="msms"
+        simulator=MSMS
     )
 
     # Convert MB → GB and apply safety margin
@@ -159,10 +157,7 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
     if "population_sizes" in combo:
         graph.population_size = combo["population_sizes"]
 
-    precision = None
-    usePrecision = bool(combo["usePrecision"])
-    if usePrecision:
-        precision = PRECISION
+    precision = PRECISION
 
     recombination_rate = float(combo.get("recombination_rates", 0))
     if recombination_rate > 0:
@@ -170,16 +165,16 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
 
     samples = get_sample_sizes(config, combo["sample_sizes"])
 
-    if sim in ("ms", "msms", "mspms"):
+    if sim in (MS, MSMS, MSPMS):
         cmd = demes.to_ms(graph, sequence_length=graph.sequence_length,
                           samples=samples, N0=graph.population_size)
 
-        if sim == "ms":
+        if sim == MS:
             if not sim_path or not os.path.exists(sim_path):
                 raise FileNotFoundError(f"{sim} executable not found at {sim_path}.")
             prefix = sim_path
 
-        elif sim == "msms":
+        elif sim == MSMS:
             if not sim_path or not os.path.exists(sim_path):
                 raise FileNotFoundError(f"{sim} executable not found at {sim_path}.")
             heap_gb = estimate_msms_heap_gb(config=config_path, combo=combo)
@@ -192,9 +187,9 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
         # print(cmd)
 
         if precision:
-            if sim in ("ms", "mspms"):
+            if sim in (MS, MSPMS):
                 cmd += f" -p {precision}"
-            elif sim == "msms":
+            elif sim == MSMS:
                 format_str = "0" + (("." + "0"*precision))
                 cmd += f' -oFP {format_str}'
 
@@ -222,7 +217,7 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
             log_step(log_file, "simulation", json.dumps(combo), sim, 1, 0)
 
     # msprime
-    elif sim == "msprime":
+    elif sim == MSPRIME:
         msprime_samples = []
         for i, deme in enumerate(graph.demes):
             if samples[i] > 0:
@@ -275,20 +270,6 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
         raise ValueError(f"Unsupported simulator: {sim}")
 
 
-def run_command_own(config_path, sim, output_file):
-    with open(config_path, "r") as f:
-        config = yaml.safe_load(f)
-
-    if sim == "ms":
-        run_ms_simulation(config=config, output_file=output_file)
-    elif sim == "msms":
-        run_msms_simulation(config=config, output_file=output_file)
-    elif sim == "mspms" or sim == "msprime":
-        run_mspms_simulation(config=config, output_file=output_file)
-    else:
-        raise ValueError(f"Unsupported simulator: {sim}")
-
-
 parser = argparse.ArgumentParser(
     description="Run simulations with one or more config files."
 )
@@ -296,15 +277,8 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "--ms_path",
     type=Path,
-    default=DEFAULT_MS_PATH,
-    help=f"Path to ms executable (default: {DEFAULT_MS_PATH})",
-)
-
-parser.add_argument(
-    "--ms_mod_path",
-    type=Path,
     default=DEFAULT_MS_MOD_PATH,
-    help=f"Path to ms-mod executable (default: {None})",
+    help=f"Path to ms executable (default: {DEFAULT_MS_MOD_PATH})",
 )
 
 parser.add_argument(
@@ -359,12 +333,6 @@ parser.add_argument(
     help="Path to master log file to update (default: None)"
 )
 
-parser.add_argument(
-    "--copy_file",
-    type=Path,
-    default=None,
-    help="If raw file is just wished to be copied, put it here"
-)
 
 args = parser.parse_args()
 
@@ -375,44 +343,28 @@ output_file.parent.mkdir(parents=True, exist_ok=True)
 config_path = args.config_path
 nreps = args.nreps
 log_file = args.log_file
-copy_file = args.copy_file
-
-if copy_file is not None and copy_file.exists():
-    shutil.copy(copy_file, output_file)
-    print(f"Copied existing file {copy_file} -> {output_file}")
-    sys.exit(0)  
 
 ms_path = args.ms_path
-ms_mod_path = args.ms_mod_path
 msms_path = args.msms_path
 slim_path = args.slim_path
 
 sim_path = None
 
-if sim=="ms":
-    if bool(combo["usePrecision"]):
-        sim_path = ms_mod_path
-    else:
-        sim_path = ms_path
-elif sim=="msms":
+if sim==MS:
+    sim_path = ms_path
+elif sim==MSMS:
     sim_path = msms_path
-elif sim=="slim" or sim.startswith("slim"):
+elif sim==SLIM:
     sim_path = slim_path
 
-if "own_" in str(output_file):
-    run_command_own(
-        config_path=config_path,
-        sim=sim,
-        output_file=output_file
-        )
-else:
-    run_command_demes(
-        config_path=config_path, 
-        combo=combo, 
-        sim=sim, 
-        output_file=output_file, 
-        nreps=nreps, 
-        sim_path=sim_path,
-        log_file=log_file
-    )
+
+run_command_demes(
+    config_path=config_path, 
+    combo=combo, 
+    sim=sim, 
+    output_file=output_file, 
+    nreps=nreps, 
+    sim_path=sim_path,
+    log_file=log_file
+)
 

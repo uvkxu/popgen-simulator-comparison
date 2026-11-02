@@ -1,0 +1,11 @@
+target_simulators:
+  - ms
+  - msms
+  - mspms
+
+replicates:
+  internal: 2
+  external: 5
+
+max_overall_samples: 200
+decimal_precision: 17

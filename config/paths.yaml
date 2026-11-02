@@ -1,0 +1,67 @@
+project_root: "."
+
+# Base directories
+directories:
+  bin: "bin"
+  config: "config"
+  lib: "lib"
+  # Can be absolute paths outside the project
+  # TODO: noch besonder hervorheben für den nutzer
+  data: "data"
+  results: "results"
+  
+
+# Shared feature types used by data, plots and top features
+feature_types:
+  - tree
+  - allele
+
+# Scientific configuration
+parameters:
+  directory: "parameter_setting"
+  demographic_models: "demographic_models"
+  simulation_parameters: "simulation_parameters.yaml"
+
+# Data subdirectories
+data_layout:
+  raw: "raw"
+  cleaned: "cleaned"
+  features: "features"
+
+# Results subdirectories
+results_layout:
+  top_features: "top_features"
+  statistics: "statistics"
+  plots: "plots"
+  merged_stats: "merged_stats"
+  collected: "collected"
+  aggregated_global: "aggregated_global"
+
+# Additional category for combined top-feature results
+topfeatures_types:
+  - tree
+  - allele
+  - together
+
+# Configuration files and other shared files
+files:
+  workflow_config: "config/workflow_config.yaml"
+  simulators: "config/simulators.yaml"
+  file_formats: "config/file_formats.yaml"
+
+executables:
+  ms:
+    linux: "ms"
+    windows: "ms.exe"
+
+  ms_mod:
+    linux: "ms-mod"
+    windows: "ms-mod.exe"
+
+  msms:
+    linux: "msms.jar"
+    windows: "msms.jar"
+
+  slim:
+    linux: "slim"
+    windows: "slim"

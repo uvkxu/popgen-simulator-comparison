@@ -17,19 +17,9 @@ sys.path.append(UTILS_ROOT)
 
 from snakemake_vars import (
     VALID_GROUPING_MODES,
-    format_feature_ranking_file,
-    format_feature_ranking_barplot,
-    format_classifier_importance_plot,
-    XGB_STR,
+    format_feature_ranking_file
 )
 from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
-
-EXCLUDE_FEATURES = {
-    "phylogenetic_div", "lap_max", "lap_fiedler", "lap_var", "lap_skew", "lap_mean",
-        "lap_kurt", "lap_second_min", "lap_entropy", "lap_sum",
-        "cut_weight", "conductance", "normalized_cut", "bottleneck_strength",
-        "density_pos", "density_neg", "modularity", "fiedler_sd"
-}
 
 
 def _relative_after_dir(p: Path, anchor: str) -> Path:
@@ -111,7 +101,10 @@ def collect_and_merge_tree_allele_features(
         merged_dfs.append(df_merged)
 
     if not merged_dfs:
-        raise ValueError("No CSV pairs were merged.")
+        raise ValueError("No CSV pairs were merged.\n Number of tree CSVs: "
+                         f"{len(tree_csv_files)}\n"
+                         f"Number of allele CSVs: {len(allele_csv_files)}\n"
+                         f"Simulators: {simulators}")
 
     return merged_dfs
 
@@ -151,70 +144,9 @@ def comparison(
     simA = data[data["simulator"] == simulator_a]
     simB = data[data["simulator"] == simulator_b]
 
-    FEATURES_TO_EXCLUDE = [
-        # --- stats_laplace (weighted = TRUE) ---
-        "lap_max",
-        "lap_fiedler",
-        "lap_var",
-        "lap_skew",
-        "lap_mean",
-        "lap_kurt",
-        "lap_second_min",
-        "lap_entropy",
-        "lap_sum",
-        "tree_type",
-        "cut_edge_weight",
-        "share_pos",
-        "share_neg",
-        "share_zero",
-        "ratio_neg_pos",
-        "dist_char",
-        "eigen_centrality",
-        "eigen_centralityW",
-
-        # --- stats_laplace (weighted = FALSE / unweighted) ---
-        "lap_max_uw",
-        "lap_fiedler_uw",
-        "lap_var_uw",
-        "lap_skew_uw",
-        "lap_mean_uw",
-        "lap_kurt_uw",
-        "lap_second_min_uw",
-        "lap_entropy_uw",
-        "lap_sum_uw",
-        "tree_type_uw",
-        "laplace_spectrum_a_uw",
-        "laplace_spectrum_p_uw",
-        "laplace_spectrum_e_uw",
-        "laplace_spectrum_g_uw",
-        "min_laplace_uw",
-        "max_laplace_uw",
-        "min_adj_uw",
-        "max_adj_uw",
-        "mpd_uw",
-        "psv_uw",
-        "vpd_uw",
-        "mntd_uw",
-        "j_stat_uw",
-        "wiener_uw",
-        "max_closenessW_uw",
-        "eigen_centralityW_uw",
-        "treeness_uw"
-
-        # --- compute_characteristic_features ---
-        "cut_weight",
-        "conductance",
-        "normalized_cut",
-        "bottleneck_strength",
-        "density_pos",
-        "density_neg",
-        "modularity",
-        "fiedler_sd",
-    ]
-
     feature_names = [
         col for col in data.columns
-        if col != "simulator" and col not in FEATURES_TO_EXCLUDE
+        if col != "simulator"
     ]
 
     for feature in feature_names:
@@ -269,18 +201,15 @@ def get_csv_files_mode(input_folder, grouped_by, seq_len_group=None, sample_size
             with open(combo_yaml_path, "r") as f:
                 combo_params = yaml.safe_load(f)
 
-            usePrecision = bool(combo_params.get("usePrecision"))
             recombination_rate = float(combo_params.get("recombination_rate") or 0)
             sample_size = int(combo_params["sample_structure"][0])
             seq_len = int(combo_params["sequence_length"])
 
             if (
-                (("precision_applied" not in grouped_by) or usePrecision)
-                and (("precision_skipped" not in grouped_by) or (not usePrecision))
-                and (("recombination_applied" not in grouped_by) or (recombination_rate > 0))
+                (("recombination_applied" not in grouped_by) or (recombination_rate > 0))
                 and (("recombination_skipped" not in grouped_by) or (recombination_rate == 0))
-                and (("sample_size" not in grouped_by) or (sample_size == sample_size_group and usePrecision))
-                and (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
+                and (("sample_size" not in grouped_by) or (sample_size == sample_size_group))
+                and (("seq_len" not in grouped_by) or (seq_len == seq_len_group))
             ):
                 csv_files = list(root_path.rglob("*.csv"))
 

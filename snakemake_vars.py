@@ -10,33 +10,30 @@ import math
 import re
 import re
 
+from project_paths import *
+from simulators import *
+
+'''
 ROOT_DIR = Path(".")
 BIN_DIR = ROOT_DIR / "bin"
-CONFIG_DIR = ROOT_DIR / "stdpopsim-config"
-# CONFIG_DIR = ROOT_DIR / "configs"
-CMD_DIR = ROOT_DIR / "commands"
-LOG_DIR = ROOT_DIR / "logs"
+CONFIG_DIR = ROOT_DIR / "config"
 
-DATA_DIR = Path("/hits/fast/cme/kuchve/without_recombination/data")
-RESULTS_DIR = Path("/hits/fast/cme/kuchve/without_recombination/results_final")
+# Directories for parameters and demographic models
+PARAMETERS_DIR = CONFIG_DIR / "parameter_setting"
+DEM_MODELS_DIR = PARAMETERS_DIR / "demographic_models"
+VARIABLE_FILE_PATH = PARAMETERS_DIR / "simulation_parameters.yaml"
 
-DEFAULT_MS_PATH = BIN_DIR / "ms"
-DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
-DEFAULT_MS_MOD_PATH = BIN_DIR / "ms-mod"
-DEFAULT_SLIM_PATH = BIN_DIR / "slim"
-
-VARIABLE_FILE_PATH = CMD_DIR / "variables.txt"
-
+# Directories for data (simulation output, output after standardization and feature extraction)
+DATA_DIR = ROOT_DIR / "data" #Path("/hits/fast/cme/kuchve/without_recombination/data")
 RAW_DATA_DIR = DATA_DIR / "raw"
+CLEAN_DIR = DATA_DIR / "cleaned"
 FEATURES_DIR = DATA_DIR / "features"
 TREE_FEATURES_DIR = FEATURES_DIR / "tree"
 ALLEL_FEATURES_DIR = FEATURES_DIR / "allele"
 
-PIGOT_RHO_DIR = FEATURES_DIR / "pigot_rho"
 
-CLEAN_DIR = DATA_DIR / "cleaned"
-
-PLOTS_RESULTS_DIR = RESULTS_DIR / "plots"
+# Directories for results after evaluation (classification and statistical tests)
+RESULTS_DIR = ROOT_DIR / "results" #Path("/hits/fast/cme/kuchve/without_recombination/results_final")
 TOPFEATURES_RESULTS_DIR = RESULTS_DIR/ "top_features"
 STATISTICS_RESULTS_DIR = RESULTS_DIR / "statistics"
 
@@ -45,111 +42,115 @@ ALLELFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "allele"
 TREE_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "tree"
 TREEFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "tree"
 TOGETHER_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "together"
+
+
+# Simulatiors paths
+DEFAULT_MS_PATH = BIN_DIR / "ms"
+DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
+DEFAULT_MS_MOD_PATH = BIN_DIR / "ms-mod.exe"
+DEFAULT_SLIM_PATH = BIN_DIR / "slim"
+
+
+
+
+# Was zur Hölle ist das?
 TIPTOP_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "top_feature_run"
 
+# MERGED 
 MERGES_COLLECT_DIR = RESULTS_DIR / "merged_stats"
 COLLECT_DIR = RESULTS_DIR / "collected"
 ALLELFEATURES_COLLECT_DIR = COLLECT_DIR / "allele"
+# Wofür brauche ich das?
 TREEFEATURES_COLLECT_DIR = COLLECT_DIR / "tree"
 
-PATCHED_TREE_DIR = FEATURES_DIR / "patched_tree"
 
-#-------COPY-FILE---------------
-COPY_DIR = Path("/hits/fast/cme/kuchve/run2/data")
-COPY_RAW_DATA_DIR = COPY_DIR/ "raw"
-COPY_CLEAN_DIR = COPY_DIR/ "cleaned"
-COPY_FEATURES_DIR = COPY_DIR / "features"
-COPY_TREE_FEATURES_DIR = COPY_FEATURES_DIR / "tree"
-COPY_ALLEL_FEATURES_DIR = COPY_FEATURES_DIR / "allele"
-#-------------------------------
-
-SANITY_RESULTS_DIR = RESULTS_DIR / "sanity_checks"
-TREEPLOTS_RESULTS_DIR = RESULTS_DIR/ "treeplots"
-
-CMD_SUBDIR = "commands"
 
 COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
+'''
 
-SIMULATORS = ["ms", "msms", "mspms", "msprime"] #msms_ms behaves the same as just msms , , "msprime"
-REPS = 200
-NUM_REPLICATES = 2
-PRECISION = 17
-MAX_OVERALL_SAMPLES = 200
+# Load workflow_config 
+with WORKFLOW_CONFIG_FILE.open(encoding="utf-8") as f:
+    workflow_config = yaml.safe_load(f)
 
-NUM_SANITY_CLASSES = 5
-SANITY_REPS = 5
+# Get target simulators
+TARGET_SIMULATORS = workflow_config["target_simulators"]         
 
-with open("file_formats.yaml") as f:
-    FILE_FORMATS = yaml.safe_load(f)
-
-XGB_STR = "xgboost"
-RF_STR = "random_forest"
-LR_STR = "logistic_regression"
-CLASSIFIERS = [XGB_STR]
+EXTERNAL_REPS = workflow_config["replicates"]["external"]
+INTERNAL_REPS = workflow_config["replicates"]["internal"]
+PRECISION = workflow_config["decimal_precision"]
+MAX_OVERALL_SAMPLES = workflow_config["max_overall_samples"]
 
 
-all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{CONFIG_DIR}/*.yaml")]
+with (FILE_FORMATS).open() as f:
+    file_formats = yaml.safe_load(f)
 
+COMBO_PARAMETERS_YAML = file_formats["combo_parameters"]
+
+
+all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{DEM_MODELS_DIR}/*.yaml")]
+
+
+# Computation of the GROUPING MODES for the grouping for computation of top features
+# TODO: VALID_GROUPING_MODES anpassen
 VALID_GROUPING_MODES = [
-    "precision_applied", "precision_skipped",
     "recombination_applied", "recombination_skipped",
     "overall", "single", 
     "sample_size_4", "sample_size_8", "sample_size_16",
     "sample_size_32", "sample_size_64", "sample_size_128",
     "seq_len_1000", "seq_len_10000", "seq_len_100000", "seq_len_1000000"
 ]
-GROUPING_MODES_TREE = ["sample_size_4", "sample_size_8", "sample_size_16",
-    "sample_size_32", "sample_size_64", "sample_size_128"]
 
-GROUPING_MODES_ALLEL = ["seq_len_1000", "seq_len_10000", "seq_len_100000", "seq_len_1000000"]
+with open(VARIABLE_FILE_PATH, "r", encoding="utf-8") as f:
+    variables = yaml.safe_load(f)
+
+GROUPING_MODES_TREE = [
+    f"sample_size_{sample_size}"
+    for sample_size in variables["sample_sizes"]
+]
+
+GROUPING_MODES_ALLEL = [
+    f"seq_len_{seq_len}"
+    for seq_len in variables["sequence_lengths"]
+]
+
+
 
 def get_num_sampled_populations(config_path):
     num_pops = 0
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
-    if CONFIG_DIR.name != "own_configs":
-        for pop in config.get("demes"):
-            epochs_time = {epoch.get("end_time", 0) for epoch in pop.get("epochs")}
-            if any(t == 0 for t in epochs_time):
-                num_pops += 1
-    else:
-        if "populations" not in config:
-            return 1
-        for pop in config.get("populations", []):
-            if pop.get("sample_size", 0) > 0:
-                num_pops += 1
+    for pop in config.get("demes"):
+        epochs_time = {epoch.get("end_time", 0) for epoch in pop.get("epochs")}
+        if any(t == 0 for t in epochs_time):
+            num_pops += 1
     return num_pops
 
+
 def get_combinations(config_path, variable_file):
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     vars_dict = parse_variable_file(variable_file)
+
     if get_num_sampled_populations(config_path) < 2:
         vars_dict.pop("population_sizes", None)
+
     keys = list(vars_dict.keys())
-    combos = itertools.product(*vars_dict.values())
+    combos = itertools.product(*(vars_dict[key] for key in keys))
 
     return keys, combos
 
 
 def parse_variable_file(filepath):
-    """Reads the variable file and returns a dict of parameter lists."""
-    variables = {}
-    with open(filepath, "r") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            key, values = line.split(":")
-            key = key.strip()
-            vals = [v.strip() for v in values.split(",")]
-            def convert(v):
-                try:
-                    return int(v) if "." not in v else float(v)
-                except ValueError:
-                    return v
-            variables[key] = [convert(v) for v in vals]
+    """Read simulation parameters from a YAML file."""
+    with open(filepath, "r", encoding="utf-8") as f:
+        variables = yaml.safe_load(f)
+
+    if not isinstance(variables, dict):
+        raise ValueError(
+            f"Expected a dictionary in parameter file: {filepath}"
+        )
+
     return variables
 
 
@@ -162,7 +163,7 @@ combo_folder_to_json = {}
 all_combo_folders = set()
 
 for config_name in all_configs:
-    config_file = Path(CONFIG_DIR) / f"{config_name}.yaml"
+    config_file = Path(DEM_MODELS_DIR) / f"{config_name}.yaml"
     keys, all_combos_by_config = get_combinations(config_file, VARIABLE_FILE_PATH)
     num_populations = get_num_sampled_populations(config_file)
 
@@ -200,6 +201,311 @@ for config_name in all_configs:
             tree_modes_by_config[config_name].append(mode)
 
 
+# Generate all feature file names for each simulator group
+# and create a mapping from feature file to the corresponding simulator group
+
+def format_feature_ranking_file(group):
+    return file_formats["feature_ranking_with_summary"].format(
+        group="_".join(group)
+    )
+
+def get_evaluation_input(config, mode, feature_type, group=None, combo=None):
+    result = []
+    if type(group) is str:
+        group = group.split("_")
+    elif group is None:
+        group = TARGET_SIMULATORS
+
+    grouped_by = mode.split(",")
+    normalized_grouped_by = []
+    sample_size_group = None
+    seq_len_group = None
+
+    for m in grouped_by:
+        if m.startswith("sample_size"):
+            para = re.search(r"\d+", m)
+            if not para:
+                raise ValueError("sample_size mode needs a number")
+            sample_size_group = int(para.group())
+            normalized_grouped_by.append("sample_size")
+
+        elif m.startswith("seq_len"):
+            para = re.search(r"\d+", m)
+            if not para:
+                raise ValueError("seq_len mode needs a number")
+            seq_len_group = int(para.group())
+            normalized_grouped_by.append("seq_len")
+
+        else:
+            normalized_grouped_by.append(m)
+
+    grouped_by = set(normalized_grouped_by)
+    
+    if feature_type == "tree":
+        root_folder = TREE_FEATURES_DIR
+        format_file = "tree_features"
+    elif feature_type == "allel":
+        root_folder = ALLEL_FEATURES_DIR
+        format_file = "allel_features"
+    else:
+        raise ValueError(f"Invalid feature type: {feature_type}")
+
+    if "single" in grouped_by:
+        if combo is None:
+            raise ValueError("Mode 'single' is not supported for top features input generation without combo.")
+
+        return [
+            f"{root_folder}/{config}/{combo}/rep{i+1}/{file_formats[format_file].format(SIM=sim)}"
+            for sim in group
+            for i in range(EXTERNAL_REPS)
+        ]
+
+    for combo_folder in combinations_by_config[config]:
+        combo_string = combo_folder_to_json[combo_folder]
+        combo = json.loads(combo_string)
+        rate = float(combo.get("recombination_rates"))
+        sample_size = int(combo.get("sample_sizes")) 
+        sample_size = int(combo.get("sample_sizes")) 
+        recombination_rate = int(combo.get("recombination_rates", 0)) 
+        seq_len = int(combo.get("sequence_lengths"))
+        usePrecision = bool(combo.get("usePrecision", True))
+
+        if (
+            (("recombination_applied" not in grouped_by) or (recombination_rate > 0)) and
+            (("recombination_skipped" not in grouped_by) or (recombination_rate == 0)) and
+            (("sample_size" not in grouped_by) or (sample_size == sample_size_group)) and
+            (("seq_len" not in grouped_by) or (seq_len == seq_len_group))
+        ):
+            result.append(combo_folder)
+    
+    return [
+        f"{root_folder}/{config}/{combo}/rep{i+1}/{file_formats[format_file].format(SIM=sim)}"
+        for combo in result
+        for sim in group
+        for i in range(EXTERNAL_REPS)
+    ] + [
+        f"{root_folder}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+        for combo in result
+    ]
+
+
+def get_topfeatures_by_config(config, sim_group, feature_type):
+    if feature_type == "tree":
+        root_folder = TREE_TOPFEATURES_DIR
+        modes = tree_modes_by_config[config]
+    elif feature_type == "allel":
+        root_folder = ALLEL_TOPFEATURES_DIR
+        modes = GROUPING_MODES_ALLEL
+    else:
+        raise ValueError(f"Invalid feature type: {feature_type}")
+
+    if type(sim_group) is str:
+        sim_group = sim_group.split("_")
+
+
+    return [
+        f"{root_folder}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
+        for mode in modes
+    ]
+
+combinations_mode = {}
+for config in all_configs:
+    combinations_mode[config] = [
+        f"{tree_mode},{grouping_mode}"
+        for tree_mode in tree_modes_by_config[config]
+        for grouping_mode in GROUPING_MODES_ALLEL
+    ]
+
+def get_topfeatures_by_config(config, sim_group, feature_type):
+    if feature_type == "tree":
+        root_folder = TREE_TOPFEATURES_DIR
+        modes = tree_modes_by_config[config]
+    elif feature_type == "allel":
+        root_folder = ALLEL_TOPFEATURES_DIR
+        modes = GROUPING_MODES_ALLEL
+    else:
+        raise ValueError(f"Invalid feature type: {feature_type}")
+
+    if type(sim_group) is str:
+        sim_group = sim_group.split("_")
+
+
+    return [
+        f"{root_folder}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
+        for mode in modes
+    ]
+
+combinations_mode = {}
+for config in all_configs:
+    combinations_mode[config] = [
+        f"{tree_mode},{grouping_mode}"
+        for tree_mode in tree_modes_by_config[config]
+        for grouping_mode in GROUPING_MODES_ALLEL
+    ]
+
+#----------------------------------
+# Zwischenstadien für snakemake
+#----------------------------------
+
+RAW_INPUTS = [
+    f"{RAW_DATA_DIR}/{config}/{combo}/rep{i+1}/{file_formats['raw'].format(SIM=sim)}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for sim in TARGET_SIMULATORS
+    for i in range(EXTERNAL_REPS)
+]
+
+ALL_COMBO_YAML = [
+    f"{RAW_DATA_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+]
+
+CLEAN_INPUTS = [
+    f"{CLEAN_DIR}/{config}/{combo}/rep{i+1}/{file_formats['cleaned'].format(SIM=sim)}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for sim in TARGET_SIMULATORS
+    for i in range(EXTERNAL_REPS)
+]
+
+ALL_FEATURES = [
+    f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{file_formats['tree_features'].format(SIM=sim)}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for sim in TARGET_SIMULATORS
+    for i in range(EXTERNAL_REPS)
+] + [
+    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{file_formats['allel_features'].format(SIM=sim)}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for sim in TARGET_SIMULATORS
+    for i in range(EXTERNAL_REPS)
+]
+
+ALL_SLIM_FEATURES = [
+    f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{file_formats['tree_features'].format(SIM=sim)}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for sim in ["slim"]
+    for i in range(EXTERNAL_REPS)
+] + [
+    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{file_formats['allel_features'].format(SIM=sim)}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+    for sim in ["slim"]
+    for i in range(EXTERNAL_REPS)
+]
+
+CREATE_COMBO_PARAMETERS_YAML = [
+    f"{TREE_FEATURES_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+] + [
+    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+    for config in all_configs
+    for combo in combinations_by_config[config]
+]
+
+#-----------------------------
+#Final results for snakemake
+#-----------------------------
+
+simulator_pairs = list(combinations(TARGET_SIMULATORS, 2))
+simulator_combination_all = tuple(TARGET_SIMULATORS)
+simulator_combinations = simulator_pairs + [simulator_combination_all]
+
+
+ALL_TREE_TOPFEATURES = [
+    f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(simulator_combination_all)}"
+    for config in all_configs
+    for mode in combinations_mode[config]
+] 
+
+ALL_ALLEL_TOPFEATURES = [
+    f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(simulator_combination_all)}"
+    for config in all_configs
+    for mode in combinations_mode[config]
+] 
+
+ALL_TOGETHER_TOPFEATURES = [
+    f"{TOGETHER_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for sim_group in simulator_pairs
+]
+
+STATS_RESULTS = [
+    f"{STATISTICS_RESULTS_DIR}/{config}/{mode}/{group_string}_feature_comparison.csv"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for group_string in [
+        "_".join(group) for group in simulator_pairs
+    ]
+]
+
+COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES + ALL_TOGETHER_TOPFEATURES + STATS_RESULTS
+
+
+#-------------------------
+# Optuna Search Space
+#-------------------------
+
+def format_optuna_report_file(group):
+    return file_formats["optuna_report_file"].format(
+        group="_".join(group)
+    )
+
+
+ALL_TREE_OPTUNA = [
+    f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_optuna_report_file(sim_group)}"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for sim_group in simulator_combinations
+]
+
+ALL_ALLEL_OPTUNA = [
+    f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_optuna_report_file(sim_group)}"
+    for config in all_configs
+    for mode in combinations_mode[config]
+    for sim_group in simulator_combinations
+]
+
+#-----------------------------------
+#COmpute stats for merged positions in coalescent simulators
+#-----------------------------------
+#TODO: check if also for slim
+
+simulators_merged_stats = [
+    simulator
+    for simulator in TARGET_SIMULATORS
+    if simulator in [MS, MSMS, MSPMS]
+]
+
+def get_merged_stats_overall_input(config, simulator):
+    return [
+    f"{MERGES_COLLECT_DIR}/{config}/{combo}/rep{i + 1}/{simulator}_merge_stats.csv"
+    for combo in combinations_by_config[config]
+    for i in range(EXTERNAL_REPS)
+]
+
+MERGED_STATS = [
+    f"{MERGES_COLLECT_DIR}/{config}/{simulator}_merged_positions_overall.csv"
+    for config in all_configs
+    for simulator in simulators_merged_stats
+] + [
+    f"{MERGES_COLLECT_DIR}/{config}/{simulator}_merged_positions_sample_size.csv"
+    for config in all_configs
+    for simulator in simulators_merged_stats
+]
+
+
+
+#---------------------------------------------
+# Estimation of cache
+#---------------------------------------------
+
+
 def estimate_mem_mb(config, combo, func, simulator=None):
     """
     Estimate memory (in MB) needed for different simulation/stat steps.
@@ -222,7 +528,7 @@ def estimate_mem_mb(config, combo, func, simulator=None):
         else:
             if config.suffix != ".yaml":
                 config = config.with_suffix(".yaml")
-            config_file = Path(CONFIG_DIR) / config
+            config_file = Path(DEM_MODELS_DIR) / config
 
     # optional: safety check
     if not config_file.exists():
@@ -247,7 +553,7 @@ def estimate_mem_mb(config, combo, func, simulator=None):
         # ==============================
         #  ms / classical coalescent
         # ==============================
-        if sim == "ms":
+        if sim == MS:
             # ms is text based; memory ~ output size
             # assume 0.2 byte per site×hap
             return min(int(n_haps * seq_len * 0.2 / 1e6), 10_000)
@@ -255,7 +561,7 @@ def estimate_mem_mb(config, combo, func, simulator=None):
         # ==============================
         #  msprime (tree sequences)
         # ==============================
-        if sim == "msprime":
+        if sim == MSPRIME:
             # msprime memory is modest even for long seqs
             # if no recombination, very cheap
             base_mb = n_haps * seq_len * 0.1 / 1e6
@@ -268,7 +574,7 @@ def estimate_mem_mb(config, combo, func, simulator=None):
         # ==============================
         #  msms (Java)
         # ==============================
-        if sim == "msms":
+        if sim == MSMS:
             recomb_rate = float(combo_json.get("recombination_rates", 0))
             mu = float(combo_json.get("mutation_rates", 1e-8))
 
@@ -297,7 +603,7 @@ def estimate_mem_mb(config, combo, func, simulator=None):
 
             mem_mb = site_mb + arg_mb
 
-            reps = int(combo_json.get("nreps", NUM_REPLICATES))
+            reps = int(combo_json.get("nreps", INTERNAL_REPS))
 
             # ====== Ultra-conservative peak multipliers ======
             mem_mb *= 10.0            # Mutation/output peak
@@ -529,520 +835,3 @@ def estimate_mem_mb_classification(
     # --- 5) Final ---
     est_mb = base_mem_mb * group_percentage * mode_percentage * scale
     return max(min_mem_mb, int(math.ceil(est_mb)))
-
-
-
-# Generate all feature file names for each simulator group
-# and create a mapping from feature file to the corresponding simulator group
-
-def format_feature_ranking_file(group):
-    return f"feature_ranking_{'_'.join(group)}_with_summary.csv"
-
-def format_feature_ranking_barplot(group):
-    return f"feature_ranking_{'_'.join(group)}_barplot.png"
-
-def format_classifier_importance_plot(classifier, group):
-    return f"feature_importance_{'_'.join(group)}_{classifier}.png"
-            
-simulator_interest = ["ms", "msms", "mspms"]             
-simulator_groups = list(combinations(simulator_interest, 2))
-# simulator_groups = []
-# simulator_groups.append(tuple(simulator_interest))
-# simulator_groups = list(dict.fromkeys(simulator_groups))
-# simulator_groups.append(("msms", "msprime", "ms"))
-
-def get_topfeatures_input(config, mode, feature_type, group=None, combo=None):
-    result = []
-    if type(group) is str:
-        group = group.split("_")
-    elif group is None:
-        group = SIMULATORS
-
-    grouped_by = mode.split(",")
-    normalized_grouped_by = []
-    sample_size_group = None
-    seq_len_group = None
-
-    for m in grouped_by:
-        if m.startswith("sample_size"):
-            para = re.search(r"\d+", m)
-            if not para:
-                raise ValueError("sample_size mode needs a number")
-            sample_size_group = int(para.group())
-            normalized_grouped_by.append("sample_size")
-
-        elif m.startswith("seq_len"):
-            para = re.search(r"\d+", m)
-            if not para:
-                raise ValueError("seq_len mode needs a number")
-            seq_len_group = int(para.group())
-            normalized_grouped_by.append("seq_len")
-
-        else:
-            normalized_grouped_by.append(m)
-
-    grouped_by = set(normalized_grouped_by)
-    
-    if feature_type == "tree":
-        root_folder = TREE_FEATURES_DIR
-        format_file = "tree_features"
-    elif feature_type == "allel":
-        root_folder = ALLEL_FEATURES_DIR
-        format_file = "allel_features"
-    else:
-        raise ValueError(f"Invalid feature type: {feature_type}")
-
-    if "single" in grouped_by:
-        if combo is None:
-            raise ValueError("Mode 'single' is not supported for top features input generation without combo.")
-
-        return [
-            f"{root_folder}/{config}/{combo}/rep{i+1}/{FILE_FORMATS[format_file].format(SIM=sim)}"
-            for sim in group
-            for i in range(REPS)
-        ]
-
-    for combo_folder in combinations_by_config[config]:
-        combo_string = combo_folder_to_json[combo_folder]
-        combo = json.loads(combo_string)
-        rate = float(combo.get("recombination_rates"))
-        sample_size = int(combo.get("sample_sizes")) 
-        sample_size = int(combo.get("sample_sizes")) 
-        recombination_rate = int(combo.get("recombination_rates", 0)) 
-        seq_len = int(combo.get("sequence_lengths"))
-        usePrecision = bool(combo.get("usePrecision", True))
-
-        if (
-            (("precision_applied" not in grouped_by) or usePrecision) and
-            (("precision_skipped" not in grouped_by) or (not usePrecision)) and
-            (("recombination_applied" not in grouped_by) or (recombination_rate > 0)) and
-            (("recombination_skipped" not in grouped_by) or (recombination_rate == 0)) and
-            (("sample_size" not in grouped_by) or (sample_size == sample_size_group and usePrecision)) and
-            (("seq_len" not in grouped_by) or (seq_len == seq_len_group and usePrecision))
-        ):
-            result.append(combo_folder)
-    
-    return [
-        f"{root_folder}/{config}/{combo}/rep{i+1}/{FILE_FORMATS[format_file].format(SIM=sim)}"
-        for combo in result
-        for sim in group
-        for i in range(REPS)
-    ] + [
-        f"{root_folder}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
-        for combo in result
-    ]
-
-
-def get_pigotrho_input(simulators):
-    if isinstance(simulators, str):
-        simulators = [simulators]
-
-    return [
-        f"{PIGOT_RHO_DIR}/{config}/{combo}/rep{i+1}/{sim}_pigotrho_features.csv"
-        for config in all_configs
-        for combo in combinations_by_config[config]
-        for sim in simulators
-        for i in range(REPS)
-    ]
-
-
-RAW_INPUTS = [
-    f"{RAW_DATA_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-ALL_COMBO_YAML = [
-    f"{RAW_DATA_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-]
-
-CLEAN_INPUTS = [
-    f"{CLEAN_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['cleaned'].format(SIM=sim)}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-ALL_FEATURES = [
-    f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in SIMULATORS
-    for i in range(REPS)
-] + [
-    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-ALL_SLIM_FEATURES = [
-    f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in ["slim"]
-    for i in range(REPS)
-] + [
-    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in ["slim"]
-    for i in range(REPS)
-]
-
-
-def get_topfeatures_by_config(config, sim_group, feature_type):
-    if feature_type == "tree":
-        root_folder = TREE_TOPFEATURES_DIR
-        modes = tree_modes_by_config[config]
-    elif feature_type == "allel":
-        root_folder = ALLEL_TOPFEATURES_DIR
-        modes = GROUPING_MODES_ALLEL
-    else:
-        raise ValueError(f"Invalid feature type: {feature_type}")
-
-    if type(sim_group) is str:
-        sim_group = sim_group.split("_")
-
-
-    return [
-        f"{root_folder}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
-        for mode in modes
-    ] + [
-        f"{root_folder}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
-        for mode in modes
-    ] + [
-        f"{root_folder}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-        for mode in modes
-        for classifier in CLASSIFIERS
-    ]
-
-combinations_mode = {}
-for config in all_configs:
-    combinations_mode[config] = [
-        f"{tree_mode},{grouping_mode}"
-        for tree_mode in tree_modes_by_config[config]
-        for grouping_mode in GROUPING_MODES_ALLEL
-    ]
-
-ALL_SLIM_FEATURES = [
-    f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in ["slim"]
-    for i in range(REPS)
-] + [
-    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{FILE_FORMATS['allel_features'].format(SIM=sim)}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in ["slim"]
-    for i in range(REPS)
-]
-
-
-def get_topfeatures_by_config(config, sim_group, feature_type):
-    if feature_type == "tree":
-        root_folder = TREE_TOPFEATURES_DIR
-        modes = tree_modes_by_config[config]
-    elif feature_type == "allel":
-        root_folder = ALLEL_TOPFEATURES_DIR
-        modes = GROUPING_MODES_ALLEL
-    else:
-        raise ValueError(f"Invalid feature type: {feature_type}")
-
-    if type(sim_group) is str:
-        sim_group = sim_group.split("_")
-
-
-    return [
-        f"{root_folder}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
-        for mode in modes
-    ] + [
-        f"{root_folder}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
-        for mode in modes
-    ] + [
-        f"{root_folder}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-        for mode in modes
-        for classifier in CLASSIFIERS
-    ]
-
-combinations_mode = {}
-for config in all_configs:
-    combinations_mode[config] = [
-        f"{tree_mode},{grouping_mode}"
-        for tree_mode in tree_modes_by_config[config]
-        for grouping_mode in GROUPING_MODES_ALLEL
-    ]
-
-
-ALL_TREE_TOPFEATURES = [
-    f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
-    for config in all_configs
-    for mode in combinations_mode[config]
-    for mode in combinations_mode[config]
-    for sim_group in simulator_groups
-] + [
-    f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
-    for config in all_configs
-    for mode in combinations_mode[config]
-    for mode in combinations_mode[config]
-    for sim_group in simulator_groups
-] + [
-    f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for config in all_configs
-    for mode in combinations_mode[config]
-    for mode in combinations_mode[config]
-    for sim_group in simulator_groups
-    for classifier in CLASSIFIERS
-]
-
-
-ALL_ALLEL_TOPFEATURES = [
-    f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
-    for config in all_configs
-    for mode in combinations_mode[config]
-    for sim_group in simulator_groups
-] + [
-    f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
-    for config in all_configs
-    for mode in combinations_mode[config]
-    for sim_group in simulator_groups
-] + [
-    f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for config in all_configs
-    for mode in combinations_mode[config]
-    for sim_group in simulator_groups
-    for classifier in CLASSIFIERS
-]
-
-ALL_TOGETHER_TOPFEATURES = [
-    f"{TOGETHER_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
-    for config in all_configs
-    for mode in combinations_mode[config]
-    for sim_group in simulator_groups
-] + [
-    f"{TOGETHER_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_barplot(sim_group)}"
-    for config in all_configs
-    for mode in combinations_mode[config]
-    for sim_group in simulator_groups
-] + [
-    f"{TOGETHER_TOPFEATURES_DIR}/{config}/{mode}/{format_classifier_importance_plot(classifier, sim_group)}"
-    for config in all_configs
-    for mode in combinations_mode[config]
-    for sim_group in simulator_groups
-    for classifier in CLASSIFIERS
-]
-
-
-ALL_PLOTS = [
-    f"{TREEFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
-    for config in all_configs
-    for mode in combinations_mode[config]
-] + [
-    f"{ALLELFEATURES_PLOTS_DIR}/{config}/{mode}/.done"
-    for config in all_configs
-    for mode in combinations_mode[config]
-]
-
-
-COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES + ALL_PLOTS
-
-STATS_RESULTS = [
-    f"{STATISTICS_RESULTS_DIR}/{config}/{mode}/{group_string}_feature_comparison.csv"
-    for config in all_configs
-    for mode in combinations_mode[config]
-    for group_string in [
-        "_".join(group) for group in simulator_groups
-    ]
-]
-
-
-MEAN_SAMPLE_SIZE_OUTPUT_TREE = [
-    path
-    for config in all_configs
-    for group in simulator_groups
-    for path in [
-        f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/mean_aggregated_{'_'.join(group)}_with_summary.csv",
-        f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_by_sample_size.csv",
-        f"{TREE_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_vs_sample_size.png"
-    ]
-]
-
-MEAN_SAMPLE_SIZE_OUTPUT_ALLEL = [
-    path
-    for config in all_configs
-    for group in simulator_groups
-    for path in [
-        f"{ALLEL_TOPFEATURES_DIR}/{config}/aggregated/mean_aggregated_{'_'.join(group)}_with_summary.csv",
-        f"{ALLEL_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_by_seq_len.csv",
-        f"{ALLEL_TOPFEATURES_DIR}/{config}/aggregated/all_features_{'_'.join(group)}_vs_seq_len.png"
-    ]
-]
-
-RAW_SINGLE = [
-    f"{RAW_DATA_DIR}/zigzag/{combo}/rep{i+1}/{FILE_FORMATS['raw'].format(SIM=sim)}"
-    for combo in combinations_by_config["zigzag"]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-EXCLUDE_CONFIGS = {"zigzag", "one_population"}
-
-EFF_CHECK_OUTPUT = [
-    f"{RESULTS_DIR}/{sim}/{typ}/{config}/{mode}/{fname}"
-    for sim in SIMULATORS
-    for typ in ("tree", "allele")
-    for config in all_configs
-    if config not in EXCLUDE_CONFIGS
-    for mode in combinations_mode[config]
-    for fname in (
-        f"check_eff_pop_size_{sim}_summary.csv",
-        f"check_eff_pop_size_{sim}_plot.png",
-    )
-]
-
-
-
-TOPFEATURES_AGG_GLOBAL_DIR = TOPFEATURES_RESULTS_DIR / "aggregated_global"
-TOPFEATURES_AGG_GLOBAL_PLOTS_DIR = TOPFEATURES_AGG_GLOBAL_DIR / "plots"
-
-AGG_OVERALL = TOPFEATURES_AGG_GLOBAL_DIR / "agg_overall.csv"
-AGG_FEAT    = TOPFEATURES_AGG_GLOBAL_DIR / "agg_feature_accuracy.csv"
-AGG_PASSED  = TOPFEATURES_AGG_GLOBAL_DIR / "agg_passed_frequency.csv"
-AGG_INDEX   = TOPFEATURES_AGG_GLOBAL_DIR / "agg_files_index.csv"
-
-# These are "key plots" that your plot script writes (always)
-PLOT_BAR_OVERALL = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "bar_overall_by_config_tree_vs_allele.png"
-PLOT_LINE_SEQLEN = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "line_accuracy_vs_sequence_length.png"
-
-# These are only produced if you pass --demes-root
-PLOT_LINE_RATIO_MEAN = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "line_accuracy_vs_sample_over_meanNe.png"
-PLOT_LINE_RATIO_MIN  = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "line_accuracy_vs_sample_over_minNe.png"
-PLOT_BAR_MIG         = TOPFEATURES_AGG_GLOBAL_PLOTS_DIR / "bar_accuracy_by_continuous_migration_tree_vs_allele.png"
-
-
-def list_all_topfeature_summary_csv():
-    """
-    Collect all feature_ranking_*_with_summary.csv under:
-      results/top_features/tree/{config}/{mode}/...
-      results/top_features/allele/{config}/{mode}/...
-    """
-    return [str(p) for p in TOPFEATURES_RESULTS_DIR.rglob("*with_summary.csv")]
-
-
-def format_optuna_report_file(group):
-    return f"xgb_params_esgrid_{'_'.join(group)}.yaml"
-
-
-ALL_TREE_OPTUNA = [
-    f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_optuna_report_file(sim_group)}"
-    for config in all_configs
-    for mode in combinations_mode[config]
-    for sim_group in simulator_groups
-]
-
-ALL_ALLEL_OPTUNA = [
-    f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_optuna_report_file(sim_group)}"
-    for config in all_configs
-    for mode in combinations_mode[config]
-    for sim_group in simulator_groups
-]
-
-
-ALL_OWN_FEATURES = [
-    f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{sim}_own_tree_features.csv"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in SIMULATORS
-    for i in range(REPS)
-] + [
-    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{sim}_own_allel_features.csv"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in SIMULATORS
-    for i in range(REPS)
-]
-
-CREATE_COMBO_PARAMETERS_YAML = [
-    f"{TREE_FEATURES_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-] + [
-    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-]
-
-TOPFEATURES_ACCURACY = [
-    f"{TIPTOP_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
-        for config in all_configs
-        for mode in combinations_mode[config]
-        for sim_group in simulator_groups
-]
-
-COLLECT_FEATURES = [
-    f"{COLLECT_DIR}/{type_}/{config}/simulator_feature_values.csv"
-        for type_ in ("tree", "allele")
-        for config in all_configs
-]
-
-OWN_COMPARISON_OUTPUT = [
-    f"{ALLEL_TOPFEATURES_DIR}/{config}/{combo}/feature_ranking_with_summary.csv"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-] + [
-    f"{TREE_TOPFEATURES_DIR}/{config}/{combo}/feature_ranking_with_summary.csv"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-]
-
-MERGED_STATS = [
-    f"{MERGES_COLLECT_DIR}/{config}/{combo}/rep{i + 1}/{simulator}_merge_stats.csv"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for i in range(REPS)
-    for simulator in ["ms", "msms", "mspms"]
-]
-
-MERGED_STATS_OVERALL = [
-    f"{ALLELFEATURES_COLLECT_DIR}/{config}/{simulator}_merged_positions_overall.csv"
-    for config in all_configs
-    for simulator in ["ms", "msms"]
-] + [
-    f"{ALLELFEATURES_COLLECT_DIR}/{config}/{simulator}_merged_positions_sample_size.csv"
-    for config in all_configs
-    for simulator in ["ms", "msms"]
-]
-
-DATA_CHECK_DIR = Path(DATA_DIR) / "check_tree"
-
-TREE_CHECK = [
-    f"{DATA_CHECK_DIR}/{config}/{combo}/rep{rep}/{simulator}_tree_check.csv"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for rep in range(1, REPS + 1)
-    for simulator in SIMULATORS
-]
-
-
-TREE_PATCHED = [
-    f"{PATCHED_TREE_DIR}/{config}/{combo}/rep{rep}/{FILE_FORMATS['tree_features'].format(SIM=sim)}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for rep in range(1, REPS + 1)
-    for sim in SIMULATORS
-]
-
-CHECK_TREE_FEATURES = [
-    f"{RESULTS_DIR}/check_tree_features/{config}/{combo}/rep{rep}/{simulator}_report.txt"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for rep in range(1, REPS + 1)
-    for simulator in simulator_interest
-]

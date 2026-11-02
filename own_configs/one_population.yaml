@@ -1,5 +1,0 @@
-population_size: 10000
-sample_size: 128
-sequence_length: 1000000
-mutation_rate: 3.5e-09
-num_replicates: 2

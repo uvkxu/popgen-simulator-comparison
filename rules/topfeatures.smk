@@ -1,3 +1,4 @@
+include: "../project_paths.py"
 include: "../snakemake_vars.py"
 
 
@@ -28,10 +29,10 @@ rule copy_combo_yaml_allel_features:
 
     
 rule compute_tree_topfeatures_grouped_by_mode:
+    input:
+        lambda wildcards: get_evaluation_input(wildcards.config, wildcards.mode, "tree", wildcards.group_string)
     output:
-        f"{TREE_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_with_summary.csv",
-        f"{TREE_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_barplot.png",
-        f"{TREE_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{XGB_STR}.png"
+        f"{TREE_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_with_summary.csv"
     resources:
         mem_mb=lambda wildcards, input: estimate_mem_mb_classification(input_folder=f"{TREE_FEATURES_DIR}/{wildcards.config}/", config=wildcards.config, group=wildcards.group_string, mode=wildcards.mode)
     params:
@@ -42,11 +43,11 @@ rule compute_tree_topfeatures_grouped_by_mode:
         output_dir = lambda wildcards: f"{TREE_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}",
         err_file = lambda wildcards: f"{TREE_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}/errorlog.err"
     conda:
-        "../envs/models-env.yaml"
+        "../envs/evaluation-env.yaml"
     shell:
         """
         scripts/run_with_errorlog.sh {params.err_file} \
-        python src/models/get_top_features.py \
+        python src/evaluation/get_top_features.py \
         --input_folder {params.input_dir} \
         --output_folder {params.output_dir} \
         --simulators {params.args_group} \
@@ -55,10 +56,10 @@ rule compute_tree_topfeatures_grouped_by_mode:
 
 
 rule compute_allel_topfeatures_grouped_by_mode:
+    input:
+        lambda wildcards: get_evaluation_input(wildcards.config, wildcards.mode, "allel", wildcards.group_string)
     output:
-        f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_with_summary.csv",
-        f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_barplot.png",
-        f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{XGB_STR}.png"
+        f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_with_summary.csv"
     resources:
         mem_mb=lambda wildcards, input: estimate_mem_mb_classification(input_folder=f"{ALLEL_FEATURES_DIR}/{wildcards.config}/", config=wildcards.config, group=wildcards.group_string, mode=wildcards.mode)
     params:
@@ -69,11 +70,11 @@ rule compute_allel_topfeatures_grouped_by_mode:
         output_dir = lambda wildcards: f"{ALLEL_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}",
         err_file = lambda wildcards: f"{ALLEL_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}/errorlog.err"
     conda:
-        "../envs/models-env.yaml"
+        "../envs/evaluation-env.yaml"
     shell:
         """
         scripts/run_with_errorlog.sh {params.err_file} \
-        python src/models/get_top_features.py \
+        python src/evaluation/get_top_features.py \
         --input_folder {params.input_dir} \
         --output_folder {params.output_dir} \
         --simulators {params.args_group} \
@@ -81,10 +82,15 @@ rule compute_allel_topfeatures_grouped_by_mode:
         """
 
 rule compute_together_topfeatures_grouped_by_mode:
+    input:
+        lambda wildcards: get_evaluation_input(
+            wildcards.config, wildcards.mode, "tree", wildcards.group_string
+        ),
+        lambda wildcards: get_evaluation_input(
+            wildcards.config, wildcards.mode, "allel", wildcards.group_string
+        )
     output:
-        f"{TOGETHER_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_with_summary.csv",
-        f"{TOGETHER_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_barplot.png",
-        f"{TOGETHER_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_importance_{{group_string}}_{XGB_STR}.png"
+        f"{TOGETHER_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_with_summary.csv"
     resources:
         mem_mb=lambda wildcards, input: estimate_mem_mb_classification(input_folder=f"{ALLEL_FEATURES_DIR}/{wildcards.config}/", config=wildcards.config, group=wildcards.group_string, mode=wildcards.mode)
     params:
@@ -96,90 +102,29 @@ rule compute_together_topfeatures_grouped_by_mode:
         output_dir = lambda wildcards: f"{TOGETHER_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}",
         err_file = lambda wildcards: f"{TOGETHER_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}/errorlog.err"
     conda:
-        "../envs/models-env.yaml"
+        "../envs/evaluation-env.yaml"
     shell:
         """
         scripts/run_with_errorlog.sh {params.err_file} \
-        python src/models/get_top_features_together.py \
+        python src/evaluation/get_top_features_together.py \
         --input_folder_tree {params.input_dir_tree} \
         --input_folder_allel {params.input_dir_allel} \
         --output_folder {params.output_dir} \
         --simulators {params.args_group} \
         --grouped_by {wildcards.mode}
-        """
-
-rule compute_actual_topfeatures_grouped_by_mode:
-    output:
-        f"{TIPTOP_TOPFEATURES_DIR}/{{config}}/{{mode}}/feature_ranking_{{group_string}}_with_summary.csv"
-    resources:
-        mem_mb=lambda wildcards, input: estimate_mem_mb_classification(
-            input_folder=f"{ALLEL_FEATURES_DIR}/{wildcards.config}/",
-            config=wildcards.config,
-            group=wildcards.group_string,
-            mode=wildcards.mode
-        )
-    params:
-        args_group=lambda wildcards: ",".join(
-            wildcards.group_string.split("_")
-        ),
-        input_dir_allel=lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/",
-        input_dir_tree=lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/",
-        output_dir=lambda wildcards: f"{TIPTOP_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}",
-        err_file=lambda wildcards: f"{TIPTOP_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}/errorlog.err"
-    conda:
-        "../envs/models-env.yaml"
-    shell:
-        """
-        scripts/run_with_errorlog.sh {params.err_file} \
-        python src/models/only_top_features.py \
-        --input_folder_tree {params.input_dir_tree} \
-        --input_folder_allel {params.input_dir_allel} \
-        --output_folder {params.output_dir} \
-        --simulators {params.args_group} \
-        --grouped_by {wildcards.mode}
-        """
-
-
-rule detect_source_tree:
-    output:
-        output_file = f"{TREE_TOPFEATURES_DIR}/{{config}}/{{combo}}/feature_ranking_with_summary.csv"
-    params:
-        input_dir_1 = lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/{wildcards.combo}",
-        input_dir_2 = lambda wildcards: f"/hits/fast/cme/kuchve/without_recombination/data/features/tree/{wildcards.config}/{wildcards.combo}",
-        err_file = lambda wildcards: f"{TREE_TOPFEATURES_DIR}/{wildcards.config}/errorlog.err"
-    conda:
-        "../envs/models-env.yaml"
-    shell:
-        """
-        scripts/run_with_errorlog.sh {params.err_file} \
-        python src/models/detect_source.py \
-        --input_dir1 {params.input_dir_1} \
-        --input_dir2 {params.input_dir_2} \
-        --output_file {output.output_file}
-        """
-
-rule detect_source_allele:
-    output:
-        output_file = f"{ALLEL_TOPFEATURES_DIR}/{{config}}/{{combo}}/feature_ranking_with_summary.csv"
-    params:
-        input_dir_1 = lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/{wildcards.combo}",
-        input_dir_2 = lambda wildcards: f"/hits/fast/cme/kuchve/without_recombination/data/features/allele/{wildcards.config}/{wildcards.combo}",
-        err_file = lambda wildcards: f"{ALLEL_TOPFEATURES_DIR}/{wildcards.config}/errorlog.err"
-    conda:
-        "../envs/models-env.yaml"
-    shell:
-        """
-        scripts/run_with_errorlog.sh {params.err_file} \
-        python src/models/detect_source.py \
-        --input_dir1 {params.input_dir_1} \
-        --input_dir2 {params.input_dir_2} \
-        --output_file {output.output_file}
         """
 
 
 #---------------Statistical Tests-----------------
 
 rule pairwise_statistical_test:
+    input:
+        lambda wildcards: get_evaluation_input(
+            wildcards.config, wildcards.mode, "tree", wildcards.group_string
+        ),
+        lambda wildcards: get_evaluation_input(
+            wildcards.config, wildcards.mode, "allel", wildcards.group_string
+        )
     output:
         output_file = f"{STATISTICS_RESULTS_DIR}/{{config}}/{{mode}}/{{group_string}}_feature_comparison.csv"
     params:
@@ -194,7 +139,7 @@ rule pairwise_statistical_test:
     shell:
         """
         scripts/run_with_errorlog.sh {params.err_file} \
-        python src/models/statistical_tests.py \
+        python src/evaluation/statistical_tests.py \
         --input_folder_tree {params.input_dir_tree} \
         --input_folder_allel {params.input_dir_allel} \
         --output_file {output.output_file} \

@@ -1,0 +1,11 @@
+sample_sizes:
+  - 16
+
+sequence_lengths:
+  - 1000
+
+population_sizes:
+  - 10000
+
+recombination_rates:
+  - 0

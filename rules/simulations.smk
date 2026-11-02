@@ -1,14 +1,14 @@
+include: "../project_paths.py"
 include: "../snakemake_vars.py"
 
 rule run_config_combo_rep_simulation_demes:
     input:
-        config_file = f"{CONFIG_DIR}/{{config}}.yaml"
+        config_file = f"{DEM_MODELS_DIR}/{{config}}.yaml"
     output:
         output_file = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_output.txt"
     params:
         combo_json=lambda w: combo_folder_to_json[w.combo],
-        err_file=lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err",
-        copy_file= lambda w: f"{COPY_RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}_output.txt"
+        err_file=lambda w: f"{RAW_DATA_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
     resources:
         mem_mb = lambda wildcards, attempt: estimate_mem_mb(
             config=wildcards.config,
@@ -25,15 +25,14 @@ rule run_config_combo_rep_simulation_demes:
             --config_path {input.config_file}\
             --simulator {wildcards.simulator} \
             --combo '{params.combo_json}' \
-            --nreps {NUM_REPLICATES} \
-            --output_file {output.output_file} \
-            --copy_file {params.copy_file}
+            --nreps {INTERNAL_REPS} \
+            --output_file {output.output_file}
         """
 
 
 rule create_combo_yaml_file:
     input:
-        config_file = f"{CONFIG_DIR}/{{config}}.yaml"
+        config_file = f"{DEM_MODELS_DIR}/{{config}}.yaml"
     output:
         output_file = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     params:
@@ -48,5 +47,5 @@ rule create_combo_yaml_file:
         --config_path {input.config_file} \
         --combo '{params.combo_json}' \
         --output_file {output.output_file} \
-        --nreps {NUM_REPLICATES}
+        --nreps {INTERNAL_REPS}
         """

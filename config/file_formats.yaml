@@ -1,0 +1,8 @@
+raw: "{SIM}_output.txt"
+cleaned: "{SIM}_cleaned_output.txt"
+allel_features: "{SIM}_allel_features.csv"
+tree_features: "{SIM}_tree_features.csv"
+reps: "/rep{REP}"
+combo_parameters: "combo_parameters.yaml"
+feature_ranking_with_summary: "feature_ranking_{group}_with_summary.csv"
+optuna_report_file: "xgb_params_esgrid_{group}.yaml"
