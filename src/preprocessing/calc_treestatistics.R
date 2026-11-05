@@ -152,8 +152,6 @@ calculate_all_treestats <- function(phylo, normalize = FALSE) {
   stats$tree_depth <- max(node.depth(phylo_unweighted))
   stats$num_branches <- nrow(phylo$edge)
 
-  stats <- c(stats, as.list(lap_stats))
-
   stats <- lapply(stats, function(x) {
     if (length(x) == 0) return(NA_real_)
     if (length(x) > 1) return(mean(x, na.rm = TRUE))
