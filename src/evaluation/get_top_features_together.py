@@ -26,7 +26,7 @@ UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(UTILS_ROOT)
 
 from snakemake_vars import (
-    VALID_GROUPING_MODES,
+    is_valid_grouping_mode,
     format_feature_ranking_file
 )
 from utils.io_helpers import collect_csv_files, detect_simulator_from_yaml
@@ -44,77 +44,228 @@ def _relative_after_dir(p: Path, anchor: str) -> Path:
     idx = parts.index(anchor)
     return Path(*parts[idx + 1:])
 
+#----------------------------------------------------------------------------
+# Hepler functions for aggregation of tree features in case of recombination
+#----------------------------------------------------------------------------
+
+def aggregate_tree_block(block: pd.DataFrame) -> dict:
+    """
+    Aggregate all tree features in one replicate block.
+    """
+    agg = {}
+    for col in block.columns:
+        agg[f"{col}_mean"] = block[col].mean()
+        agg[f"{col}_std"] = block[col].std()
+        agg[f"{col}_min"] = block[col].min()
+        agg[f"{col}_max"] = block[col].max()
+    agg["num_trees"] = len(block)
+    return agg
+
+
+def count_trees_per_replicate(cleaned_output):
+    counts = []
+    current = 0
+
+    with open(cleaned_output) as f:
+        for line in f:
+            line = line.strip()
+
+            if is_tree_line(line, cleaned_output):
+                current += 1
+            elif current > 0:
+                counts.append(current)
+                current = 0
+
+    if current > 0:
+        counts.append(current)
+
+    return counts
+
+
+def is_tree_line(line: str, file_path: str | Path | None = None) -> bool:
+    line = line.strip()
+
+    return (
+        "(" in line
+        and ";" in line
+        and not line.startswith("//")
+        and not line.lower().startswith("segsites")
+        and not line.lower().startswith("positions")
+    )
+
+
 def collect_and_merge_tree_allele_features(
     tree_csv_files: list[Path],
     allele_csv_files: list[Path],
     simulators: list[str],
+    cleaned_csv_files: list[Path] | None = None,
+    aggregate_trees: bool = False,
     suffix_tree: str = "_tree_features.csv",
     suffix_allele: str = "_allel_features.csv",
+    suffix_cleaned: str = "_cleaned_output.txt",
 ) -> list[pd.DataFrame]:
     """
     Merge tree and allele feature CSVs.
-    Paths are assumed identical below `tree/` vs `allele/`.
-    Feature names are NOT prefixed.
+
+    If aggregate_trees=True, tree features are aggregated at replicate
+    level using the number of marginal trees reconstructed from the
+    cleaned simulator output.
+
+    If aggregate_trees=False, tree and allele features are merged
+    directly without aggregation.
     """
 
-    # --- build allele lookup: relative path below allele/ ---
+    if aggregate_trees and cleaned_csv_files is None:
+        raise ValueError(
+            "cleaned_csv_files must be provided when aggregate_trees=True."
+        )
+
+    # --- Build allele lookup ---
     allele_lookup: dict[Path, Path] = {}
 
     for a in allele_csv_files:
-        key = _relative_after_dir(a, "allele")
+        rel = _relative_after_dir(a, "allele")
+
+        if aggregate_trees:
+            key = rel.with_name(rel.name.replace(suffix_allele, ""))
+        else:
+            key = rel
+
         allele_lookup[key] = a
+
+    # --- Build cleaned output lookup if aggregation is needed ---
+    cleaned_lookup: dict[Path, Path] = {}
+
+    if aggregate_trees:
+        for r in cleaned_csv_files:
+            rel = _relative_after_dir(r, "cleaned")
+            key = rel.with_name(rel.name.replace(suffix_cleaned, ""))
+            cleaned_lookup[key] = r
 
     merged_dfs: list[pd.DataFrame] = []
 
     for tree_csv in tree_csv_files:
-        tree_key = _relative_after_dir(tree_csv, "tree")
 
-        allele_key = tree_key.with_name(
-            tree_csv.name.replace(suffix_tree, suffix_allele)
-        )
+        # --- Identify simulator ---
+        sim_name = detect_simulator_from_yaml(tree_csv)
 
-        if allele_key not in allele_lookup:
-            raise FileNotFoundError(
-                f"No matching allele CSV for:\n{tree_csv}"
-            )
-
-        allele_csv = allele_lookup[allele_key]
-
-        df_tree = pd.read_csv(tree_csv)
-        df_allele = pd.read_csv(allele_csv)
-
-        if len(df_tree) != len(df_allele):
-            raise ValueError(
-                f"Row mismatch:\n{tree_csv}\n{allele_csv}"
-            )
-
-        # --- infer simulator from filename ---
-        simulator_name = detect_simulator_from_yaml(
-                input_file=tree_csv)
-
-        if simulator_name not in simulators:
+        if sim_name not in simulators:
             continue
 
-        simulator_col = pd.Series(
-            [simulator_name] * len(df_tree),
+        # --- Match corresponding allele file ---
+        rel_tree = _relative_after_dir(tree_csv, "tree")
+
+        if aggregate_trees:
+            key = rel_tree.with_name(
+                rel_tree.name.replace(suffix_tree, "")
+            )
+        else:
+            key = rel_tree.with_name(
+                tree_csv.name.replace(suffix_tree, suffix_allele)
+            )
+
+        if key not in allele_lookup:
+            raise FileNotFoundError(
+                f"No matching allele CSV for:\n{tree_csv}\n"
+                f"Looking for key: {key}"
+            )
+
+        # --- Read feature files ---
+        df_tree = pd.read_csv(tree_csv)
+        df_allele = pd.read_csv(allele_lookup[key])
+
+        # --- Aggregate tree features if required ---
+        if aggregate_trees:
+
+            if key not in cleaned_lookup:
+                raise FileNotFoundError(
+                    f"No matching cleaned output for:\n{tree_csv}\n"
+                    f"Looking for key: {key}"
+                )
+
+            cleaned_file = cleaned_lookup[key]
+
+            counts = count_trees_per_replicate(cleaned_file)
+
+            if sum(counts) != len(df_tree):
+                raise ValueError(
+                    f"Tree count mismatch:\n"
+                    f"sum(counts) = {sum(counts)}\n"
+                    f"tree rows = {len(df_tree)}\n"
+                    f"Tree file: {tree_csv}\n"
+                    f"Cleaned file: {cleaned_file}"
+                )
+
+            # Aggregate marginal trees per replicate
+            offset = 0
+            aggregated = []
+
+            for k in counts:
+                block = df_tree.iloc[offset:offset + k]
+                block = block.drop(columns=["simulator"], errors="ignore")
+
+                aggregated.append(aggregate_tree_block(block))
+                offset += k
+
+            df_tree = pd.DataFrame(aggregated)
+
+            # Save aggregated tree features
+            parts = list(tree_csv.parts)
+            tree_idx = parts.index("tree")
+            parts[tree_idx] = "tree_block"
+
+            block_path = Path(*parts).with_name(
+                tree_csv.name.replace(
+                    suffix_tree,
+                    "_tree_block_features.csv"
+                )
+            )
+
+            block_path.parent.mkdir(parents=True, exist_ok=True)
+            df_tree.to_csv(block_path, index=False)
+
+        else:
+            df_tree = df_tree.drop(
+                columns=["simulator"],
+                errors="ignore"
+            )
+
+        # --- Remove simulator column from allele features ---
+        df_allele = df_allele.drop(
+            columns=["simulator"],
+            errors="ignore"
+        )
+
+        # --- Check row correspondence ---
+        if len(df_tree) != len(df_allele):
+            raise ValueError(
+                f"Row mismatch between tree and allele features:\n"
+                f"Tree file: {tree_csv}\n"
+                f"Allele file: {allele_lookup[key]}\n"
+                f"Tree rows: {len(df_tree)}\n"
+                f"Allele rows: {len(df_allele)}"
+            )
+
+        # --- Merge features ---
+        sim_col = pd.Series(
+            [sim_name] * len(df_tree),
             name="simulator"
         )
 
-        tree_feats = df_tree.drop(columns=["simulator"], errors="ignore")
-        allele_feats = df_allele.drop(columns=["simulator"], errors="ignore")
-
         df_merged = pd.concat(
-            [simulator_col, tree_feats, allele_feats],
+            [sim_col, df_tree, df_allele],
             axis=1
         )
 
         merged_dfs.append(df_merged)
 
     if not merged_dfs:
-        raise ValueError("No CSV pairs were merged.\n Number of tree CSVs: "
-                         f"{len(tree_csv_files)}\n"
-                         f"Number of allele CSVs: {len(allele_csv_files)}\n"
-                         f"Simulators: {simulators}")
+        raise ValueError(
+            "No CSV pairs were merged.\n"
+            f"Number of tree CSVs: {len(tree_csv_files)}\n"
+            f"Number of allele CSVs: {len(allele_csv_files)}\n"
+            f"Simulators: {simulators}"
+        )
 
     return merged_dfs
 
@@ -351,7 +502,9 @@ def run_feature_evaluation(
     simulator_group,
     tree_csv_files,
     allel_csv_files,
+    cleaned_csv_files,
     output_dir,
+    aggregate_trees: bool = False,
     use_optuna: bool = False,
     optuna_trials: int = 50,
     es_rounds: int = 30,
@@ -363,6 +516,8 @@ def run_feature_evaluation(
     all_dfs =  collect_and_merge_tree_allele_features(
         tree_csv_files=tree_csv_files,
         allele_csv_files=allel_csv_files,
+        cleaned_csv_files=cleaned_csv_files,
+        aggregate_trees=aggregate_trees,
         simulators=simulator_group
     )
     data = pd.concat(all_dfs, ignore_index=True)
@@ -650,47 +805,66 @@ def run_feature_evaluation(
     df_summary.to_csv(csv_file, index=False)
 
 
-def csv_list(s: str) -> list[str]:
+def csv_list_simple(s: str) -> list[str]:
     return [x.strip() for x in s.split(",") if x.strip()]
 
+def csv_list_mode(value):
+    modes = [item.strip() for item in value.split(",")]
+
+    invalid_modes = [
+        mode for mode in modes
+        if not is_valid_grouping_mode(mode)
+    ]
+
+    if invalid_modes:
+        raise argparse.ArgumentTypeError(
+            f"Invalid grouping mode(s): {', '.join(invalid_modes)}"
+        )
+
+    return modes
 
 
-def get_csv_files_mode(input_folder, grouped_by, seq_len_group=None, sample_size_group=None, simulator_group=None):
+def get_csv_files_mode(input_folder, grouped_by, seq_len_group=None, sample_size_group=None, simulator_group=None, file_type="csv"):
     csv_my_mode = []
+    has_recombination = False
 
     for root, _, files in os.walk(input_folder):
-            root_path = Path(root)
+        root_path = Path(root)
 
-            combo_yamls = [f for f in files if f.endswith(".yaml") or f.endswith(".yml")]
-            if not combo_yamls:
-                continue
+        combo_yamls = [f for f in files if f.endswith(".yaml") or f.endswith(".yml")]
+        if not combo_yamls:
+            continue
 
-            combo_yaml_path = root_path / combo_yamls[0]
-            with open(combo_yaml_path, "r") as f:
-                combo_params = yaml.safe_load(f)
+        combo_yaml_path = root_path / combo_yamls[0]
+        with open(combo_yaml_path, "r") as f:
+            combo_params = yaml.safe_load(f)
 
-            recombination_rate = float(combo_params.get("recombination_rate") or 0)
-            sample_size = int(combo_params["sample_structure"][0])
-            seq_len = int(combo_params["sequence_length"])
+        recombination_rate = float(combo_params.get("recombination_rate") or 0)
+        has_recombination = (recombination_rate != 0)
+        sample_size = int(combo_params["sample_structure"][0])
+        seq_len = int(combo_params["sequence_length"])
 
-            if (
-                (("recombination_applied" not in grouped_by) or (recombination_rate > 0))
-                and (("recombination_skipped" not in grouped_by) or (recombination_rate == 0))
-                and (("sample_size" not in grouped_by) or (sample_size == sample_size_group))
-                and (("seq_len" not in grouped_by) or (seq_len == seq_len_group))
-            ):
-                csv_files = list(root_path.rglob("*.csv"))
+        if ((("recombination_applied" not in grouped_by) or (recombination_rate > 0))
+            and (("recombination_skipped" not in grouped_by) or (recombination_rate == 0))
+            and (("sample_size" not in grouped_by) or (sample_size == sample_size_group))
+            and (("seq_len" not in grouped_by) or (seq_len == seq_len_group))
+        ):
+            if "cleaned" in input_folder.parts:
+                csv_files = list(root_path.rglob("*_output.txt"))
+            else:
+                csv_files = collect_csv_files(root_path)
 
-                if simulator_group is not None:
+            if simulator_group:
                     csv_files = [
                         csv_file
                         for csv_file in csv_files
                         if detect_simulator_from_yaml(csv_file) in simulator_group
                     ]
 
-                csv_my_mode += csv_files
+            csv_my_mode += csv_files
 
-    return csv_my_mode
+    return has_recombination, csv_my_mode
+
 
 
 def parse_args():
@@ -698,6 +872,12 @@ def parse_args():
 
     parser.add_argument("--input_folder_tree", type=Path, required=True, help="Input folder containing result files")
     parser.add_argument("--input_folder_allel", type=Path, required=True, help="Input folder containing result files")
+    parser.add_argument(
+        "--input_folder_cleaned",
+        type=Path,
+        required=False,
+        help="Cleaned input folder",
+    )
     parser.add_argument("--output_folder", type=Path, required=True, help="Output folder path")
 
     parser.add_argument(
@@ -708,14 +888,9 @@ def parse_args():
     )
     parser.add_argument(
         "--grouped_by",
-        type=csv_list,
+        type=csv_list_mode,
         default=["single"],
-        help=(
-            "Comma-separated list of grouping modes, e.g. "
-            "'precision_applied,recombination_skipped,sample_size500'. "
-            f"Base choices: {', '.join(VALID_GROUPING_MODES)} "
-            "(sample_sizeN / seq_lenN allowed)."
-        ),
+        help="Comma-separated list of grouping modes."
     )
 
     parser.add_argument(
@@ -730,7 +905,7 @@ def parse_args():
 
     parser.add_argument(
         "--es_grid",
-        type=csv_list,
+        type=csv_list_simple,
         default=None,
         help="Comma-separated list of early stopping rounds for Optuna grid, e.g. '10,30,50'. "
              "If set with --use_optuna: runs Optuna for each ES and stores all results in one YAML.",
@@ -766,6 +941,7 @@ def main():
 
     input_folder_tree = args.input_folder_tree
     input_folder_allel = args.input_folder_allel
+    input_folder_cleaned = args.input_folder_cleaned
     output_folder = args.output_folder
     simulator_group = args.simulators
     grouped_by = args.grouped_by
@@ -801,18 +977,87 @@ def main():
     grouped_by = set(normalized_grouped_by)
 
     output_folder.mkdir(parents=True, exist_ok=True)
-    tree_csv_files = get_csv_files_mode(input_folder_tree, grouped_by, seq_len_group, sample_size_group, simulator_group)
-    allel_csv_files = get_csv_files_mode(input_folder_allel, grouped_by, seq_len_group, sample_size_group, simulator_group)
+    has_recombination, tree_csv_files = get_csv_files_mode(input_folder_tree, grouped_by, seq_len_group, sample_size_group, simulator_group)
+    _, allel_csv_files = get_csv_files_mode(input_folder_allel, grouped_by, seq_len_group, sample_size_group, simulator_group)
+    _, cleaned_csv_files = None if not input_folder_cleaned else get_csv_files_mode(input_folder_cleaned, grouped_by, seq_len_group, sample_size_group, simulator_group, "txt")
 
-    assert len(tree_csv_files) == len(allel_csv_files), (
-        f"Number of tree CSV files ({len(tree_csv_files)}) "
-        f"does not match number of allele CSV files ({len(allel_csv_files)})."
-    )
+    tree_set = {
+        _relative_after_dir(f, "tree").with_name(
+            _relative_after_dir(f, "tree").name.replace("_tree_features.csv", "")
+        )
+        for f in tree_csv_files
+    }
+
+    allel_set = {
+        _relative_after_dir(f, "allele").with_name(
+            _relative_after_dir(f, "allele").name.replace("_allel_features.csv", "")
+        )
+        for f in allel_csv_files
+    }
+
+    missing_tree = allel_set - tree_set
+    missing_allel = tree_set - allel_set
+
+    if missing_tree or missing_allel:
+        msg = (
+            f"Number of tree files:   {len(tree_csv_files)}\n"
+            f"Number of allele files: {len(allel_csv_files)}\n"
+        )
+
+        if missing_tree:
+            msg += f"\nExample allele file without matching tree file:\n  {next(iter(missing_tree))}\n"
+
+        if missing_allel:
+            msg += f"\nExample tree file without matching allele file:\n  {next(iter(missing_allel))}\n"
+
+        msg += (
+            f"Number of tree files ({len(tree_csv_files)}) does not match "
+            f"number of allele files ({len(allel_csv_files)}).\n"
+            f"grouped_by: {grouped_by}\n"
+            f"sample_size_group: {sample_size_group}\n"
+            f"seq_len_group: {seq_len_group}\n"
+            f"config: {input_folder_tree}\n"
+            f"{allel_csv_files}\n"
+        )
+
+        for tree in list(tree_set):
+            msg += f"{tree}\n"
+        msg += "------------------------------------------"
+
+        for allel in list(allel_set):
+            msg += f"{allel}\n"
+        msg += "------------------------------------------"
+
+        raise ValueError(msg)
+
+    if has_recombination:
+        assert len(cleaned_csv_files) != 0
+
+    if len(tree_csv_files) != len(allel_csv_files):
+        error_message = (
+            f"Number of tree files ({len(tree_csv_files)}) does not match "
+            f"number of allele files ({len(allel_csv_files)}).\n"
+            f"grouped_by: {grouped_by}\n"
+            f"sample_size_group: {sample_size_group}\n"
+            f"seq_len_group: {seq_len_group}\n"
+            f"config: {input_folder_tree}\n"
+            f"{allel_csv_files}\n"
+        )
+
+        with open("output.err", "a") as f:
+            f.write(error_message)
+
+        raise AssertionError(error_message)
+
+    if has_recombination:
+        assert len(tree_csv_files) == len(cleaned_csv_files)
 
     run_feature_evaluation(
         simulator_group=simulator_group,
         tree_csv_files=tree_csv_files,
         allel_csv_files=allel_csv_files,
+        cleaned_csv_files=cleaned_csv_files,
+        aggregate_trees=has_recombination,
         output_dir=output_folder,
         use_optuna=use_optuna,
         optuna_trials=optuna_trials,

@@ -27,6 +27,19 @@ rule copy_combo_yaml_allel_features:
         Path(output.copy_file).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(input.combo_yaml, output.copy_file)
 
+
+rule copy_combo_yaml_cleaned:
+    input:
+        combo_yaml = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+    output:
+        copy_file = f"{CLEAN_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+    run:
+        from pathlib import Path
+        import shutil
+
+        Path(output.copy_file).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(input.combo_yaml, output.copy_file)
+
     
 rule compute_tree_topfeatures_grouped_by_mode:
     input:
@@ -99,6 +112,7 @@ rule compute_together_topfeatures_grouped_by_mode:
         ),
         input_dir_allel = lambda wildcards: f"{ALLEL_FEATURES_DIR}/{wildcards.config}/",
         input_dir_tree = lambda wildcards: f"{TREE_FEATURES_DIR}/{wildcards.config}/",
+        input_dir_cleaned = lambda wildcards: f"{CLEAN_DIR}/{wildcards.config}/",
         output_dir = lambda wildcards: f"{TOGETHER_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}",
         err_file = lambda wildcards: f"{TOGETHER_TOPFEATURES_DIR}/{wildcards.config}/{wildcards.mode}/errorlog.err"
     conda:
@@ -109,6 +123,7 @@ rule compute_together_topfeatures_grouped_by_mode:
         python src/evaluation/get_top_features_together.py \
         --input_folder_tree {params.input_dir_tree} \
         --input_folder_allel {params.input_dir_allel} \
+        --input_folder_cleaned {params.input_dir_cleaned} \
         --output_folder {params.output_dir} \
         --simulators {params.args_group} \
         --grouped_by {wildcards.mode}

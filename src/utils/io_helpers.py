@@ -11,6 +11,20 @@ sys.path.append(PROJECT_ROOT)
 
 from simulators import *
 
+CONFIG_ORDER = [
+    "one_population",
+    "zigzag",
+    "li_african3epoch",
+    "lavretsky_ducks",
+    "locke_orangutan",
+    "gutenkunst_ooa",
+    "browning_america",
+    "pawar_gorilla",
+    "freedman_wolf",
+    "kamm_westerneurasia",
+    "jacobs_papuans",
+]
+
 
 def log_step(master_log_file, step_name, combo, simulator, success_inc, failed_inc, info: str = ""):
     """

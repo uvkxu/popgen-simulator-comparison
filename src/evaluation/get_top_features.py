@@ -26,7 +26,7 @@ UTILS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(UTILS_ROOT)
 
 from snakemake_vars import (
-    VALID_GROUPING_MODES,
+    is_valid_grouping_mode,
     format_feature_ranking_file
 )
 
@@ -592,8 +592,23 @@ def run_feature_evaluation(
     df_summary.to_csv(csv_file, index=False)
 
 
-def csv_list(s: str) -> list[str]:
+def csv_list_simple(s: str) -> list[str]:
     return [x.strip() for x in s.split(",") if x.strip()]
+
+def csv_list_mode(value):
+    modes = [item.strip() for item in value.split(",")]
+
+    invalid_modes = [
+        mode for mode in modes
+        if not is_valid_grouping_mode(mode)
+    ]
+
+    if invalid_modes:
+        raise argparse.ArgumentTypeError(
+            f"Invalid grouping mode(s): {', '.join(invalid_modes)}"
+        )
+
+    return modes
 
 
 def parse_args():
@@ -610,14 +625,9 @@ def parse_args():
     )
     parser.add_argument(
         "--grouped_by",
-        type=csv_list,
+        type=csv_list_mode,
         default=["single"],
-        help=(
-            "Comma-separated list of grouping modes, e.g. "
-            "'precision_applied,recombination_skipped,sample_size500'. "
-            f"Base choices: {', '.join(VALID_GROUPING_MODES)} "
-            "(sample_sizeN / seq_lenN allowed)."
-        ),
+        help="Comma-separated list of grouping modes."
     )
 
     parser.add_argument(
@@ -632,7 +642,7 @@ def parse_args():
 
     parser.add_argument(
         "--es_grid",
-        type=csv_list,
+        type=csv_list_simple,
         default=None,
         help="Comma-separated list of early stopping rounds for Optuna grid, e.g. '10,30,50'. "
              "If set with --use_optuna: runs Optuna for each ES and stores all results in one YAML.",

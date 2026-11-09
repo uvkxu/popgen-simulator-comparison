@@ -91,27 +91,53 @@ all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{DEM_MOD
 
 
 # Computation of the GROUPING MODES for the grouping for computation of top features
-# TODO: VALID_GROUPING_MODES anpassen
-VALID_GROUPING_MODES = [
-    "recombination_applied", "recombination_skipped",
-    "overall", "single", 
-    "sample_size_4", "sample_size_8", "sample_size_16",
-    "sample_size_32", "sample_size_64", "sample_size_128",
-    "seq_len_1000", "seq_len_10000", "seq_len_100000", "seq_len_1000000"
-]
+def is_valid_grouping_mode(mode):
+    return (
+        mode in {
+            "recombination_applied",
+            "recombination_skipped",
+            "overall",
+            "single",
+        }
+        or re.fullmatch(r"sample_size_\d+", mode) is not None
+        or re.fullmatch(r"seq_len_\d+", mode) is not None
+    )
 
 with open(VARIABLE_FILE_PATH, "r", encoding="utf-8") as f:
     variables = yaml.safe_load(f)
 
-GROUPING_MODES_TREE = [
-    f"sample_size_{sample_size}"
-    for sample_size in variables["sample_sizes"]
-]
 
-GROUPING_MODES_ALLEL = [
+GROUPING_MODES_SEQ_LEN = [
     f"seq_len_{seq_len}"
     for seq_len in variables["sequence_lengths"]
 ]
+
+recombination_settings = variables["recombination_rates"]
+
+if len(recombination_settings) > 2:
+    raise ValueError(
+        "Recombination is treated as a binary experimental factor. "
+        "At most two settings are allowed: one with recombination (non-zero rate) "
+        "and one without recombination (zero rate)."
+    )
+
+if len(recombination_settings) == 2:
+    has_zero = 0 in recombination_settings
+    has_nonzero = any(rate != 0 for rate in recombination_settings)
+
+    if not (has_zero and has_nonzero):
+        raise ValueError(
+            "When two recombination settings are provided, "
+            "one must be zero (without recombination) and the other non-zero (with recombination)."
+        )
+
+GROUPING_MODES_RECOMB = []
+
+for recomb_rate in recombination_settings:
+    if recomb_rate == 0:
+        GROUPING_MODES_RECOMB.append("recombination_skipped")
+    else:
+        GROUPING_MODES_RECOMB.append("recombination_applied")
 
 
 
@@ -158,7 +184,7 @@ def format_combination_as_folder_name(combo):
     return "_".join(f"{k}-{v}" for k, v in combo.items())
 
 combinations_by_config = {}
-tree_modes_by_config = {}
+modes_sample_size_by_config = {}
 combo_folder_to_json = {}
 all_combo_folders = set()
 
@@ -167,26 +193,22 @@ for config_name in all_configs:
     keys, all_combos_by_config = get_combinations(config_file, VARIABLE_FILE_PATH)
     num_populations = get_num_sampled_populations(config_file)
 
-    tree_modes_by_config[config_name] = []
+    modes_sample_size_by_config[config_name] = []
     
     combos = []
     for values in all_combos_by_config:
         combo = dict(zip(keys, values))
 
-        # --- Filter: remove combos with usePrecision=True AND recombination_rate != 0 ---
-        if not bool(combo.get("usePrecision")) and float(combo.get("recombination_rates", 0)) > 0.0:
+        # TODO: Vergiss nicht, wenn du slim hinzufügst dann auch freedman wolf auszuschließen
+        if (config_name == "lavretsky_ducks" or config_name == "li_african3epoch") and combo.get("recombination_rates") != 0:
             continue
         
         if num_populations * combo.get("sample_sizes") > MAX_OVERALL_SAMPLES:
             continue
 
         possible_mode = f"sample_size_{int(combo.get('sample_sizes'))}"
-        if possible_mode in GROUPING_MODES_TREE:
-            tree_modes_by_config[config_name].append(possible_mode)
-
-        possible_mode = f"sample_size_{int(combo.get('sample_sizes'))}"
-        if possible_mode in GROUPING_MODES_TREE:
-            tree_modes_by_config[config_name].append(possible_mode)
+        if is_valid_grouping_mode(possible_mode):
+            modes_sample_size_by_config[config_name].append(possible_mode)
 
         combo_folder = format_combination_as_folder_name(combo)
         all_combo_folders.add(combo_folder)
@@ -195,10 +217,6 @@ for config_name in all_configs:
         combo_folder_to_json[combo_folder] = json.dumps(combo)
     
     combinations_by_config[config_name] = combos
-
-    for mode in GROUPING_MODES_TREE:
-        if not "sample_size" in mode:
-            tree_modes_by_config[config_name].append(mode)
 
 
 # Generate all feature file names for each simulator group
@@ -266,7 +284,7 @@ def get_evaluation_input(config, mode, feature_type, group=None, combo=None):
         rate = float(combo.get("recombination_rates"))
         sample_size = int(combo.get("sample_sizes")) 
         sample_size = int(combo.get("sample_sizes")) 
-        recombination_rate = int(combo.get("recombination_rates", 0)) 
+        recombination_rate = float(combo.get("recombination_rates", 0))
         seq_len = int(combo.get("sequence_lengths"))
         usePrecision = bool(combo.get("usePrecision", True))
 
@@ -284,63 +302,23 @@ def get_evaluation_input(config, mode, feature_type, group=None, combo=None):
         for sim in group
         for i in range(EXTERNAL_REPS)
     ] + [
-        f"{root_folder}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+        f"{folder}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+        for folder in [root_folder, CLEAN_DIR]
         for combo in result
     ]
 
 
-def get_topfeatures_by_config(config, sim_group, feature_type):
-    if feature_type == "tree":
-        root_folder = TREE_TOPFEATURES_DIR
-        modes = tree_modes_by_config[config]
-    elif feature_type == "allel":
-        root_folder = ALLEL_TOPFEATURES_DIR
-        modes = GROUPING_MODES_ALLEL
-    else:
-        raise ValueError(f"Invalid feature type: {feature_type}")
-
-    if type(sim_group) is str:
-        sim_group = sim_group.split("_")
-
-
-    return [
-        f"{root_folder}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
-        for mode in modes
-    ]
-
 combinations_mode = {}
 for config in all_configs:
+    recombination_modes = GROUPING_MODES_RECOMB
+    if config == "lavretsky_ducks" or config == "li_african3epoch":
+        recombination_modes = ["recombination_skipped"]
+
     combinations_mode[config] = [
-        f"{tree_mode},{grouping_mode}"
-        for tree_mode in tree_modes_by_config[config]
-        for grouping_mode in GROUPING_MODES_ALLEL
-    ]
-
-def get_topfeatures_by_config(config, sim_group, feature_type):
-    if feature_type == "tree":
-        root_folder = TREE_TOPFEATURES_DIR
-        modes = tree_modes_by_config[config]
-    elif feature_type == "allel":
-        root_folder = ALLEL_TOPFEATURES_DIR
-        modes = GROUPING_MODES_ALLEL
-    else:
-        raise ValueError(f"Invalid feature type: {feature_type}")
-
-    if type(sim_group) is str:
-        sim_group = sim_group.split("_")
-
-
-    return [
-        f"{root_folder}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
-        for mode in modes
-    ]
-
-combinations_mode = {}
-for config in all_configs:
-    combinations_mode[config] = [
-        f"{tree_mode},{grouping_mode}"
-        for tree_mode in tree_modes_by_config[config]
-        for grouping_mode in GROUPING_MODES_ALLEL
+        f"{recombination_mode},{sample_size_mode},{seq_len_mode}"
+        for recombination_mode in recombination_modes
+        for sample_size_mode in modes_sample_size_by_config[config]
+        for seq_len_mode in GROUPING_MODES_SEQ_LEN
     ]
 
 #----------------------------------
@@ -444,7 +422,7 @@ STATS_RESULTS = [
     ]
 ]
 
-COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES + ALL_TOGETHER_TOPFEATURES + STATS_RESULTS
+COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES + ALL_TOGETHER_TOPFEATURES #+ STATS_RESULTS
 
 
 #-------------------------
@@ -578,6 +556,7 @@ def estimate_mem_mb(config, combo, func, simulator=None):
             recomb_rate = float(combo_json.get("recombination_rates", 0))
             mu = float(combo_json.get("mutation_rates", 1e-8))
 
+            # TODO: das ist hier iwie falsch
             Ne = combo_json.get("population_sizes")
             if Ne is None:
                 with open(config_file, "r") as f:
@@ -643,7 +622,7 @@ def estimate_mem_mb_classification(
     - scannt alle CSVs unter input_folder nur EINMAL (caching in size_all_csv)
     - skaliert dann pro Job über group-Anteil + mode-Anteil + (milde) Größe von sample_size/seq_len
 
-    Erwartet, dass SIMULATORS, tree_modes_by_config, GROUPING_MODES_ALLEL,
+    Erwartet, dass SIMULATORS, modes_sample_size_by_config, GROUPING_MODES_ALLEL,
     sowie ALLEL_FEATURES_DIR / TREE_FEATURES_DIR global existieren.
     """
 
@@ -652,7 +631,7 @@ def estimate_mem_mb_classification(
     - scannt alle CSVs unter input_folder nur EINMAL (caching in size_all_csv)
     - skaliert dann pro Job über group-Anteil + mode-Anteil + (milde) Größe von sample_size/seq_len
 
-    Erwartet, dass SIMULATORS, tree_modes_by_config, GROUPING_MODES_ALLEL,
+    Erwartet, dass SIMULATORS, modes_sample_size_by_config, GROUPING_MODES_ALLEL,
     sowie ALLEL_FEATURES_DIR / TREE_FEATURES_DIR global existieren.
     """
 
@@ -761,10 +740,10 @@ def estimate_mem_mb_classification(
 
     for token in mode_split:
         if "sample_size" in token:
-            denom = max(len(tree_modes_by_config.get(config, [])), 1)
+            denom = max(len(modes_sample_size_by_config.get(config, [])), 1)
             mode_percentage *= 1.0 / denom
         elif "seq_len" in token:
-            denom = max(len(GROUPING_MODES_ALLEL), 1)
+            denom = max(len(GROUPING_MODES_SEQ_LEN), 1)
             mode_percentage *= 1.0 / denom
 
     # --- 4) extra Skalierung: größere sample size / seq len => etwas mehr RAM ---
@@ -807,10 +786,10 @@ def estimate_mem_mb_classification(
 
     for token in mode_split:
         if "sample_size" in token:
-            denom = max(len(tree_modes_by_config.get(config, [])), 1)
+            denom = max(len(modes_sample_size_by_config.get(config, [])), 1)
             mode_percentage *= 1.0 / denom
         elif "seq_len" in token:
-            denom = max(len(GROUPING_MODES_ALLEL), 1)
+            denom = max(len(GROUPING_MODES_SEQ_LEN), 1)
             mode_percentage *= 1.0 / denom
 
     # --- 4) extra Skalierung: größere sample size / seq len => etwas mehr RAM ---

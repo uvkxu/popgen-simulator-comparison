@@ -16,4 +16,5 @@ dependencies:
   - r-dplyr
   - r-yaml
   - r-nloptr
+  - r-remotes
   - gfortran
