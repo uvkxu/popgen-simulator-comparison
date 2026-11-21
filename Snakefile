@@ -7,5 +7,4 @@ include: "rules/optuna.smk"
 
 rule all:
     input:
-        ALL_TREE_OPTUNA, ALL_ALLEL_OPTUNA
-        
+        COMPLETE_OUTPUTS

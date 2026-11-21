@@ -127,7 +127,8 @@ def run_slim_stdpopsim(graph, model_id, species_name, samples, nreps, output_fil
             contig=contig,
             samples=msprime_samples,
             slim_path=slim_path,
-            slim_scaling_factor=scaling_factor
+            slim_scaling_factor=scaling_factor,
+            slim_burn_in=10
         ) 
         end_time = time.time()
         elapsed = end_time - start_time
@@ -146,7 +147,6 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
     """Run a single simulator and write its raw output to a .txt file."""
 
     if output_file.exists():
-        print(f"Output file already exists, skipping: {output_file}")
         return
 
     with open(config_path, "r") as f:
@@ -265,7 +265,28 @@ def run_command_demes(config_path, combo, sim, output_file, nreps, sim_path=None
                         info=str(e))
             raise
 
+    # slim with stdpopsim
+    elif sim == "slim" or sim.startswith("slim"):
+        if not sim_path or not os.path.exists(sim_path):
+                raise FileNotFoundError(f"{sim} executable not found at {sim_path}.")
 
+        model_id = config.get("metadata", {}).get("model_id")
+        species_name = config.get("metadata", {}).get("species")
+        scaling_factor = config.get("metadata", {}).get("scaling_factor")
+
+        run_slim_stdpopsim(
+            graph=graph,
+            model_id=model_id,
+            species_name=species_name,
+            samples=samples,
+            nreps=nreps,
+            output_file=output_file,
+            slim_path=sim_path,
+            scaling_factor=scaling_factor
+        )
+
+        if log_file:
+            log_step(log_file, "simulation", json.dumps(combo), sim, success_inc=1, failed_inc=0)
     else:
         raise ValueError(f"Unsupported simulator: {sim}")
 
@@ -357,7 +378,6 @@ elif sim==MSMS:
 elif sim==SLIM:
     sim_path = slim_path
 
-
 run_command_demes(
     config_path=config_path, 
     combo=combo, 
@@ -367,4 +387,3 @@ run_command_demes(
     sim_path=sim_path,
     log_file=log_file
 )
-

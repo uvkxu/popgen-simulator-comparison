@@ -9,7 +9,6 @@ directories:
   # TODO: noch besonder hervorheben für den nutzer
   data: "data"
   results: "results"
-  
 
 # Shared feature types used by data, plots and top features
 feature_types:

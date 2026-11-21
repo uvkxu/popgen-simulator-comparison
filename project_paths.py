@@ -2,6 +2,7 @@
 from pathlib import Path
 import yaml
 import platform
+from scenario_types import COMPARISON_SCENARIOS
 
 
 SYSTEM = platform.system().lower()
@@ -46,41 +47,107 @@ DEM_MODELS_DIR = PARAMETERS_DIR / cfg["parameters"]["demographic_models"]
 VARIABLE_FILE_PATH = PARAMETERS_DIR / cfg["parameters"]["simulation_parameters"]
 
 # Data
-RAW_DATA_DIR = DATA_DIR / cfg["data_layout"]["raw"]
-CLEAN_DIR = DATA_DIR / cfg["data_layout"]["cleaned"]
-FEATURES_DIR = DATA_DIR / cfg["data_layout"]["features"]
+FEATURE_TYPES = cfg["feature_types"]
+
+
+# Data directories
+RAW_DATA_DIR = {
+    scenario: DATA_DIR / scenario / cfg["data_layout"]["raw"]
+    for scenario in COMPARISON_SCENARIOS
+}
+
+CLEAN_DIR = {
+    scenario: DATA_DIR / scenario / cfg["data_layout"]["cleaned"]
+    for scenario in COMPARISON_SCENARIOS
+}
+
+FEATURES_DATA_DIR = {
+    scenario: DATA_DIR / scenario / cfg["data_layout"]["features"]
+    for scenario in COMPARISON_SCENARIOS
+}
 
 FEATURE_DIRS = {
-    name: FEATURES_DIR / name
-    for name in cfg["feature_types"]
+    scenario: {
+        feature_type: FEATURES_DATA_DIR[scenario] / feature_type
+        for feature_type in FEATURE_TYPES
+    }
+    for scenario in COMPARISON_SCENARIOS
 }
 
-TREE_FEATURES_DIR = FEATURE_DIRS["tree"]
-ALLEL_FEATURES_DIR = FEATURE_DIRS["allele"]
+TREE_FEATURES_DIR = {
+    scenario: dirs["tree"]
+    for scenario, dirs in FEATURE_DIRS.items()
+}
+
+ALLEL_FEATURES_DIR = {
+    scenario: dirs["allele"]
+    for scenario, dirs in FEATURE_DIRS.items()
+}
+
+RESULTS_PATHS = {
+    scenario: {
+        name: RESULTS_DIR / scenario / subdir
+        for name, subdir in cfg["results_layout"].items()
+    }
+    for scenario in COMPARISON_SCENARIOS
+}
 
 # Results
-TOPFEATURES_RESULTS_DIR = RESULTS_DIR / cfg["results_layout"]["top_features"]
-STATISTICS_RESULTS_DIR = RESULTS_DIR / cfg["results_layout"]["statistics"]
-PLOTS_RESULTS_DIR = RESULTS_DIR / cfg["results_layout"]["plots"]
-MERGES_COLLECT_DIR = RESULTS_DIR / cfg["results_layout"]["merged_stats"]
-COLLECT_DIR = RESULTS_DIR / cfg["results_layout"]["collected"]
+# Results directories
+TOPFEATURES_RESULTS_DIR = {
+    scenario: RESULTS_PATHS[scenario]["top_features"]
+    for scenario in COMPARISON_SCENARIOS
+}
+
+STATISTICS_RESULTS_DIR = {
+    scenario: RESULTS_PATHS[scenario]["statistics"]
+    for scenario in COMPARISON_SCENARIOS
+}
+
+PLOTS_RESULTS_DIR = {
+    scenario: RESULTS_PATHS[scenario]["plots"]
+    for scenario in COMPARISON_SCENARIOS
+}
+
+MERGES_COLLECT_DIR = {
+    scenario: RESULTS_PATHS[scenario]["merged_stats"]
+    for scenario in COMPARISON_SCENARIOS
+}
+
+COLLECT_DIR = {
+    scenario: RESULTS_PATHS[scenario]["collected"]
+    for scenario in COMPARISON_SCENARIOS
+}
+
+AGGREGATED_GLOBAL_DIR = {
+    scenario: RESULTS_PATHS[scenario]["aggregated_global"]
+    for scenario in COMPARISON_SCENARIOS
+}
+
+TOPFEATURES_TYPES = cfg["topfeatures_types"]
 
 TOPFEATURES_DIRS = {
-    name: TOPFEATURES_RESULTS_DIR / name
-    for name in cfg["topfeatures_types"]
+    scenario: {
+        name: TOPFEATURES_RESULTS_DIR[scenario] / name
+        for name in TOPFEATURES_TYPES
+    }
+    for scenario in COMPARISON_SCENARIOS
 }
 
-TREE_TOPFEATURES_DIR = TOPFEATURES_DIRS["tree"]
-ALLEL_TOPFEATURES_DIR = TOPFEATURES_DIRS["allele"]
-TOGETHER_TOPFEATURES_DIR = TOPFEATURES_DIRS["together"]
-
-PLOTS_DIRS = {
-    name: PLOTS_RESULTS_DIR / name
-    for name in cfg["feature_types"]
+TREE_TOPFEATURES_DIR = {
+    scenario: dirs["tree"]
+    for scenario, dirs in TOPFEATURES_DIRS.items()
 }
 
-TREEFEATURES_PLOTS_DIR = PLOTS_DIRS["tree"]
-ALLELFEATURES_PLOTS_DIR = PLOTS_DIRS["allele"]
+ALLEL_TOPFEATURES_DIR = {
+    scenario: dirs["allele"]
+    for scenario, dirs in TOPFEATURES_DIRS.items()
+}
+
+TOGETHER_TOPFEATURES_DIR = {
+    scenario: dirs["together"]
+    for scenario, dirs in TOPFEATURES_DIRS.items()
+}
 
 # Executables
 def get_executable(name):

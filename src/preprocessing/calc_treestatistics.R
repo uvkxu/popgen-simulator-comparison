@@ -5,161 +5,260 @@ library(treestats)
 library(igraph)
 library(yaml)
 
-calculate_all_treestats <- function(phylo, normalize = FALSE) {
 
-  stats <- list()
+eps = 1e-8
+
+fix_zero_edges <- function(tr) {
+    if (!is.null(tr$edge.length)) {
+      tr$edge.length[tr$edge.length == 0] <- eps
+    }
+    tr
+  }
+
+make_binary <- function(tr) {
+    trb <- ape::multi2di(tr, random = TRUE)
+    fix_zero_edges(trb)
+  }
+
+calc_non_binary_node_features <- function(tr) {
+  if (is.null(tr$edge) || nrow(tr$edge) == 0) {
+    return(list(non_binary_nodes = NA_real_, non_binary_nodes_frac = NA_real_))
+  }
+
+  n_tip  <- length(tr$tip.label)
+  n_node <- tr$Nnode
+
+  if (is.null(n_node) || n_node <= 0) {
+    return(list(non_binary_nodes = 0, non_binary_nodes_frac = 0))
+  }
+
+  internal_nodes <- (n_tip + 1):(n_tip + n_node)
+
+  parent <- tr$edge[, 1]
+  outdeg <- tabulate(match(parent, internal_nodes), nbins = length(internal_nodes))
+
+  non_bin <- sum(outdeg != 2)
+  frac <- non_bin / n_node
+
+  list(non_binary_nodes = as.numeric(non_bin),
+       non_binary_nodes_frac = as.numeric(frac))
+}
+
+calculate_all_treestats <- function(phylo, normalize = FALSE, n_resolutions = 30) {
+
+  safe_any <- function(expr) {
+    tryCatch(expr, error = function(e) NULL)
+  }
+
+  as_num_scalar <- function(x) {
+    if (is.null(x)) return(NA_real_)
+    x <- as.numeric(x)
+    if (length(x) == 0) return(NA_real_)
+    if (length(x) > 1) return(mean(x, na.rm = TRUE))
+    x
+  }
+
+  is_bin <- safe_any(ape::is.binary(phylo))
+  if (is.null(is_bin) || length(is_bin) != 1 || is.na(is_bin)) {
+    is_bin <- FALSE
+  }
+
+  need_binary_avg <- (!is_bin) && (n_resolutions > 1)
+
+  stats_original <- list()
+
+  nb <- calc_non_binary_node_features(phylo)
+  stats_original$non_binary_nodes <- nb$non_binary_nodes
+  stats_original$non_binary_nodes_frac <- nb$non_binary_nodes_frac
   
-  stats$pigot_rho <- tryCatch(
+  stats_original$pigot_rho <- tryCatch(
     as.numeric(calc_pigot_rho(phylo)),
     error = function(e) NA_real_
   )
 
-  stats$blum <- tryCatch(
-    as.numeric(calc_blum_index(phylo)),
-    error = function(e) NA_real_
-  )
-
-  stats$phylogenetic_div <- tryCatch(
+  stats_original$phylogenetic_div <- tryCatch(
     as.numeric(calc_phylogenetic_diversity(phylo)),
     error = function(e) NA_real_
   )
 
-  stats$sackin             <- try_stat(phylo, treestats::sackin, normalize, c("yule", "none"))
+  
+  stats_original$crown_age          <- try_stat(phylo, treestats::crown_age)
+  stats_original$tree_height        <- try_stat(phylo, treestats::tree_height)
 
-  stats$colless            <- try_stat(phylo, treestats::colless, normalize, c("yule", "none"))
-  stats$colless_corr       <- try_stat(phylo, treestats::colless_corr, normalize, c("yule", "none"))
-  stats$colless_quad       <- try_stat(phylo, treestats::colless_quad, normalize, c("yule", "none"))
+  stats_original$number_of_lineages <- try_stat(phylo, treestats::number_of_lineages)
 
-  stats$beta               <- try_stat(phylo, treestats::beta_statistic)
-  stats$crown_age          <- try_stat(phylo, treestats::crown_age)
-  stats$tree_height        <- try_stat(phylo, treestats::tree_height)
+  stats_original$il_number          <- try_stat(phylo, treestats::ILnumber, normalize, c("tips", "none"))
 
-  stats$number_of_lineages <- try_stat(phylo, treestats::number_of_lineages)
-  stats$avg_ladder         <- try_stat(phylo, treestats::avg_ladder)
-  stats$max_ladder         <- try_stat(phylo, treestats::max_ladder)
-
-  stats$cherries           <- try_stat(phylo, treestats::cherries, normalize, c("yule", "none"))
-
-  stats$double_cherries    <- try_stat(phylo, treestats::double_cherries)
-  stats$four_prong         <- try_stat(phylo, treestats::four_prong)
-
-  stats$il_number          <- try_stat(phylo, treestats::ILnumber, normalize, c("tips", "none"))
-
-  stats$stairs             <- try_stat(phylo, treestats::stairs)
+  
 
   temp_stats <- tryCatch(expr = { treestats::laplacian_spectrum(phylo) },
                           error = function(e) { return(NA) })
 
   if (length(temp_stats) == 5) {
-    stats$laplace_spectrum_a  <- temp_stats$asymmetry
-    stats$laplace_spectrum_p  <- temp_stats$peakedness
-    stats$laplace_spectrum_e  <- log(temp_stats$principal_eigenvalue)
-    stats$laplace_spectrum_g  <- temp_stats$eigengap[[1]]
+    stats_original$laplace_spectrum_a  <- temp_stats$asymmetry
+    stats_original$laplace_spectrum_p  <- temp_stats$peakedness
+    stats_original$laplace_spectrum_e  <- log(temp_stats$principal_eigenvalue)
+    stats_original$laplace_spectrum_g  <- temp_stats$eigengap[[1]]
   } else {
-    stats$laplace_spectrum_a  <- NA
-    stats$laplace_spectrum_p  <- NA
-    stats$laplace_spectrum_e  <- NA
-    stats$laplace_spectrum_g  <- NA
+    stats_original$laplace_spectrum_a  <- NA
+    stats_original$laplace_spectrum_p  <- NA
+    stats_original$laplace_spectrum_e  <- NA
+    stats_original$laplace_spectrum_g  <- NA
   }
 
-  temp_stats <- try_stat(phylo, function(x) treestats::minmax_laplace(x, TRUE))
-  if (length(temp_stats) >= 2) {
-    stats$min_laplace <- temp_stats$min
-    stats$max_laplace <- temp_stats$max
-  } else {
-    stats$min_laplace <- NA
-    stats$max_laplace <- NA
-  }
 
-  temp_stats <- try_stat(phylo, function(x) treestats::minmax_adj(x, TRUE))
-  if (length(temp_stats) >= 2) {
-    stats$min_adj <- temp_stats$min
-    stats$max_adj <- temp_stats$max
-  } else {
-    stats$min_adj <- NA
-    stats$max_adj <- NA
-  }
+  stats_original$mpd                <- try_stat(phylo, treestats::mean_pair_dist, normalize, c("tips", "none"))
+  stats_original$psv                <- try_stat(phylo, treestats::psv, normalize, c("tips", "none"))
+  stats_original$mntd               <- try_stat(phylo, treestats::mntd)
 
-  stats$j_one              <- try_stat(phylo, treestats::j_one)
+  stats_original$j_stat             <- try_stat(phylo, treestats::entropy_j)
 
-  stats$b1                 <- try_stat(phylo, treestats::b1, normalize, c("tips", "none"))
-  stats$b2                 <- try_stat(phylo, treestats::b2, normalize, c("yule", "none"))
+  stats_original$rquartet           <- try_stat(phylo, treestats::rquartet, normalize, c("yule", "none"))
+  stats_original$mean_branch_length <- try_stat(phylo, treestats::mean_branch_length)
+  stats_original$var_branch_length  <- try_stat(phylo, treestats::var_branch_length)
 
-  stats$area_per_pair      <- try_stat(phylo, treestats::area_per_pair, normalize, c("yule", "none"))
-  stats$average_leaf_depth <- try_stat(phylo, treestats::average_leaf_depth, normalize, c("yule", "none"))
+  stats_original$mean_branch_length_int <- try_stat(phylo, treestats::mean_branch_length_int)
+  stats_original$mean_branch_length_ext <- try_stat(phylo, treestats::mean_branch_length_ext)
+  stats_original$var_branch_length_int  <- try_stat(phylo, treestats::var_branch_length_int)
+  stats_original$var_branch_length_ext  <- try_stat(phylo, treestats::var_branch_length_ext)
 
-  stats$i_stat             <- try_stat(phylo, treestats::mean_i)
-
-  stats$ew_colless         <- try_stat(phylo, treestats::ew_colless)
-
-  stats$max_del_width      <- try_stat(phylo, treestats::max_del_width, normalize, c("tips", "none"))
-  stats$max_depth          <- try_stat(phylo, treestats::max_depth, normalize, c("tips", "none"))
-  stats$avg_vert_depth     <- try_stat(phylo, treestats::avg_vert_depth)
-
-  stats$max_width          <- try_stat(phylo, treestats::max_width, normalize, c("tips", "none"))
-  stats$mw_over_md         <- try_stat(phylo, treestats::mw_over_md)
-
-  stats$tot_path           <- try_stat(phylo, treestats::tot_path_length)
-  stats$tot_internal_path  <- try_stat(phylo, treestats::tot_internal_path)
-
-  stats$rogers             <- try_stat(phylo, treestats::rogers, normalize, c("tips", "none"))
-
-  stats$stairs2            <- try_stat(phylo, treestats::stairs2)
-
-  stats$tot_coph           <- try_stat(phylo, treestats::tot_coph, normalize, c("yule", "none"))
-
-  stats$symmetry_nodes     <- try_stat(phylo, treestats::sym_nodes, normalize, c("tips", "none"))
-
-  stats$mpd                <- try_stat(phylo, treestats::mean_pair_dist, normalize, c("tips", "none"))
-  stats$psv                <- try_stat(phylo, treestats::psv, normalize, c("tips", "none"))
-  stats$vpd                <- try_stat(phylo, treestats::var_pair_dist)
-  stats$mntd               <- try_stat(phylo, treestats::mntd)
-
-  stats$j_stat             <- try_stat(phylo, treestats::entropy_j)
-
-  stats$rquartet           <- try_stat(phylo, treestats::rquartet, normalize, c("yule", "none"))
-  stats$wiener             <- try_stat(phylo, treestats::wiener, normalize)
-
-  stats$max_betweenness    <- try_stat(phylo, treestats::max_betweenness, normalize, c("tips", "none"))
-
-  local_closeness <- function(tree, w, n) {
-    treestats::max_closeness(tree, weight = w,
-                              normalization = ifelse(n == TRUE, "tips", "none"))
-  }
-
-  stats$max_closeness      <- try_stat(phylo, function(x) local_closeness(x, FALSE, normalize))
-  stats$max_closenessW     <- try_stat(phylo, function(x) local_closeness(x, TRUE,  normalize))
-
-  stats$diameter           <- try_stat(phylo, treestats::diameter)
-
-  stats$eigen_centrality   <- try_stat(phylo, function(x) max(treestats::eigen_centrality(x, weight = FALSE)$eigenvector))
-  stats$eigen_centralityW  <- try_stat(phylo, function(x) max(treestats::eigen_centrality(x, weight = TRUE)$eigenvector))
-
-  stats$mean_branch_length <- try_stat(phylo, treestats::mean_branch_length)
-  stats$var_branch_length  <- try_stat(phylo, treestats::var_branch_length)
-
-  stats$mean_branch_length_int <- try_stat(phylo, treestats::mean_branch_length_int)
-  stats$mean_branch_length_ext <- try_stat(phylo, treestats::mean_branch_length_ext)
-  stats$var_branch_length_int  <- try_stat(phylo, treestats::var_branch_length_int)
-  stats$var_branch_length_ext  <- try_stat(phylo, treestats::var_branch_length_ext)
-
-  stats$treeness <- try_stat(phylo, treestats::treeness)
-  stats$root_imbalance <- try_stat(phylo, treestats::root_imbalance)
+  stats_original$treeness <- try_stat(phylo, treestats::treeness)
 
   phylo_unweighted <- phylo
   phylo_unweighted$edge.length <- rep(1, nrow(phylo_unweighted$edge))
 
-  stats$tree_depth <- max(node.depth(phylo_unweighted))
-  stats$num_branches <- nrow(phylo$edge)
+  stats_original$tree_depth <- max(node.depth(phylo_unweighted))
+  stats_original$num_branches <- nrow(phylo$edge)
 
-  stats <- lapply(stats, function(x) {
-    if (length(x) == 0) return(NA_real_)
-    if (length(x) > 1) return(mean(x, na.rm = TRUE))
-    as.numeric(x)
-  })
+  calculate_binary_stats <- function(tr_bin) {
+    stats_bin <- list()
 
+    stats_bin$area_per_pair      <- try_stat(tr_bin, treestats::area_per_pair, normalize, c("yule", "none"))
+    stats_bin$average_leaf_depth <- try_stat(tr_bin, treestats::average_leaf_depth, normalize, c("yule", "none"))
+
+    stats_bin$blum <- tryCatch(
+      as.numeric(calc_blum_index(tr_bin)),
+      error = function(e) NA_real_
+    )
+
+    stats_bin$colless            <- try_stat(tr_bin, treestats::colless, normalize, c("yule", "none"))
+    stats_bin$colless_corr       <- try_stat(tr_bin, treestats::colless_corr, normalize, c("yule", "none"))
+    stats_bin$colless_quad       <- try_stat(tr_bin, treestats::colless_quad, normalize, c("yule", "none"))
+
+    stats_bin$beta               <- try_stat(tr_bin, treestats::beta_statistic)
+
+    stats_bin$avg_ladder         <- try_stat(tr_bin, treestats::avg_ladder)
+    stats_bin$max_ladder         <- try_stat(tr_bin, treestats::max_ladder)
+    stats_bin$cherries           <- try_stat(tr_bin, treestats::cherries, normalize, c("yule", "none"))
+
+    stats_bin$double_cherries    <- try_stat(tr_bin, treestats::double_cherries)
+    stats_bin$four_prong         <- try_stat(tr_bin, treestats::four_prong)
+    stats_bin$stairs             <- try_stat(tr_bin, treestats::stairs)
+    stats_bin$stairs2            <- try_stat(tr_bin, treestats::stairs2)
+
+    temp_stats <- try_stat(tr_bin, function(x) treestats::minmax_laplace(x, TRUE))
+    if (length(temp_stats) >= 2) {
+      stats_bin$min_laplace <- temp_stats$min
+      stats_bin$max_laplace <- temp_stats$max
+    } else {
+      stats_bin$min_laplace <- NA
+      stats_bin$max_laplace <- NA
+    }
+
+    temp_stats <- try_stat(tr_bin, function(x) treestats::minmax_adj(x, TRUE))
+    if (length(temp_stats) >= 2) {
+      stats_bin$min_adj <- temp_stats$min
+      stats_bin$max_adj <- temp_stats$max
+    } else {
+      stats_bin$min_adj <- NA
+      stats_bin$max_adj <- NA
+    }
+
+    stats_bin$j_one              <- try_stat(tr_bin, treestats::j_one)
+    stats_bin$b1                 <- try_stat(tr_bin, treestats::b1, normalize, c("tips", "none"))
+    stats_bin$b2                 <- try_stat(tr_bin, treestats::b2, normalize, c("yule", "none"))
+    stats_bin$eigen_centrality   <- try_stat(tr_bin, function(x) max(treestats::eigen_centrality(x, weight = FALSE)$eigenvector))
+    stats_bin$eigen_centralityW  <- try_stat(tr_bin, function(x) max(treestats::eigen_centrality(x, weight = TRUE)$eigenvector))
+    stats_bin$root_imbalance <- try_stat(tr_bin, treestats::root_imbalance)
+
+    local_closeness <- function(tree, w, n) {
+      treestats::max_closeness(tree, weight = w,
+                                normalization = ifelse(n == TRUE, "tips", "none"))
+    }
+
+    stats_bin$max_closeness      <- try_stat(tr_bin, function(x) local_closeness(x, FALSE, normalize))
+    stats_bin$max_closenessW     <- try_stat(tr_bin, function(x) local_closeness(x, TRUE,  normalize))
+    stats_bin$wiener             <- try_stat(tr_bin, treestats::wiener, normalize)
+
+    stats_bin$max_betweenness    <- try_stat(tr_bin, treestats::max_betweenness, normalize, c("tips", "none"))
+    stats_bin$diameter           <- try_stat(tr_bin, treestats::diameter)
+    stats_bin$i_stat             <- try_stat(tr_bin, treestats::mean_i)
+
+    stats_bin$ew_colless         <- try_stat(tr_bin, treestats::ew_colless)
+
+    stats_bin$max_del_width      <- try_stat(tr_bin, treestats::max_del_width, normalize, c("tips", "none"))
+
+    stats_bin$max_depth          <- try_stat(tr_bin, treestats::max_depth, normalize, c("tips", "none"))
+    stats_bin$avg_vert_depth     <- try_stat(tr_bin, treestats::avg_vert_depth)
+
+    stats_bin$max_width          <- try_stat(tr_bin, treestats::max_width, normalize, c("tips", "none"))
+    stats_bin$mw_over_md         <- try_stat(tr_bin, treestats::mw_over_md)
+    stats_bin$tot_path           <- try_stat(tr_bin, treestats::tot_path_length)
+    stats_bin$tot_internal_path  <- try_stat(tr_bin, treestats::tot_internal_path)
+
+    stats_bin$rogers             <- try_stat(tr_bin, treestats::rogers, normalize, c("tips", "none"))
+
+    stats_bin$tot_coph           <- try_stat(tr_bin, treestats::tot_coph, normalize, c("yule", "none"))
+
+    stats_bin$symmetry_nodes     <- try_stat(tr_bin, treestats::sym_nodes, normalize, c("tips", "none"))
+    
+    stats_bin$vpd                <- try_stat(tr_bin, treestats::var_pair_dist)
+
+    stats_bin <- lapply(stats_bin, as_num_scalar)
+    stats_bin <- unlist(stats_bin)
+    stats_bin[order(names(stats_bin))]
+  }
+
+  if (!need_binary_avg) {
+
+    stats_binary <- calculate_binary_stats(phylo)
+
+  } else {
+
+    reps <- vector("list", n_resolutions)
+
+    for (i in seq_len(n_resolutions)) {
+
+      tr_bin <- make_binary(phylo)
+
+      reps[[i]] <- calculate_binary_stats(tr_bin)
+    }
+
+    # Ergebnisse der einzelnen Resolutions zusammenführen
+    all_names <- sort(unique(unlist(lapply(reps, names))))
+
+    mat <- do.call(rbind, lapply(reps, function(v) {
+      out <- rep(NA_real_, length(all_names))
+      names(out) <- all_names
+      out[names(v)] <- v
+      out
+    }))
+
+    # Mittelwert pro Feature über alle Resolutions
+    stats_binary <- apply(
+      mat, 2,
+      function(v) mean(v, na.rm = TRUE)
+    )
+
+    stats_binary <- stats_binary[order(names(stats_binary))]
+  }
+
+  stats <- c(stats_original, as.list(stats_binary))
+
+  stats <- lapply(stats, as_num_scalar)
   stats <- unlist(stats)
   stats <- stats[order(names(stats))]
+
   return(stats)
 }
 

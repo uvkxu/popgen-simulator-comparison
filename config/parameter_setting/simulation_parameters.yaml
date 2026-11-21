@@ -9,3 +9,4 @@ population_sizes:
 
 recombination_rates:
   - 0
+  - 1e-8

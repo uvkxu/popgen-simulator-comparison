@@ -4,12 +4,12 @@ include: "../snakemake_vars.py"
 
 rule clean_single_file:
     input:
-        raw = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_output.txt",
-        combo_yaml = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+        raw = f"{DATA_DIR}/{{scenario}}/raw/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_output.txt",
+        combo_yaml = f"{DATA_DIR}/{{scenario}}/raw/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     output:
-        cleaned = protected(f"{CLEAN_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_cleaned_output.txt")
+        cleaned = f"{DATA_DIR}/{{scenario}}/cleaned/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_cleaned_output.txt"
     params:
-        err_file= lambda w: f"{CLEAN_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
+        err_file= lambda w: f"{DATA_DIR}/{w.scenario}/cleaned/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
     conda:
         "../envs/allelstats-env.yaml"
     shell:
@@ -24,12 +24,12 @@ rule clean_single_file:
     
 rule compute_allel_features_single_file:
     input:
-        cleaned = f"{CLEAN_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_cleaned_output.txt",
-        combo_yaml = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+        cleaned = f"{DATA_DIR}/{{scenario}}/cleaned/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_cleaned_output.txt",
+        combo_yaml = f"{DATA_DIR}/{{scenario}}/raw/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     output:
-        allelstats = f"{ALLEL_FEATURES_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_allel_features.csv"
+        allelstats = f"{DATA_DIR}/{{scenario}}/features/allele/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_allel_features.csv"
     params:
-        err_file= lambda w: f"{ALLEL_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
+        err_file= lambda w: f"{DATA_DIR}/{w.scenario}/features/allele/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
     resources:
         mem_mb = lambda wildcards, attempt: estimate_mem_mb(
             config=wildcards.config,
@@ -50,12 +50,12 @@ rule compute_allel_features_single_file:
 
 rule compute_tree_features_single_file:
     input:
-        cleaned = f"{CLEAN_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_cleaned_output.txt",
-        combo_yaml = f"{RAW_DATA_DIR}/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
+        cleaned = f"{DATA_DIR}/{{scenario}}/cleaned/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_cleaned_output.txt",
+        combo_yaml = f"{DATA_DIR}/{{scenario}}/raw/{{config}}/{{combo}}/{COMBO_PARAMETERS_YAML}"
     output:
-        treestats = f"{TREE_FEATURES_DIR}/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_tree_features.csv"
+        treestats = f"{DATA_DIR}/{{scenario}}/features/tree/{{config}}/{{combo}}/rep{{rep}}/{{simulator}}_tree_features.csv"
     params:
-        err_file = lambda w: f"{TREE_FEATURES_DIR}/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
+        err_file = lambda w: f"{DATA_DIR}/{w.scenario}/features/tree/{w.config}/{w.combo}/rep{w.rep}/{w.simulator}.err"
     conda:
         "../envs/treestats-env.yaml"
     shell:

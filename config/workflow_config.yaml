@@ -2,10 +2,17 @@ target_simulators:
   - ms
   - msms
   - mspms
+  - slim
+
+selected_scenarios:
+  - coalescent_with_recombination
+  - coalescent_without_recombination
+  - slim_comparison
+
 
 replicates:
   internal: 2
-  external: 5
+  external: 4
 
 max_overall_samples: 200
 decimal_precision: 17

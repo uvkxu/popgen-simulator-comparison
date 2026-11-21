@@ -745,9 +745,7 @@ def main():
         seq_len = int(combo_params["sequence_length"])
 
         if (
-            (("recombination_applied" not in grouped_by) or (recombination_rate > 0))
-            and (("recombination_skipped" not in grouped_by) or (recombination_rate == 0))
-            and (("sample_size" not in grouped_by) or (sample_size == sample_size_group))
+            (("sample_size" not in grouped_by) or (sample_size == sample_size_group))
             and (("seq_len" not in grouped_by) or (seq_len == seq_len_group))
         ):
             csv_my_mode += collect_csv_files(root_path)

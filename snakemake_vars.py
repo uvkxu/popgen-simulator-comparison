@@ -12,68 +12,86 @@ import re
 
 from project_paths import *
 from simulators import *
-
-'''
-ROOT_DIR = Path(".")
-BIN_DIR = ROOT_DIR / "bin"
-CONFIG_DIR = ROOT_DIR / "config"
-
-# Directories for parameters and demographic models
-PARAMETERS_DIR = CONFIG_DIR / "parameter_setting"
-DEM_MODELS_DIR = PARAMETERS_DIR / "demographic_models"
-VARIABLE_FILE_PATH = PARAMETERS_DIR / "simulation_parameters.yaml"
-
-# Directories for data (simulation output, output after standardization and feature extraction)
-DATA_DIR = ROOT_DIR / "data" #Path("/hits/fast/cme/kuchve/without_recombination/data")
-RAW_DATA_DIR = DATA_DIR / "raw"
-CLEAN_DIR = DATA_DIR / "cleaned"
-FEATURES_DIR = DATA_DIR / "features"
-TREE_FEATURES_DIR = FEATURES_DIR / "tree"
-ALLEL_FEATURES_DIR = FEATURES_DIR / "allele"
-
-
-# Directories for results after evaluation (classification and statistical tests)
-RESULTS_DIR = ROOT_DIR / "results" #Path("/hits/fast/cme/kuchve/without_recombination/results_final")
-TOPFEATURES_RESULTS_DIR = RESULTS_DIR/ "top_features"
-STATISTICS_RESULTS_DIR = RESULTS_DIR / "statistics"
-
-ALLEL_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "allele"
-ALLELFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "allele"
-TREE_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "tree"
-TREEFEATURES_PLOTS_DIR = PLOTS_RESULTS_DIR/ "tree"
-TOGETHER_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "together"
-
-
-# Simulatiors paths
-DEFAULT_MS_PATH = BIN_DIR / "ms"
-DEFAULT_MSMS_PATH = ROOT_DIR/ "lib"/ "msms.jar"
-DEFAULT_MS_MOD_PATH = BIN_DIR / "ms-mod.exe"
-DEFAULT_SLIM_PATH = BIN_DIR / "slim"
-
-
-
-
-# Was zur Hölle ist das?
-TIPTOP_TOPFEATURES_DIR = TOPFEATURES_RESULTS_DIR/ "top_feature_run"
-
-# MERGED 
-MERGES_COLLECT_DIR = RESULTS_DIR / "merged_stats"
-COLLECT_DIR = RESULTS_DIR / "collected"
-ALLELFEATURES_COLLECT_DIR = COLLECT_DIR / "allele"
-# Wofür brauche ich das?
-TREEFEATURES_COLLECT_DIR = COLLECT_DIR / "tree"
-
-
-
-COMBO_PARAMETERS_YAML = "combo_parameters.yaml"
-'''
+from scenario_types import *
 
 # Load workflow_config 
 with WORKFLOW_CONFIG_FILE.open(encoding="utf-8") as f:
     workflow_config = yaml.safe_load(f)
 
+with VARIABLE_FILE_PATH.open(encoding="utf-8") as f:
+    parameters_config = yaml.safe_load(f)
+
 # Get target simulators
-TARGET_SIMULATORS = workflow_config["target_simulators"]         
+TARGET_SIMULATORS = workflow_config["target_simulators"]
+RECOMBINATION_RATES = [
+    float(rate) if rate is not None else 0.0
+    for rate in parameters_config["recombination_rates"]
+]
+
+if not RECOMBINATION_RATES:
+    raise ValueError("At least one recombination rate must be specified.")
+
+if any(rate < 0 for rate in RECOMBINATION_RATES):
+    raise ValueError("Recombination rates must not be negative.")
+
+# Validate recombination rates
+if len(RECOMBINATION_RATES) > 2:
+    raise ValueError(
+        "More than two recombination rates are specified. "
+        "The current directory structure supports at most two rates "
+        "(one without recombination and one with recombination). "
+        "If you want to use more rates, the data and results directory "
+        "structure must be adapted to accommodate additional comparison scenarios."
+    )
+
+if len(RECOMBINATION_RATES) == 2:
+    has_zero = 0 in RECOMBINATION_RATES
+    has_nonzero = any(rate != 0 for rate in RECOMBINATION_RATES)
+
+    if not (has_zero and has_nonzero):
+        raise ValueError(
+            "If exactly two recombination rates are specified, "
+            "one must be 0 and the other must be non-zero."
+        )
+
+
+SELECTED_SCENARIOS = workflow_config["selected_scenarios"]
+AVAILABLE_SCENARIOS = []
+
+if 0 in RECOMBINATION_RATES:
+    AVAILABLE_SCENARIOS.append(COALESCENT_WITHOUT_RECOMBINATION)
+
+    if SLIM in TARGET_SIMULATORS:
+        AVAILABLE_SCENARIOS.append(SLIM_COMPARISON)
+
+if any(rate > 0 for rate in RECOMBINATION_RATES):
+    AVAILABLE_SCENARIOS.append(COALESCENT_WITH_RECOMBINATION)
+
+unavailable_scenarios = (
+    set(SELECTED_SCENARIOS) - set(AVAILABLE_SCENARIOS)
+)
+
+if unavailable_scenarios:
+    raise ValueError(
+        "The following selected scenarios cannot be executed "
+        "with the current simulator and recombination settings: "
+        f"{sorted(unavailable_scenarios)}"
+    )
+
+SIMULATORS_BY_SCENARIO = {
+    scenario: [
+        simulator for simulator in TARGET_SIMULATORS
+        if scenario == SLIM_COMPARISON or simulator != SLIM
+    ]
+    for scenario in SELECTED_SCENARIOS
+}
+
+for scenario, simulators in SIMULATORS_BY_SCENARIO.items():
+    if len(simulators) < 2:
+        raise ValueError(
+            f"Comparison scenario '{scenario}' requires at least two simulators. "
+            f"Currently selected simulators: {simulators}"
+        )
 
 EXTERNAL_REPS = workflow_config["replicates"]["external"]
 INTERNAL_REPS = workflow_config["replicates"]["internal"]
@@ -88,14 +106,25 @@ COMBO_PARAMETERS_YAML = file_formats["combo_parameters"]
 
 
 all_configs = [os.path.splitext(os.path.basename(f))[0] for f in glob(f"{DEM_MODELS_DIR}/*.yaml")]
+config_by_scenario = {
+    COALESCENT_WITHOUT_RECOMBINATION: all_configs.copy(),
+
+    COALESCENT_WITH_RECOMBINATION: [
+        config for config in all_configs
+        if config not in {"lavretsky_ducks", "li_african3epoch"}
+    ],
+
+    SLIM_COMPARISON: [
+        config for config in all_configs
+        if config != "freedman_wolf"
+    ],
+}
 
 
 # Computation of the GROUPING MODES for the grouping for computation of top features
 def is_valid_grouping_mode(mode):
     return (
         mode in {
-            "recombination_applied",
-            "recombination_skipped",
             "overall",
             "single",
         }
@@ -103,43 +132,10 @@ def is_valid_grouping_mode(mode):
         or re.fullmatch(r"seq_len_\d+", mode) is not None
     )
 
-with open(VARIABLE_FILE_PATH, "r", encoding="utf-8") as f:
-    variables = yaml.safe_load(f)
-
-
 GROUPING_MODES_SEQ_LEN = [
     f"seq_len_{seq_len}"
-    for seq_len in variables["sequence_lengths"]
+    for seq_len in parameters_config["sequence_lengths"]
 ]
-
-recombination_settings = variables["recombination_rates"]
-
-if len(recombination_settings) > 2:
-    raise ValueError(
-        "Recombination is treated as a binary experimental factor. "
-        "At most two settings are allowed: one with recombination (non-zero rate) "
-        "and one without recombination (zero rate)."
-    )
-
-if len(recombination_settings) == 2:
-    has_zero = 0 in recombination_settings
-    has_nonzero = any(rate != 0 for rate in recombination_settings)
-
-    if not (has_zero and has_nonzero):
-        raise ValueError(
-            "When two recombination settings are provided, "
-            "one must be zero (without recombination) and the other non-zero (with recombination)."
-        )
-
-GROUPING_MODES_RECOMB = []
-
-for recomb_rate in recombination_settings:
-    if recomb_rate == 0:
-        GROUPING_MODES_RECOMB.append("recombination_skipped")
-    else:
-        GROUPING_MODES_RECOMB.append("recombination_applied")
-
-
 
 def get_num_sampled_populations(config_path):
     num_pops = 0
@@ -183,26 +179,28 @@ def parse_variable_file(filepath):
 def format_combination_as_folder_name(combo):
     return "_".join(f"{k}-{v}" for k, v in combo.items())
 
-combinations_by_config = {}
+combinations_by_config_and_scenario = {}
 modes_sample_size_by_config = {}
 combo_folder_to_json = {}
 all_combo_folders = set()
 
 for config_name in all_configs:
     config_file = Path(DEM_MODELS_DIR) / f"{config_name}.yaml"
-    keys, all_combos_by_config = get_combinations(config_file, VARIABLE_FILE_PATH)
+    keys, all_combos_by_config = get_combinations(
+        config_file, VARIABLE_FILE_PATH
+    )
     num_populations = get_num_sampled_populations(config_file)
 
     modes_sample_size_by_config[config_name] = []
-    
-    combos = []
+
+    combos_by_scenario = {
+        scenario: []
+        for scenario in SELECTED_SCENARIOS
+    }
+
     for values in all_combos_by_config:
         combo = dict(zip(keys, values))
 
-        # TODO: Vergiss nicht, wenn du slim hinzufügst dann auch freedman wolf auszuschließen
-        if (config_name == "lavretsky_ducks" or config_name == "li_african3epoch") and combo.get("recombination_rates") != 0:
-            continue
-        
         if num_populations * combo.get("sample_sizes") > MAX_OVERALL_SAMPLES:
             continue
 
@@ -212,12 +210,65 @@ for config_name in all_configs:
 
         combo_folder = format_combination_as_folder_name(combo)
         all_combo_folders.add(combo_folder)
-
-        combos.append(combo_folder)
         combo_folder_to_json[combo_folder] = json.dumps(combo)
-    
-    combinations_by_config[config_name] = combos
 
+        recombination_rate = float(combo.get("recombination_rates") or 0)
+
+        if recombination_rate == 0:
+            for scenario in [COALESCENT_WITHOUT_RECOMBINATION, SLIM_COMPARISON]:
+                if (
+                    scenario in SELECTED_SCENARIOS
+                    and config_name in config_by_scenario[scenario]
+                ):
+                    combos_by_scenario[scenario].append(combo_folder)
+
+        elif (
+            COALESCENT_WITH_RECOMBINATION in SELECTED_SCENARIOS
+            and config_name not in {"lavretsky_ducks", "li_african3epoch"}
+        ):
+            combos_by_scenario[COALESCENT_WITH_RECOMBINATION].append(combo_folder)
+
+    for scenario in SELECTED_SCENARIOS:
+        combinations_by_config_and_scenario.setdefault(scenario, {})
+        combinations_by_config_and_scenario[scenario][config_name] = (
+            combos_by_scenario[scenario]
+        )
+
+simulators_by_scenario = {}
+simulator_groups_by_scenario = {}
+
+for scenario in SELECTED_SCENARIOS:
+    if scenario == SLIM_COMPARISON:
+        simulators = TARGET_SIMULATORS.copy()
+    else:
+        simulators = [
+            simulator for simulator in TARGET_SIMULATORS
+            if simulator != SLIM
+        ]
+
+    if len(simulators) < 2:
+        raise ValueError(
+            f"At least two simulators are required for '{scenario}'. "
+            f"Selected simulators: {simulators}"
+        )
+
+    simulators_by_scenario[scenario] = simulators
+
+    if scenario == SLIM_COMPARISON:
+        groups = [
+            pair for pair in itertools.combinations(simulators, 2)
+            if SLIM in pair
+        ]
+    else:
+        groups = []
+        if len(simulators) > 2:
+            groups = [
+                pair for pair in itertools.combinations(simulators, 2)
+            ]
+        groups.append(tuple(simulators))
+
+
+    simulator_groups_by_scenario[scenario] = groups
 
 # Generate all feature file names for each simulator group
 # and create a mapping from feature file to the corresponding simulator group
@@ -227,12 +278,12 @@ def format_feature_ranking_file(group):
         group="_".join(group)
     )
 
-def get_evaluation_input(config, mode, feature_type, group=None, combo=None):
+def get_evaluation_input(config, mode, feature_type, scenario, group=None, combo=None):
     result = []
     if type(group) is str:
         group = group.split("_")
     elif group is None:
-        group = TARGET_SIMULATORS
+        group = simulators_by_scenario[scenario]
 
     grouped_by = mode.split(",")
     normalized_grouped_by = []
@@ -260,10 +311,10 @@ def get_evaluation_input(config, mode, feature_type, group=None, combo=None):
     grouped_by = set(normalized_grouped_by)
     
     if feature_type == "tree":
-        root_folder = TREE_FEATURES_DIR
+        root_folder = TREE_FEATURES_DIR[scenario]
         format_file = "tree_features"
     elif feature_type == "allel":
-        root_folder = ALLEL_FEATURES_DIR
+        root_folder = ALLEL_FEATURES_DIR[scenario]
         format_file = "allel_features"
     else:
         raise ValueError(f"Invalid feature type: {feature_type}")
@@ -278,7 +329,7 @@ def get_evaluation_input(config, mode, feature_type, group=None, combo=None):
             for i in range(EXTERNAL_REPS)
         ]
 
-    for combo_folder in combinations_by_config[config]:
+    for combo_folder in combinations_by_config_and_scenario[scenario][config]:
         combo_string = combo_folder_to_json[combo_folder]
         combo = json.loads(combo_string)
         rate = float(combo.get("recombination_rates"))
@@ -289,8 +340,6 @@ def get_evaluation_input(config, mode, feature_type, group=None, combo=None):
         usePrecision = bool(combo.get("usePrecision", True))
 
         if (
-            (("recombination_applied" not in grouped_by) or (recombination_rate > 0)) and
-            (("recombination_skipped" not in grouped_by) or (recombination_rate == 0)) and
             (("sample_size" not in grouped_by) or (sample_size == sample_size_group)) and
             (("seq_len" not in grouped_by) or (seq_len == seq_len_group))
         ):
@@ -303,127 +352,117 @@ def get_evaluation_input(config, mode, feature_type, group=None, combo=None):
         for i in range(EXTERNAL_REPS)
     ] + [
         f"{folder}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
-        for folder in [root_folder, CLEAN_DIR]
+        for folder in [root_folder, CLEAN_DIR[scenario]]
         for combo in result
     ]
 
-
-combinations_mode = {}
-for config in all_configs:
-    recombination_modes = GROUPING_MODES_RECOMB
-    if config == "lavretsky_ducks" or config == "li_african3epoch":
-        recombination_modes = ["recombination_skipped"]
-
-    combinations_mode[config] = [
-        f"{recombination_mode},{sample_size_mode},{seq_len_mode}"
-        for recombination_mode in recombination_modes
-        for sample_size_mode in modes_sample_size_by_config[config]
-        for seq_len_mode in GROUPING_MODES_SEQ_LEN
-    ]
 
 #----------------------------------
 # Zwischenstadien für snakemake
 #----------------------------------
 
 RAW_INPUTS = [
-    f"{RAW_DATA_DIR}/{config}/{combo}/rep{i+1}/{file_formats['raw'].format(SIM=sim)}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in TARGET_SIMULATORS
+    f"{RAW_DATA_DIR[scenario]}/{config}/{combo}/rep{i+1}/{file_formats['raw'].format(SIM=sim)}"
+    for scenario in SELECTED_SCENARIOS
+    for config in config_by_scenario[scenario]
+    for combo in combinations_by_config_and_scenario[scenario][config]
+    for sim in simulators_by_scenario[scenario]
     for i in range(EXTERNAL_REPS)
 ]
 
 ALL_COMBO_YAML = [
-    f"{RAW_DATA_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
+    f"{RAW_DATA_DIR[scenario]}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+    for scenario in SELECTED_SCENARIOS
+    for config in config_by_scenario[scenario]
+    for combo in combinations_by_config_and_scenario[scenario][config]
 ]
 
 CLEAN_INPUTS = [
-    f"{CLEAN_DIR}/{config}/{combo}/rep{i+1}/{file_formats['cleaned'].format(SIM=sim)}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in TARGET_SIMULATORS
+    f"{CLEAN_DIR[scenario]}/{config}/{combo}/rep{i+1}/{file_formats['cleaned'].format(SIM=sim)}"
+    for scenario in SELECTED_SCENARIOS
+    for config in config_by_scenario[scenario]
+    for combo in combinations_by_config_and_scenario[scenario][config]
+    for sim in simulators_by_scenario[scenario]
     for i in range(EXTERNAL_REPS)
 ]
 
 ALL_FEATURES = [
-    f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{file_formats['tree_features'].format(SIM=sim)}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in TARGET_SIMULATORS
+    f"{TREE_FEATURES_DIR[scenario]}/{config}/{combo}/rep{i+1}/{file_formats['tree_features'].format(SIM=sim)}"
+    for scenario in SELECTED_SCENARIOS
+    for config in config_by_scenario[scenario]
+    for combo in combinations_by_config_and_scenario[scenario][config]
+    for sim in simulators_by_scenario[scenario]
     for i in range(EXTERNAL_REPS)
 ] + [
-    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{file_formats['allel_features'].format(SIM=sim)}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in TARGET_SIMULATORS
-    for i in range(EXTERNAL_REPS)
-]
-
-ALL_SLIM_FEATURES = [
-    f"{TREE_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{file_formats['tree_features'].format(SIM=sim)}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in ["slim"]
-    for i in range(EXTERNAL_REPS)
-] + [
-    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/rep{i+1}/{file_formats['allel_features'].format(SIM=sim)}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
-    for sim in ["slim"]
+    f"{ALLEL_FEATURES_DIR[scenario]}/{config}/{combo}/rep{i+1}/{file_formats['allel_features'].format(SIM=sim)}"
+    for scenario in SELECTED_SCENARIOS
+    for config in config_by_scenario[scenario]
+    for combo in combinations_by_config_and_scenario[scenario][config]
+    for sim in simulators_by_scenario[scenario]
     for i in range(EXTERNAL_REPS)
 ]
 
 CREATE_COMBO_PARAMETERS_YAML = [
-    f"{TREE_FEATURES_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
+    f"{TREE_FEATURES_DIR[scenario]}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+    for scenario in SELECTED_SCENARIOS
+    for config in config_by_scenario[scenario]
+    for combo in combinations_by_config_and_scenario[scenario][config]
 ] + [
-    f"{ALLEL_FEATURES_DIR}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
-    for config in all_configs
-    for combo in combinations_by_config[config]
+    f"{ALLEL_FEATURES_DIR[scenario]}/{config}/{combo}/{COMBO_PARAMETERS_YAML}"
+    for scenario in SELECTED_SCENARIOS
+    for config in config_by_scenario[scenario]
+    for combo in combinations_by_config_and_scenario[scenario][config]
 ]
 
 #-----------------------------
 #Final results for snakemake
 #-----------------------------
 
-simulator_pairs = list(combinations(TARGET_SIMULATORS, 2))
-simulator_combination_all = tuple(TARGET_SIMULATORS)
-simulator_combinations = simulator_pairs + [simulator_combination_all]
+combinations_mode = {}
+for config in all_configs:
+    combinations_mode[config] = [
+        f"{sample_size_mode},{seq_len_mode}"
+        for sample_size_mode in modes_sample_size_by_config[config]
+        for seq_len_mode in GROUPING_MODES_SEQ_LEN
+    ]
+
 
 
 ALL_TREE_TOPFEATURES = [
-    f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(simulator_combination_all)}"
-    for config in all_configs
+    f"{TREE_TOPFEATURES_DIR[scenario]}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
+    for scenario in SELECTED_SCENARIOS
+    for config in config_by_scenario[scenario]
     for mode in combinations_mode[config]
+    for sim_group in simulator_groups_by_scenario[scenario]
 ] 
 
 ALL_ALLEL_TOPFEATURES = [
-    f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(simulator_combination_all)}"
-    for config in all_configs
+    f"{ALLEL_TOPFEATURES_DIR[scenario]}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
+    for scenario in SELECTED_SCENARIOS
+    for config in config_by_scenario[scenario]
     for mode in combinations_mode[config]
+    for sim_group in simulator_groups_by_scenario[scenario]
 ] 
 
 ALL_TOGETHER_TOPFEATURES = [
-    f"{TOGETHER_TOPFEATURES_DIR}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
-    for config in all_configs
+    f"{TOGETHER_TOPFEATURES_DIR[scenario]}/{config}/{mode}/{format_feature_ranking_file(sim_group)}"
+    for scenario in SELECTED_SCENARIOS
+    for config in config_by_scenario[scenario]
     for mode in combinations_mode[config]
-    for sim_group in simulator_pairs
+    for sim_group in simulator_groups_by_scenario[scenario]
 ]
 
 STATS_RESULTS = [
-    f"{STATISTICS_RESULTS_DIR}/{config}/{mode}/{group_string}_feature_comparison.csv"
-    for config in all_configs
+    f"{STATISTICS_RESULTS_DIR[scenario]}/{config}/{mode}/{'_'.join(group)}_feature_comparison.csv"
+    for scenario in SELECTED_SCENARIOS
+    for config in config_by_scenario[scenario]
     for mode in combinations_mode[config]
-    for group_string in [
-        "_".join(group) for group in simulator_pairs
-    ]
+    for group in simulator_groups_by_scenario[scenario]
+    if len(group) == 2
 ]
 
-COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES + ALL_TOGETHER_TOPFEATURES #+ STATS_RESULTS
 
+COMPLETE_OUTPUTS = ALL_TREE_TOPFEATURES + ALL_ALLEL_TOPFEATURES + ALL_TOGETHER_TOPFEATURES + STATS_RESULTS
 
 #-------------------------
 # Optuna Search Space
@@ -436,48 +475,48 @@ def format_optuna_report_file(group):
 
 
 ALL_TREE_OPTUNA = [
-    f"{TREE_TOPFEATURES_DIR}/{config}/{mode}/{format_optuna_report_file(sim_group)}"
-    for config in all_configs
+    f"{TREE_TOPFEATURES_DIR[scenario]}/{config}/{mode}/{format_optuna_report_file(sim_group)}"
+    for scenario in SELECTED_SCENARIOS
+    for config in config_by_scenario[scenario]
     for mode in combinations_mode[config]
-    for sim_group in simulator_combinations
-]
+    for sim_group in simulator_groups_by_scenario[scenario]
+] 
 
 ALL_ALLEL_OPTUNA = [
-    f"{ALLEL_TOPFEATURES_DIR}/{config}/{mode}/{format_optuna_report_file(sim_group)}"
-    for config in all_configs
+    f"{ALLEL_TOPFEATURES_DIR[scenario]}/{config}/{mode}/{format_optuna_report_file(sim_group)}"
+    for scenario in SELECTED_SCENARIOS
+    for config in config_by_scenario[scenario]
     for mode in combinations_mode[config]
-    for sim_group in simulator_combinations
-]
+    for sim_group in simulator_groups_by_scenario[scenario]
+] 
 
 #-----------------------------------
-#COmpute stats for merged positions in coalescent simulators
+#Compute stats for merged positions in coalescent simulators
 #-----------------------------------
-#TODO: check if also for slim
 
-simulators_merged_stats = [
-    simulator
-    for simulator in TARGET_SIMULATORS
-    if simulator in [MS, MSMS, MSPMS]
-]
+MERGE_STATS_SCENARIOS = [scenario for scenario in SELECTED_SCENARIOS if scenario != SLIM_COMPARISON]
 
 def get_merged_stats_overall_input(config, simulator):
     return [
-    f"{MERGES_COLLECT_DIR}/{config}/{combo}/rep{i + 1}/{simulator}_merge_stats.csv"
-    for combo in combinations_by_config[config]
+    f"{MERGES_COLLECT_DIR[scenario]}/{config}/{combo}/rep{i + 1}/{simulator}_merge_stats.csv"
+    for scenario in MERGE_STATS_SCENARIOS
+    for config in config_by_scenario[scenario]
+    for combo in combinations_by_config_and_scenario[scenario][config]
+    for sim in simulators_by_scenario[scenario]
     for i in range(EXTERNAL_REPS)
 ]
 
 MERGED_STATS = [
-    f"{MERGES_COLLECT_DIR}/{config}/{simulator}_merged_positions_overall.csv"
-    for config in all_configs
-    for simulator in simulators_merged_stats
+    f"{MERGES_COLLECT_DIR[scenario]}/{config}/{simulator}_merged_positions_overall.csv"
+    for scenario in MERGE_STATS_SCENARIOS
+    for config in config_by_scenario[scenario]
+    for simulator in simulators_by_scenario[scenario]
 ] + [
-    f"{MERGES_COLLECT_DIR}/{config}/{simulator}_merged_positions_sample_size.csv"
-    for config in all_configs
-    for simulator in simulators_merged_stats
+    f"{MERGES_COLLECT_DIR[scenario]}/{config}/{simulator}_merged_positions_sample_size.csv"
+    for scenario in MERGE_STATS_SCENARIOS
+    for config in config_by_scenario[scenario]
+    for simulator in simulators_by_scenario[scenario]
 ]
-
-
 
 #---------------------------------------------
 # Estimation of cache

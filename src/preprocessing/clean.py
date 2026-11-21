@@ -12,11 +12,21 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 sys.path.append(PROJECT_ROOT)
 
 from snakemake_vars import FILE_FORMATS, PRECISION, SIMULATORS
+from simulators import *
+from scenario_types import *
 
 
-def clean_sim_output(input_file, output_file, sequence_length,
-                            branch_decimals=None, position_decimals=None,
-                            factor=1.0, branches_already_scaled=False):
+def clean_sim_output(
+    input_file,
+    output_file,
+    sequence_length,
+    scenario,
+    branch_decimals=None,
+    position_decimals=None,
+    factor=1.0,
+    slim_scaling_factor=None,
+    branches_already_scaled=False
+):
 
     with open(input_file, "r") as fin, open(output_file, "w") as fout:
         lines_buffer = []
@@ -88,24 +98,41 @@ def clean_sim_output(input_file, output_file, sequence_length,
                 for row in merged_haplotypes:
                     fout.write("".join(map(str, row)) + "\n")
 
+
             # --- Handle tree lines with branch lengths ---
             elif "(" in line and ":" in line:
+
                 def scale_branch(m):
                     val = float(m.group(1))
-                    if branches_already_scaled:
-                        if branch_decimals is not None:
-                            val = (val / factor)
-                            val = round(val, branch_decimals)
-                            val *= factor
-                        return f":{val:.{branch_decimals if branch_decimals else 6}f}"
-                    else:
-                        if branch_decimals is not None:
-                            val = round(val, branch_decimals)
-                        val *= factor
-                        return f":{val:.{branch_decimals if branch_decimals else 6}f}"
-                scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, line) if factor != 1 else line
-                fout.write(scaled_line + "\n")
 
+                    if scenario == SLIM_COMPARISON:
+                        if not branches_already_scaled:
+                            val *= factor
+
+                        if slim_scaling_factor is not None:
+                            val = round(val / slim_scaling_factor) * slim_scaling_factor
+
+                        val = int(round(val))
+
+                    else:
+                        if branches_already_scaled:
+                            if branch_decimals is not None:
+                                val = val / factor
+                                val = round(val, branch_decimals)
+                                val *= factor
+
+                        else:
+                            if branch_decimals is not None:
+                                val = round(val, branch_decimals)
+
+                            val *= factor
+
+                    return f":{val:.{branch_decimals if branch_decimals else 6}f}"
+
+                scaled_line = re.sub(r":([0-9]*\.?[0-9]+)", scale_branch, line)
+
+                fout.write(scaled_line + "\n")
+            
             else:
                 fout.write(line + "\n")
 
@@ -131,18 +158,17 @@ def main():
     )
 
     parser.add_argument(
-        "--combo_yaml",
-        type=Path,
-        required=True,
-        help="Yaml file, which contains all combo parameters"
-    )
-
-    parser.add_argument(
         "--sim",
         type=str,
         required=True,
         choices=SIMULATORS,
         help="Simulator used to generate the input files"
+    )
+
+    parser.add_argument(
+        "--combo_yaml",
+        type=Path,
+        help="Path to the combo_parameters.yaml file of the corresponding input file"
     )
 
     parser.add_argument(
@@ -182,10 +208,12 @@ def main():
         input_file=input_file,
         output_file=output_file,
         sequence_length=combo_params["sequence_length"],
+        scenario=combo_params["scenario"],
         branch_decimals=precision,
         position_decimals=precision,
         factor= 4 * combo_params["population_size"],
-        branches_already_scaled=(sim == "msprime" or sim == "slim" or "slim" in sim)
+        slim_scaling_factor=combo_params.get("slim_scaling_factor", None) if not (sim == SLIM) else None,
+        branches_already_scaled=(sim == MSPRIME or sim == SLIM)
     )
 
 if __name__ == "__main__":

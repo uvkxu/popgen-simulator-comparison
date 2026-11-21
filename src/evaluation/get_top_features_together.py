@@ -844,9 +844,7 @@ def get_csv_files_mode(input_folder, grouped_by, seq_len_group=None, sample_size
         sample_size = int(combo_params["sample_structure"][0])
         seq_len = int(combo_params["sequence_length"])
 
-        if ((("recombination_applied" not in grouped_by) or (recombination_rate > 0))
-            and (("recombination_skipped" not in grouped_by) or (recombination_rate == 0))
-            and (("sample_size" not in grouped_by) or (sample_size == sample_size_group))
+        if ((("sample_size" not in grouped_by) or (sample_size == sample_size_group))
             and (("seq_len" not in grouped_by) or (seq_len == seq_len_group))
         ):
             if "cleaned" in input_folder.parts:

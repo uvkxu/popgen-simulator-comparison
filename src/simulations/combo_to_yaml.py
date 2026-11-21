@@ -45,6 +45,12 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--scenario",
+    type=str,
+    required=True
+)
+
+parser.add_argument(
     "--output_file",
     type=Path,
     help="Base output directory (default: data/raw/)",
@@ -63,6 +69,7 @@ combo = json.loads(args.combo)
 output_file = args.output_file
 config_path = args.config_path
 nreps = args.nreps
+scenario = args.scenario
 
 with open(config_path, "r") as f:
     config = yaml.safe_load(f)
@@ -79,7 +86,9 @@ metadata = {
     "sample_structure": [s for s in samples if s > 0],
     "mutation_rate": config["mutation_rate"],
     "recombination_rate": float(combo.get("recombination_rates", 0)),
-    "config": str(config_path.name)
+    "config": str(config_path.name),
+    "slim_scaling_factor": config.get("metadata", {}).get("scaling_factor", None),
+    "scenario": scenario
 }
 
 output_file.parent.mkdir(parents=True, exist_ok=True)
